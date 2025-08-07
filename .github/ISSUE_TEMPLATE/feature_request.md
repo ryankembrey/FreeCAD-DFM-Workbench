@@ -7,14 +7,17 @@ assignees: ''
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+*Please note: This is a student-led capstone project with a fixed scope. All ideas are valued and will be considered for the current project or for future development.*
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+Scope Limitations:
+- The only manufacturing method to be worked on in this Capstone is injection molding
+- Time to implement
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+## The Idea
+A clear and concise description of the new DFM check or feature.
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+## Why it's needed
+Briefly, what problem does this solve for a designer?
+
+## (Optional) Resources
+Feel free to add any links to design guides or articles that explain this rule.
