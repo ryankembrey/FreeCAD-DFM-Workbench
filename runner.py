@@ -20,46 +20,59 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+from OCC.Core.TopoDS import TopoDS_Shape
+from OCC.Core.STEPControl import STEPControl_Reader
+from OCC.Core.IFSelect import IFSelect_RetDone
+from OCC.Core.gp import gp_Dir
 
-class DFMWorkbench(Workbench):
-    "DFM workbench object"
-
-    MenuText = "DFM"
-    ToolTip = "Design for manufacturing workbench"
-    Icon = """paste here the contents of a 16x16 xpm icon"""
-
-    def Initialize(self):
-        """This function is executed when the workbench is first activated.
-        It is executed once in a FreeCAD session followed by the Activated function.
-        """
-        # import MyModuleA, MyModuleB # import here all the needed files that create your FreeCAD commands
-        self.list = []  # a list of command names created in the line above
-        self.appendToolbar(
-            "My Commands", self.list
-        )  # creates a new toolbar with your commands
-        self.appendMenu("My New Menu", self.list)  # creates a new menu
-        self.appendMenu(
-            ["An existing Menu", "My submenu"], self.list
-        )  # appends a submenu to an existing menu
-
-    def Activated(self):
-        """This function is executed whenever the workbench is activated"""
-        return
-
-    def Deactivated(self):
-        """This function is executed whenever the workbench is deactivated"""
-        return
-
-    def ContextMenu(self, recipient):
-        """This function is executed whenever the user right-clicks on screen"""
-        # "recipient" will be either "view" or "tree"
-        self.appendContextMenu(
-            "My commands", self.list
-        )  # add commands to the context menu
-
-    def GetClassName(self):
-        # This function is mandatory if this is a full Python workbench
-        return "Gui::PythonWorkbench"
+from Analyzers.DraftAnalyzer import DraftAnalyzer
 
 
-Gui.addWorkbench(DFMWorkbench())
+def import_step(model_path: str) -> TopoDS_Shape:
+    print(f"Reading STEP file from: {model_path}")
+
+    step_reader = STEPControl_Reader()
+    status = step_reader.ReadFile(model_path)
+
+    if status != IFSelect_RetDone:
+        raise FileNotFoundError(f"Could not read the STEP file at {model_path}")
+
+    step_reader.TransferRoots()
+    return step_reader.OneShape()
+
+
+def _run_analyzer_test():
+    print("DFM WB running startup test…")
+
+    try:
+        model_path = "/home/Ryan/documents/git/FreeCAD-DFM-Workbench/tapered_pad.step"
+
+        test_shape = import_step(model_path)
+
+        draft_analyzer = DraftAnalyzer()
+
+        pull_dir = gp_Dir(0, 0, 1)
+        print(f"{draft_analyzer.name} using pull direction: Z+")
+
+        analysis_results = draft_analyzer.execute(
+            shape=test_shape, pull_direction=pull_dir
+        )
+
+        print("\nTest results:")
+        if not analysis_results:
+            print("The analysis returned no results.")
+        else:
+            face_index = 1
+            for face, angle in analysis_results.items():
+                print(f"Face #{face_index}: Draft Angle = {angle:.2f} degrees")
+                face_index += 1
+
+    except Exception as e:
+        print(f"\nDFM TEST FAILED: An error occurred -> {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+def main():
+    _run_analyzer_test()
