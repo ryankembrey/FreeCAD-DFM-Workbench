@@ -31,7 +31,7 @@ from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Vec
 
 # Local
-from Analyzers.BaseAnalyzer import BaseAnalyzer
+from analyzers.BaseAnalyzer import BaseAnalyzer
 from Enums import AnalysisType
 
 

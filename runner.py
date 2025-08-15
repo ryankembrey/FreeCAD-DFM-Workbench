@@ -25,7 +25,7 @@ from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
 from OCC.Core.gp import gp_Dir
 
-from Analyzers.DraftAnalyzer import DraftAnalyzer
+from analyzers.DraftAnalyzer import DraftAnalyzer
 
 
 def import_step(model_path: str) -> TopoDS_Shape:
