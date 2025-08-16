@@ -56,7 +56,9 @@ def _run_analyzer_test():
         pull_dir = gp_Dir(0, 0, 1)
         print(f"{draft_analyzer.name} using pull direction: Z+")
 
-        analysis_results = draft_analyzer.execute(shape=test_shape, pull_direction=pull_dir)
+        analysis_results = draft_analyzer.execute(
+            shape=test_shape, pull_direction=pull_dir, samples=1000
+        )
         print("\nTest results:")
         if not analysis_results:
             print("The analysis returned no results.")
@@ -68,7 +70,7 @@ def _run_analyzer_test():
 
         draft_checker = DraftAngleCheck()
         findings = draft_checker.run_check(
-            analysis_results, parameters=50, check_type=CheckType.MAX_DRAFT_ANGLE
+            analysis_results, parameters=1, check_type=CheckType.MIN_DRAFT_ANGLE
         )
         print("\n--- DFM FINDINGS ---")
         if not findings:
