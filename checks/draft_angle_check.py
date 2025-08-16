@@ -21,6 +21,7 @@
 #  ***************************************************************************
 
 from typing import Dict, Any, Generator
+import math
 
 from OCC.Core.TopoDS import TopoDS_Face
 
@@ -58,7 +59,9 @@ class DraftAngleCheck(BaseCheck):
 
         if check_type is CheckType.MAX_DRAFT_ANGLE:
             for i, (face, measured_angle) in enumerate(analysis_data.items()):
-                if measured_angle > min_angle:
+                if measured_angle > min_angle and not math.isclose(
+                    measured_angle, 90.0, rel_tol=1e-9
+                ):
                     yield CheckResult(
                         message=f"Offending face: #{i + 1}. Angle is {measured_angle:.2f}°, allowed max {min_angle}°.",
                         offending_geometry=[face],
