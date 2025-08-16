@@ -26,7 +26,8 @@ from OCC.Core.IFSelect import IFSelect_RetDone
 from OCC.Core.gp import gp_Dir
 
 from analyzers import DraftAnalyzer
-from checks import MinDraftAngleCheck
+from checks import DraftAngleCheck
+from enums import CheckType
 
 
 def import_step(model_path: str) -> TopoDS_Shape:
@@ -65,8 +66,10 @@ def _run_analyzer_test():
                 print(f"Face #{face_index}: Draft Angle = {angle:.2f} degrees")
                 face_index += 1
 
-        draft_checker = MinDraftAngleCheck()
-        findings = draft_checker.run_check(analysis_results, parameters=5.0)
+        draft_checker = DraftAngleCheck()
+        findings = draft_checker.run_check(
+            analysis_results, parameters=50, check_type=CheckType.MAX_DRAFT_ANGLE
+        )
         print("\n--- DFM FINDINGS ---")
         if not findings:
             print("No DFM violations found.")

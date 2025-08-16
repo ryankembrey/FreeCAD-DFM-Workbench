@@ -21,4 +21,4 @@
 #  ***************************************************************************
 
 from .base_check import BaseCheck
-from .min_draft_angle_check import MinDraftAngleCheck
+from .draft_angle_check import DraftAngleCheck

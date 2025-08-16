@@ -42,6 +42,6 @@ class BaseCheck(ABC):
 
     @abstractmethod
     def run_check(
-        self, analysis_data: Dict[TopoDS_Face, Any], parameters: float
+        self, analysis_data: Dict[TopoDS_Face, Any], parameters: float, check_type: CheckType
     ) -> Generator[CheckResult, None, None]:
         pass

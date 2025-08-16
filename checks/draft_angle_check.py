@@ -29,7 +29,7 @@ from enums import Severity, CheckType
 from data_types import CheckResult
 
 
-class MinDraftAngleCheck(BaseCheck):
+class DraftAngleCheck(BaseCheck):
     @property
     def check_type(self) -> CheckType:
         return CheckType.MIN_DRAFT_ANGLE
@@ -39,18 +39,29 @@ class MinDraftAngleCheck(BaseCheck):
         return "Draft Angle Check"
 
     def run_check(
-        self, analysis_data: Dict[TopoDS_Face, Any], parameters: float
+        self, analysis_data: Dict[TopoDS_Face, Any], parameters: float, check_type: CheckType
     ) -> Generator[CheckResult, None, None]:
         min_angle = parameters
 
         if min_angle is None:
-            raise ValueError("MinDraftAngleCheck requires a 'min_angle' parameter.")
+            raise ValueError("DraftAngleCheck requires a 'min_angle' parameter.")
 
-        for i, (face, measured_angle) in enumerate(analysis_data.items()):
-            if measured_angle < min_angle:
-                yield CheckResult(
-                    message=f"Offending face: #{i + 1}. Angle is {measured_angle:.2f}°, required min {min_angle}°.",
-                    offending_geometry=[face],
-                    severity=Severity.ERROR,
-                    check_name=CheckType.MIN_DRAFT_ANGLE,
-                )
+        if check_type is CheckType.MIN_DRAFT_ANGLE:
+            for i, (face, measured_angle) in enumerate(analysis_data.items()):
+                if measured_angle < min_angle:
+                    yield CheckResult(
+                        message=f"Offending face: #{i + 1}. Angle is {measured_angle:.2f}°, required min {min_angle}°.",
+                        offending_geometry=[face],
+                        severity=Severity.ERROR,
+                        check_name=CheckType.MIN_DRAFT_ANGLE,
+                    )
+
+        if check_type is CheckType.MAX_DRAFT_ANGLE:
+            for i, (face, measured_angle) in enumerate(analysis_data.items()):
+                if measured_angle > min_angle:
+                    yield CheckResult(
+                        message=f"Offending face: #{i + 1}. Angle is {measured_angle:.2f}°, allowed max {min_angle}°.",
+                        offending_geometry=[face],
+                        severity=Severity.ERROR,
+                        check_name=CheckType.MAX_DRAFT_ANGLE,
+                    )

@@ -27,9 +27,13 @@ class AnalysisType(Enum):
     DRAFT_ANGLE = auto()
     UNDERCUT = auto()
 
+    def __str__(self):
+        return self.name.replace("_", " ").title()
+
 
 class CheckType(Enum):
     MIN_DRAFT_ANGLE = auto()
+    MAX_DRAFT_ANGLE = auto()
 
     def __str__(self):
         return self.name.replace("_", " ").title()
@@ -39,3 +43,6 @@ class Severity(Enum):
     INFO = auto()
     WARNING = auto()
     ERROR = auto()
+
+    def __str__(self):
+        return self.name.replace("_", " ").lower()
