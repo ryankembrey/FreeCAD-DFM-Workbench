@@ -19,3 +19,6 @@
 #  *   Suite 330, Boston, MA  02111-1307, USA                                *
 #  *                                                                         *
 #  ***************************************************************************
+
+from .base_analyzer import BaseAnalyzer
+from .draft_analyzer import DraftAnalyzer

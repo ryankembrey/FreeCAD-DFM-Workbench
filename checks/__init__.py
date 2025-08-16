@@ -20,31 +20,5 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
-
-from Enums import AnalysisType
-
-
-class BaseAnalyzer(ABC):
-    @property
-    @abstractmethod
-    def analysis_type(self) -> AnalysisType:
-        """
-        The unique type of analysis this class performs.
-        This is the primary way to identify and retrieve this analyzer.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """
-        A user-friendly name for this analysis, e.g., for UI elements.
-        """
-        pass
-
-    @abstractmethod
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> Dict[TopoDS_Face, Any]:
-        pass
+from .base_check import BaseCheck
+from .min_draft_angle_check import MinDraftAngleCheck

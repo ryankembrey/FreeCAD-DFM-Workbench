@@ -25,7 +25,8 @@ from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
 from OCC.Core.gp import gp_Dir
 
-from analyzers.DraftAnalyzer import DraftAnalyzer
+from analyzers import DraftAnalyzer
+from checks import MinDraftAngleCheck
 
 
 def import_step(model_path: str) -> TopoDS_Shape:
@@ -45,7 +46,7 @@ def _run_analyzer_test():
     print("DFM WB running startup test…")
 
     try:
-        model_path = "/home/Ryan/documents/git/FreeCAD-DFM-Workbench/tapered_pad.step"
+        model_path = "/home/Ryan/documents/git/FreeCAD-DFM-Workbench/dfm_test.step"
 
         test_shape = import_step(model_path)
 
@@ -54,10 +55,7 @@ def _run_analyzer_test():
         pull_dir = gp_Dir(0, 0, 1)
         print(f"{draft_analyzer.name} using pull direction: Z+")
 
-        analysis_results = draft_analyzer.execute(
-            shape=test_shape, pull_direction=pull_dir
-        )
-
+        analysis_results = draft_analyzer.execute(shape=test_shape, pull_direction=pull_dir)
         print("\nTest results:")
         if not analysis_results:
             print("The analysis returned no results.")
@@ -66,6 +64,15 @@ def _run_analyzer_test():
             for face, angle in analysis_results.items():
                 print(f"Face #{face_index}: Draft Angle = {angle:.2f} degrees")
                 face_index += 1
+
+        draft_checker = MinDraftAngleCheck()
+        findings = draft_checker.run_check(analysis_results, parameters=5.0)
+        print("\n--- DFM FINDINGS ---")
+        if not findings:
+            print("No DFM violations found.")
+        else:
+            for finding in findings:
+                print(f"[{finding.severity.name}] {finding.check_name}: {finding.message}")
 
     except Exception as e:
         print(f"\nDFM TEST FAILED: An error occurred -> {e}")

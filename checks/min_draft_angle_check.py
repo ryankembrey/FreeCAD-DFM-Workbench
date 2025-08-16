@@ -20,9 +20,37 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from enum import Enum, auto
+from typing import Dict, Any, Generator
+
+from OCC.Core.TopoDS import TopoDS_Face
+
+from checks import BaseCheck
+from enums import Severity, CheckType
+from data_types import CheckResult
 
 
-class AnalysisType(Enum):
-    DRAFT_ANGLE = auto()
-    UNDERCUT = auto()
+class MinDraftAngleCheck(BaseCheck):
+    @property
+    def check_type(self) -> CheckType:
+        return CheckType.MIN_DRAFT_ANGLE
+
+    @property
+    def name(self) -> str:
+        return "Draft Angle Check"
+
+    def run_check(
+        self, analysis_data: Dict[TopoDS_Face, Any], parameters: float
+    ) -> Generator[CheckResult, None, None]:
+        min_angle = parameters
+
+        if min_angle is None:
+            raise ValueError("MinDraftAngleCheck requires a 'min_angle' parameter.")
+
+        for i, (face, measured_angle) in enumerate(analysis_data.items()):
+            if measured_angle < min_angle:
+                yield CheckResult(
+                    message=f"Offending face: #{i + 1}. Angle is {measured_angle:.2f}°, required min {min_angle}°.",
+                    offending_geometry=[face],
+                    severity=Severity.ERROR,
+                    check_name=CheckType.MIN_DRAFT_ANGLE,
+                )

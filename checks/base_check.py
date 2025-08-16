@@ -19,3 +19,29 @@
 #  *   Suite 330, Boston, MA  02111-1307, USA                                *
 #  *                                                                         *
 #  ***************************************************************************
+
+from abc import ABC, abstractmethod
+from typing import Dict, Generator, Any
+
+from OCC.Core.TopoDS import TopoDS_Face
+
+from enums import CheckType, AnalysisType
+from data_types import CheckResult
+
+
+class BaseCheck(ABC):
+    @property
+    @abstractmethod
+    def check_type(self) -> CheckType:
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def run_check(
+        self, analysis_data: Dict[TopoDS_Face, Any], parameters: float
+    ) -> Generator[CheckResult, None, None]:
+        pass
