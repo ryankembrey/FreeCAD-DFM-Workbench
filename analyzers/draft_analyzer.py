@@ -35,6 +35,7 @@ from OCC.Core.GeomAbs import GeomAbs_Plane
 # --- Local, explicit relative imports ---
 from analyzers import BaseAnalyzer
 from enums import AnalysisType
+from registry import dfm_registry
 
 # Set up a logger for this module.
 log = logging.getLogger(__name__)
@@ -54,8 +55,8 @@ class DraftAnalyzer(BaseAnalyzer):
         return "Draft Analyzer"
 
     def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> Dict[TopoDS_Face, float]:
-        log.info(f"Executing {self.name}...")
-        print(f"Executing {self.name}...")
+        log.info(f"Executing {self.name}…")
+        print(f"Executing {self.name}…")
 
         pull_direction = kwargs.get("pull_direction")
         samples = kwargs.get("samples", 20)  # Allow samples to be a parameter
@@ -63,22 +64,21 @@ class DraftAnalyzer(BaseAnalyzer):
         if not isinstance(pull_direction, gp_Dir):
             raise ValueError(f"{self.name} requires a 'pull_direction' of type gp_Dir.")
 
-        results: Dict[TopoDS_Face, float] = {}
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+
+        results: Dict[TopoDS_Face, float] = {}  # <-- Update dict type
 
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
-            min_draft = self._get_minimum_draft_for_face(current_face, pull_direction, samples)
+            draft_result = self._get_draft_for_face(current_face, pull_direction, samples)
 
-            if min_draft is not None:
-                results[current_face] = min_draft
+            if draft_result is not None:
+                results[current_face] = draft_result
 
             face_explorer.Next()
-
-        log.info(f"{self.name} finished. Processed {len(results)} faces.")
         return results
 
-    def _get_minimum_draft_for_face(
+    def _get_draft_for_face(
         self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int
     ) -> float | None:
         """
@@ -122,11 +122,14 @@ class DraftAnalyzer(BaseAnalyzer):
 
                 normal_dir = gp_Dir(normal_vec)
 
-                if face.Orientation() == TopAbs_REVERSED:
-                    normal_dir.Reverse()
+                # if face.Orientation() == TopAbs_REVERSED:
+                #     normal_dir.Reverse()
 
                 angle_rad = pull_direction.Angle(normal_dir)
-                draft_angle_rad = abs((math.pi / 2) - angle_rad)
+                draft_angle_rad = (math.pi / 2) - angle_rad
                 min_draft_angle_rad = min(min_draft_angle_rad, draft_angle_rad)
 
         return math.degrees(min_draft_angle_rad)
+
+
+dfm_registry.register_analyzer(DraftAnalyzer())

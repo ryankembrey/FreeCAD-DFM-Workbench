@@ -20,11 +20,43 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-print("\n\n--- DFM Package Initializing: Discovering components... ---\n")
+from enums import AnalysisType, CheckType
 
-from registry import dfm_registry
-import analyzers, checks
 
-from runner import main
+class DFMRegistry:
+    """
+    A singleton class to hold a central registry of all available
+    Analyzers and Checks in the DFM Workbench.
+    """
 
-main()
+    def __init__(self):
+        print(" -> DFMRegistry created.")
+        self._analyzers = {}
+        self._checks = {}
+
+    def register_analyzer(self, analyzer_instance: "BaseAnalyzer"):
+        analyzer_type = analyzer_instance.analysis_type
+        print(f" -> Registering Analyzer for: {analyzer_type}")
+        self._analyzers[analyzer_type] = analyzer_instance
+
+    def register_check(self, check_instance: "BaseCheck"):
+        if not hasattr(check_instance, "handled_check_types"):
+            raise AttributeError(
+                f"DFM Registration Error: The check class '{type(check_instance).__name__}' "
+                f"must have a 'handled_check_types' class property."
+            )
+
+        for check_type in check_instance.handled_check_types:
+            if check_type in self._checks:
+                print(f"!! WARNING: Overwriting existing Check for type: {check_type.name}")
+            print(f" -> Registering Check for: {check_type}")
+            self._checks[check_type] = check_instance
+
+    def get_analyzer(self, analysis_type) -> "BaseAnalyzer | None":
+        return self._analyzers.get(analysis_type)
+
+    def get_check(self, check_type: CheckType) -> "BaseCheck | None":
+        return self._checks.get(check_type)
+
+
+dfm_registry = DFMRegistry()
