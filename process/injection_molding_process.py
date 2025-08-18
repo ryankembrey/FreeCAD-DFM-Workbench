@@ -20,11 +20,28 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-print("\n\n--- DFM Package Initializing: Discovering components... ---\n")
+from typing import List
 
 from registry import dfm_registry
-import process, analyzers, checks
+from process import BaseProcess
+from enums import ProcessType, CheckType
 
-# from runner import main
-#
-# main()
+
+class InjectionMoldingProcess(BaseProcess):
+    @property
+    def name(self) -> str:
+        return "Injection Molding"
+
+    @property
+    def process_type(self) -> ProcessType:
+        return ProcessType.INJECTION_MOLDING
+
+    @property
+    def applicable_checks(self) -> List[CheckType]:
+        return [
+            CheckType.MIN_DRAFT_ANGLE,
+            CheckType.MAX_DRAFT_ANGLE,
+        ]
+
+
+dfm_registry.register_process(InjectionMoldingProcess())

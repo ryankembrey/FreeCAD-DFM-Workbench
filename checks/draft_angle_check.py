@@ -23,7 +23,6 @@
 import math
 from typing import Dict, Any, Generator, List
 
-# --- Correct, robust imports ---
 from checks.base_check import BaseCheck
 from enums import AnalysisType, Severity, CheckType
 from data_types import CheckResult
@@ -37,13 +36,11 @@ class DraftAngleCheck(BaseCheck):
     Implements checks for minimum draft and maximum draft.
     """
 
-    # This is the contract that the registry uses.
     handled_check_types: List[CheckType] = [
         CheckType.MIN_DRAFT_ANGLE,
         CheckType.MAX_DRAFT_ANGLE,
     ]
 
-    # This is the contract that the AnalysisRunner uses.
     dependencies: List[AnalysisType] = [AnalysisType.DRAFT_ANGLE]
 
     @property
@@ -56,11 +53,8 @@ class DraftAngleCheck(BaseCheck):
         parameters: Dict[str, Any],
         check_type: CheckType,
     ) -> Generator[CheckResult, None, None]:
-        # --- STEP 1: Unpack the required data from the map ---
-        # This check knows it needs the DRAFT data.
         draft_analysis_data: Dict[TopoDS_Face, float] = analysis_data_map[AnalysisType.DRAFT_ANGLE]
 
-        # --- STEP 2: MIN_DRAFT_ANGLE Logic ---
         if check_type == CheckType.MIN_DRAFT_ANGLE:
             min_angle = parameters.get("min_angle")
             if min_angle is None:
@@ -75,14 +69,12 @@ class DraftAngleCheck(BaseCheck):
                         check_name=check_type,
                     )
 
-        # --- STEP 3: MAX_DRAFT_ANGLE Logic ---
         elif check_type == CheckType.MAX_DRAFT_ANGLE:
             max_angle = parameters.get("max_angle")
             if max_angle is None:
                 raise ValueError(f"'{check_type.name}' requires a 'max_angle' parameter.")
 
             for face, draft_result in draft_analysis_data.items():
-                # Don't flag flat top/bottom faces as having "too much" draft.
                 is_flat = math.isclose(draft_result, 90.0)
 
                 if not is_flat and draft_result > max_angle:

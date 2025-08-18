@@ -24,7 +24,6 @@ import math
 import logging
 from typing import Dict, Any
 
-# --- PythonOCC Imports ---
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_REVERSED
@@ -32,12 +31,10 @@ from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Vec
 from OCC.Core.GeomAbs import GeomAbs_Plane
 
-# --- Local, explicit relative imports ---
 from analyzers import BaseAnalyzer
 from enums import AnalysisType
 from registry import dfm_registry
 
-# Set up a logger for this module.
 log = logging.getLogger(__name__)
 
 
@@ -55,11 +52,10 @@ class DraftAnalyzer(BaseAnalyzer):
         return "Draft Analyzer"
 
     def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> Dict[TopoDS_Face, float]:
-        log.info(f"Executing {self.name}…")
-        print(f"Executing {self.name}…")
+        # log.info(f"Executing {self.name}…")
 
         pull_direction = kwargs.get("pull_direction")
-        samples = kwargs.get("samples", 20)  # Allow samples to be a parameter
+        samples = kwargs.get("samples", 20)
 
         if not isinstance(pull_direction, gp_Dir):
             raise ValueError(f"{self.name} requires a 'pull_direction' of type gp_Dir.")

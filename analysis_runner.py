@@ -41,30 +41,22 @@ class AnalysisRunner:
         self._analysis_cache.clear()
         all_findings: List[CheckResult] = []
 
-        # --- PHASE 1: Dependency Resolution (Your code, which is excellent) ---
         required_analysis_types = self._get_required_analysis_types(
             list(active_checks_with_params.keys())
         )
         print(f"Analysis Runner: Required analyzers: {[t.name for t in required_analysis_types]}")
 
-        # --- PHASE 2: Execute Analyzers (THE MISSING LOGIC) ---
-        # This is the expensive part. We run only what's necessary.
         for analysis_type in required_analysis_types:
             analyzer = dfm_registry.get_analyzer(analysis_type)
             if analyzer:
                 print(f"Analysis Runner: Executing {analyzer.name}...")
-                # Pass all global params; the analyzer will pick what it needs.
                 raw_data = analyzer.execute(shape, **global_params)
-                # Store the results in the cache for the checks to use.
                 self._analysis_cache[analysis_type] = raw_data
             else:
-                # This is crucial error handling.
                 print(
                     f"!! WARNING: Analyzer for type '{analysis_type.name}' not found in registry. Checks depending on it will be skipped."
                 )
 
-        # --- PHASE 3: Execute Checks (Your code, which now works) ---
-        # This is the cheap part, using the now-populated cache.
         print("Analysis Runner: Executing checks...")
         for check_type, params in active_checks_with_params.items():
             check_to_run = dfm_registry.get_check(check_type)
@@ -73,14 +65,12 @@ class AnalysisRunner:
                 print(f"!! WARNING: Check for '{check_type.name}' not found in registry. Skipping.")
                 continue
 
-            # Assemble the data map this specific check needs
             required_data_map = {}
             can_run = True
             for dependency_type in check_to_run.dependencies:
                 if dependency_type in self._analysis_cache:
                     required_data_map[dependency_type] = self._analysis_cache[dependency_type]
                 else:
-                    # This now correctly catches if an analyzer failed to run
                     can_run = False
                     break
 

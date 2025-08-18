@@ -23,23 +23,16 @@
 import sys
 import os
 import traceback
-from typing import Dict
 
-# --- Path Setup ---
-# This "bootstrap" code allows this script to find your DFM package.
 project_root = os.path.dirname(__file__)
 src_path = os.path.join(project_root, "src")
 if src_path not in sys.path:
     sys.path.append(src_path)
-# --- End Path Setup ---
 
-# --- DFM Workbench Imports ---
-# We now only need to import the Runner, our Enums, and data types.
 from analysis_runner import AnalysisRunner
 from enums import CheckType
 from data_types import CheckResult
 
-# --- PythonOCC Imports ---
 from OCC.Core.TopoDS import TopoDS_Shape
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
@@ -70,42 +63,26 @@ def main():
     """
     print("--- DFM Workbench Test Runner ---")
     try:
-        # --- 1. DEFINE YOUR INPUTS ---
-
-        # The model to be tested. Path is built relative to this script.
         model_path = os.path.join(project_root, "dfm_test.step")
 
-        # Define the global parameters that analyzers will need.
         analyzer_params = {"pull_direction": gp_Dir(0, 0, 1), "samples": 50}
 
-        # Define which checks the "user" wants to run and their parameters.
-        # This dictionary is the main input to the DFM engine.
         user_selected_checks = {
-            CheckType.MIN_DRAFT_ANGLE: {"min_angle": 50.0},
-            # CheckType.UNDERCUT: {},  # Undercut check needs no parameters
+            CheckType.MIN_DRAFT_ANGLE: {"min_angle": 2},
         }
 
-        # --- 2. PREPARE THE ENGINE ---
-
-        # Load the 3D model.
         test_shape = import_step(model_path)
 
-        # Instantiate the analysis runner.
         runner = AnalysisRunner()
 
-        # --- 3. EXECUTE THE ANALYSIS ---
-        # This one line replaces all the old manual calls.
-        # It's a single, clean call to the facade.
         print("\n--- Starting DFM Analysis ---")
         dfm_findings = runner.run(test_shape, user_selected_checks, analyzer_params)
         print("--- Analysis Complete ---")
 
-        # --- 4. DISPLAY THE RESULTS ---
         print("\n--- FINAL DFM FINDINGS ---")
         if not dfm_findings:
             print("No DFM violations found. Good job!")
         else:
-            # Sort findings by severity for a cleaner report
             dfm_findings.sort(key=lambda f: f.severity.value, reverse=True)
             for finding in dfm_findings:
                 print(f"[{finding.severity.name}] {finding.check_name}: {finding.message}")
@@ -116,9 +93,5 @@ def main():
         traceback.print_exc()
 
 
-# --- SCRIPT ENTRY POINT ---
 if __name__ == "__main__":
-    # You MUST have your __init__.py files in place for this to work
-    # DFM/__init__.py, DFM/analyzers/__init__.py, DFM/checks/__init__.py
-    # These trigger the component registration when the 'DFM' package is first imported.
     main()

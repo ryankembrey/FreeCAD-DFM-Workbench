@@ -23,6 +23,13 @@
 from enum import Enum, auto
 
 
+class ProcessType(Enum):
+    INJECTION_MOLDING = auto()
+
+    def __str__(self):
+        return self.name.replace("_", " ").title()
+
+
 class AnalysisType(Enum):
     DRAFT_ANGLE = auto()
     UNDERCUT = auto()

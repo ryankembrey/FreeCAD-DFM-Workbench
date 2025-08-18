@@ -20,7 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from enums import AnalysisType, CheckType
+from enums import AnalysisType, CheckType, ProcessType
 
 
 class DFMRegistry:
@@ -31,12 +31,18 @@ class DFMRegistry:
 
     def __init__(self):
         print(" -> DFMRegistry created.")
+        self._processes = {}
         self._analyzers = {}
         self._checks = {}
 
+    def register_process(self, process_instance: "BaseProcess"):
+        processer_name = process_instance.name
+        print(f" -> Registering Process: {processer_name}")
+        self._processes[processer_name] = process_instance
+
     def register_analyzer(self, analyzer_instance: "BaseAnalyzer"):
         analyzer_type = analyzer_instance.analysis_type
-        print(f" -> Registering Analyzer for: {analyzer_type}")
+        print(f" -> Registering Analyzer: {analyzer_type}")
         self._analyzers[analyzer_type] = analyzer_instance
 
     def register_check(self, check_instance: "BaseCheck"):
@@ -48,9 +54,12 @@ class DFMRegistry:
 
         for check_type in check_instance.handled_check_types:
             if check_type in self._checks:
-                print(f"!! WARNING: Overwriting existing Check for type: {check_type.name}")
-            print(f" -> Registering Check for: {check_type}")
+                print(f"!! WARNING: Overwriting existing Check type: {check_type.name}")
+            print(f" -> Registering Check: {check_type}")
             self._checks[check_type] = check_instance
+
+    def get_process(self, process_type) -> "BaseProcess | None":
+        return self._processes.get(process_type)
 
     def get_analyzer(self, analysis_type) -> "BaseAnalyzer | None":
         return self._analyzers.get(analysis_type)

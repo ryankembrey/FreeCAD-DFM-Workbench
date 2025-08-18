@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DFMGui</class>
+ <widget class="QWidget" name="DFMGui">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>350</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>350</width>
+    <height>500</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>350</width>
+    <height>16777215</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <widget class="QGroupBox" name="gbChecksToRun">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>140</y>
+     <width>331</width>
+     <height>311</height>
+    </rect>
+   </property>
+   <property name="title">
+    <string>Checks to Run</string>
+   </property>
+   <widget class="QListWidget" name="listChecksToRun">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>30</y>
+      <width>313</width>
+      <height>271</height>
+     </rect>
+    </property>
+    <property name="selectionMode">
+     <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QWidget" name="gridLayoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>10</y>
+     <width>331</width>
+     <height>121</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="gridLayout" columnstretch="1,1" columnminimumwidth="0,0">
+    <item row="2" column="1">
+     <widget class="QLineEdit" name="lePullDir">
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="labelProcess">
+      <property name="text">
+       <string>Process</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QToolButton" name="btnSelectTarget">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>22</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>      Select Target       </string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0">
+     <widget class="QToolButton" name="btnSelectPullDir">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>22</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>Select Pull Direction</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QComboBox" name="cbProcesses"/>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLabel" name="lMinDraftAngle">
+      <property name="text">
+       <string>Min draft angle</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QDoubleSpinBox" name="dsbMinDraftAngle"/>
+    </item>
+    <item row="0" column="1">
+     <widget class="QLineEdit" name="leTargetName">
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QPushButton" name="btnRunAnalysis">
+   <property name="geometry">
+    <rect>
+     <x>120</x>
+     <y>460</y>
+     <width>121</width>
+     <height>25</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Run Analysis</string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

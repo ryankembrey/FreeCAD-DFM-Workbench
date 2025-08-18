@@ -20,11 +20,29 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-print("\n\n--- DFM Package Initializing: Discovering components... ---\n")
+from abc import ABC, abstractmethod
+from typing import List
 
-from registry import dfm_registry
-import process, analyzers, checks
 
-# from runner import main
-#
-# main()
+from enums import ProcessType, CheckType
+
+
+class BaseProcess(ABC):
+    """
+    Base class for all processes (manufacturing methods).
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def process_type(self) -> ProcessType:
+        pass
+
+    @property
+    @abstractmethod
+    def applicable_checks(self) -> List[CheckType]:
+        pass

@@ -20,11 +20,5 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-print("\n\n--- DFM Package Initializing: Discovering components... ---\n")
-
-from registry import dfm_registry
-import process, analyzers, checks
-
-# from runner import main
-#
-# main()
+from .base_process import BaseProcess
+from .injection_molding_process import InjectionMoldingProcess
