@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 
 from enums import AnalysisType
@@ -46,5 +46,5 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> Dict[TopoDS_Face, Any]:
+    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, Any]:
         pass

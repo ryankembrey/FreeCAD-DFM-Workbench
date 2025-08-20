@@ -20,8 +20,6 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import Dict, List, Set
-
 from registry import dfm_registry
 from enums import AnalysisType, CheckType
 from data_types import CheckResult
@@ -30,16 +28,16 @@ from OCC.Core.TopoDS import TopoDS_Shape
 
 class AnalysisRunner:
     def __init__(self):
-        self._analysis_cache: Dict[AnalysisType, Dict] = {}
+        self._analysis_cache: dict[AnalysisType, dict] = {}
 
     def run(
         self,
         shape: TopoDS_Shape,
-        active_checks_with_params: Dict[CheckType, Dict],
-        global_params: Dict,
-    ) -> List[CheckResult]:
+        active_checks_with_params: dict[CheckType, dict],
+        global_params: dict,
+    ) -> list[CheckResult]:
         self._analysis_cache.clear()
-        all_findings: List[CheckResult] = []
+        all_findings: list[CheckResult] = []
 
         required_analysis_types = self._get_required_analysis_types(
             list(active_checks_with_params.keys())
@@ -82,12 +80,12 @@ class AnalysisRunner:
         return all_findings
 
     def _get_required_analysis_types(
-        self, selected_check_types: List[CheckType]
-    ) -> Set[AnalysisType]:
+        self, selected_check_types: list[CheckType]
+    ) -> set[AnalysisType]:
         """
         Determines the unique set of analyzers needed for a list of checks.
         """
-        required_types: Set[AnalysisType] = set()
+        required_types: set[AnalysisType] = set()
         for check_type in selected_check_types:
             check_instance = dfm_registry.get_check(check_type)
             if check_instance and hasattr(check_instance, "dependencies"):

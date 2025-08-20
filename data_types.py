@@ -21,8 +21,7 @@
 #  ***************************************************************************
 
 from dataclasses import dataclass
-from typing import List
-from OCC.Core.TopoDS import TopoDS_Shape
+from OCC.Core.TopoDS import TopoDS_Face
 from enums import Severity, CheckType
 
 
@@ -33,6 +32,6 @@ class CheckResult:
     """
 
     message: str
-    offending_geometry: List[TopoDS_Shape]
+    offending_geometry: list[TopoDS_Face]
     severity: Severity
     check_name: CheckType

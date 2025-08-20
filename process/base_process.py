@@ -21,7 +21,6 @@
 #  ***************************************************************************
 
 from abc import ABC, abstractmethod
-from typing import List
 
 
 from enums import ProcessType, CheckType
@@ -44,5 +43,5 @@ class BaseProcess(ABC):
 
     @property
     @abstractmethod
-    def applicable_checks(self) -> List[CheckType]:
+    def applicable_checks(self) -> list[CheckType]:
         pass

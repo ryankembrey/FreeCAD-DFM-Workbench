@@ -29,7 +29,6 @@ from registry import dfm_registry
 
 from runner import main
 from data_types import CheckType
-from typing import List
 
 
 # ==============================================================================
@@ -41,8 +40,6 @@ class DfmTaskPanel:
     def __init__(self):
         self.form = FreeCADGui.PySideUic.loadUi(":/ui/task_setup.ui")
         self.form.setWindowTitle("DFM Analysis Setup")
-        self.hi = FreeCADGui.PySideUic.loadUi(":/ui/task_setup.ui")
-        self.hi.setWindowTitle("DFM Analysis Results")
 
         self.draft_angle = 5
         all_processes = sorted(list(dfm_registry._processes.keys()))
@@ -92,7 +89,7 @@ class DfmTaskPanel:
                 checkbox.setChecked(True)
                 list_widget.setItemWidget(list_item, checkbox)
 
-    def get_selected_checks(self) -> List[CheckType]:
+    def get_selected_checks(self) -> list[CheckType]:
         """
         A helper function to read the state of the checkboxes and return a
         list of the CheckType enums that the user has enabled.

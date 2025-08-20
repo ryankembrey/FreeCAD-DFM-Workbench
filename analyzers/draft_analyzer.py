@@ -22,7 +22,7 @@
 
 import math
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
@@ -51,7 +51,7 @@ class DraftAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Draft Analyzer"
 
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> Dict[TopoDS_Face, float]:
+    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, float]:
         # log.info(f"Executing {self.name}…")
 
         pull_direction = kwargs.get("pull_direction")
@@ -62,7 +62,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
 
-        results: Dict[TopoDS_Face, float] = {}  # <-- Update dict type
+        results: dict[TopoDS_Face, float] = {}
 
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())

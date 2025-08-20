@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 import math
-from typing import Dict, Any, Generator, List
+from typing import Any, Generator
 
 from checks.base_check import BaseCheck
 from enums import AnalysisType, Severity, CheckType
@@ -36,12 +36,12 @@ class DraftAngleCheck(BaseCheck):
     Implements checks for minimum draft and maximum draft.
     """
 
-    handled_check_types: List[CheckType] = [
+    handled_check_types: list[CheckType] = [
         CheckType.MIN_DRAFT_ANGLE,
         CheckType.MAX_DRAFT_ANGLE,
     ]
 
-    dependencies: List[AnalysisType] = [AnalysisType.DRAFT_ANGLE]
+    dependencies: list[AnalysisType] = [AnalysisType.DRAFT_ANGLE]
 
     @property
     def name(self) -> str:
@@ -49,11 +49,11 @@ class DraftAngleCheck(BaseCheck):
 
     def run_check(
         self,
-        analysis_data_map: Dict[AnalysisType, Dict],
-        parameters: Dict[str, Any],
+        analysis_data_map: dict[AnalysisType, dict],
+        parameters: dict[str, Any],
         check_type: CheckType,
     ) -> Generator[CheckResult, None, None]:
-        draft_analysis_data: Dict[TopoDS_Face, float] = analysis_data_map[AnalysisType.DRAFT_ANGLE]
+        draft_analysis_data: dict[TopoDS_Face, float] = analysis_data_map[AnalysisType.DRAFT_ANGLE]
 
         if check_type == CheckType.MIN_DRAFT_ANGLE:
             min_angle = parameters.get("min_angle")
@@ -81,7 +81,7 @@ class DraftAngleCheck(BaseCheck):
                     yield CheckResult(
                         message=f"Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle}°.",
                         offending_geometry=[face],
-                        severity=Severity.WARNING,  # Max draft is usually a warning
+                        severity=Severity.WARNING,
                         check_name=check_type,
                     )
 

@@ -20,8 +20,6 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import List
-
 from registry import dfm_registry
 from process import BaseProcess
 from enums import ProcessType, CheckType
@@ -37,7 +35,7 @@ class InjectionMoldingProcess(BaseProcess):
         return ProcessType.INJECTION_MOLDING
 
     @property
-    def applicable_checks(self) -> List[CheckType]:
+    def applicable_checks(self) -> list[CheckType]:
         return [
             CheckType.MIN_DRAFT_ANGLE,
             CheckType.MAX_DRAFT_ANGLE,

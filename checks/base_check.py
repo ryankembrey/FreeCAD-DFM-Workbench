@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, Any, List
+from typing import Generator, Any
 
 from OCC.Core.TopoDS import TopoDS_Face
 
@@ -35,11 +35,11 @@ class BaseCheck(ABC):
     """
 
     # A list of check types this check can perform (some can check multiple things)
-    handled_check_types: List[CheckType] = []
+    handled_check_types: list[CheckType] = []
 
     # A list of the Analyzer dependencies needed for this check to run.
     # (some Checks need data from multiple Analyzers)
-    dependencies: List[AnalysisType] = []
+    dependencies: list[AnalysisType] = []
 
     # Returns a human readable string for UI uses
     @property
@@ -51,8 +51,8 @@ class BaseCheck(ABC):
     @abstractmethod
     def run_check(
         self,
-        analysis_data_map: Dict[AnalysisType, Dict],
-        parameters: Dict[str, Any],
+        analysis_data_map: dict[AnalysisType, dict],
+        parameters: dict[str, Any],
         check_type: CheckType,
     ) -> Generator[CheckResult, None, None]:
         pass
