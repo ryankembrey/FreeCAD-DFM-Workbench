@@ -1,5 +1,8 @@
-# FreeCAD DFM Workbench
-A powerful, extensible Design for Manufacturability (DFM) workbench for
+# FreeCAD DFM workbench
+
+> [!CAUTION]
+> NOTE THIS WORKBENCH IS IN AN UN-WORKING STATE, AND WILL BE SO UNTIL 2026
+
 FreeCAD. This workbench analyses 3D models and provides actionable feedback to
 help designers create parts that are cheaper, faster, and more reliable to
 manufacture.
