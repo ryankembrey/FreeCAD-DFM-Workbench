@@ -26,7 +26,7 @@ import FreeCADGui as Gui
 class DFMWorkbench(Gui.Workbench):
     MenuText = "DFM"
     ToolTip = "Design For Manufacturing Workbench"
-    Icon = ":/icons/Mechanical_Assembly_workbench_icon.svg"
+    Icon = ""
 
     def Initialize(self):
         """This function is executed when the workbench is first activated.

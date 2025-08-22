@@ -123,7 +123,7 @@ class DfmTaskPanel:
 class DfmAnalysisCommand:
     def GetResources(self):
         return {
-            "Pixmap": ":/icons/fem_postpipeline_from_result.svg",
+            "Pixmap": "",
             "MenuText": "Run DFM Analysis",
             "ToolTip": "Opens the DFM Analysis task panel.",
         }
