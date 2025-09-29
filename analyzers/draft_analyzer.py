@@ -113,11 +113,12 @@ class DraftAnalyzer(BaseAnalyzer):
 
                 normal_dir = gp_Dir(normal_vec)
 
-                # if face.Orientation() == TopAbs_REVERSED:
-                #     normal_dir.Reverse()
+                if face.Orientation() == TopAbs_REVERSED:
+                    normal_dir.Reverse()
 
                 angle_rad = pull_direction.Angle(normal_dir)
                 draft_angle_rad = (math.pi / 2) - angle_rad
                 min_draft_angle_rad = min(min_draft_angle_rad, draft_angle_rad)
 
-        return math.degrees(min_draft_angle_rad)
+        print(f"{math.degrees(min_draft_angle_rad)}")
+        return -1 * math.degrees(min_draft_angle_rad)

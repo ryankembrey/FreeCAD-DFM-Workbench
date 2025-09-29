@@ -46,17 +46,16 @@ class DraftAngleCheck(BaseCheck):
         parameters: dict[str, Any],
         check_type,
     ):
-        draft_analysis_data: dict[TopoDS_Face, float] = analysis_data_map["DRAFT_ANGLE"]
+        tolerance = 1e-4  # 0.0001 degrees
 
         if check_type == "MIN_DRAFT_ANGLE":
             min_angle = parameters.get("min_angle")
             if min_angle is None:
                 raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_angle' parameter.")
-
-            for face, draft_result in draft_analysis_data.items():
-                if draft_result < min_angle and abs(draft_result) != 90.0:
+            for face, draft_result in analysis_data_map.items():
+                if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
                     print(
-                        f"Angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle}°."
+                        f"Angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
                     )
 
         elif check_type == "MAX_DRAFT_ANGLE":
@@ -64,10 +63,10 @@ class DraftAngleCheck(BaseCheck):
             if max_angle is None:
                 raise ValueError(f"'MAX_DRAFT_ANGLE' requires a 'max_angle' parameter.")
 
-            for face, draft_result in draft_analysis_data.items():
+            for face, draft_result in analysis_data_map.items():
                 is_flat = math.isclose(draft_result, 90.0)
 
-                if not is_flat and draft_result > max_angle:
+                if not is_flat and draft_result > (max_angle + tolerance):
                     print(
-                        f"Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle}°."
+                        f"Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle:.2f}°."
                     )
