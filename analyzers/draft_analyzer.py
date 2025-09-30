@@ -113,8 +113,9 @@ class DraftAnalyzer(BaseAnalyzer):
 
                 normal_dir = gp_Dir(normal_vec)
 
-                if face.Orientation() == TopAbs_REVERSED:
-                    normal_dir.Reverse()
+                # I think this section is buggy
+                # if face.Orientation() == TopAbs_REVERSED:
+                #     normal_dir.Reverse()
 
                 angle_rad = pull_direction.Angle(normal_dir)
                 draft_angle_rad = (math.pi / 2) - angle_rad
@@ -122,4 +123,6 @@ class DraftAnalyzer(BaseAnalyzer):
 
         face_id: int = face.__hash__()
         print(f"Face ID: [{face_id}] | Draft = {-1 * math.degrees(min_draft_angle_rad):.2f}°")
+        if surface.GetType() == GeomAbs_Plane:
+            print("Face is planar")
         return -1 * math.degrees(min_draft_angle_rad)

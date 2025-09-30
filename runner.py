@@ -31,12 +31,12 @@ def import_step(model_path: str) -> TopoDS_Shape:
 
 
 def run_draft():
-    step_file = "/home/Ryan/documents/git/FreeCAD-DFM-Workbench/draft.step"
+    step_file = "/home/Ryan/documents/git/FreeCAD-DFM-Workbench/d1.step"
     shape: TopoDS_Shape = import_step(step_file)
     analyzer_params = {"pull_direction": gp_Dir(0, 0, 1), "samples": 50}
 
     draft_analyzer = DraftAnalyzer()
     data = draft_analyzer.execute(shape, **analyzer_params)
-    params = {"min_angle": 4.0}
+    params = {"min_angle": 3.0}
     dac = DraftAngleCheck()
     dac.run_check(analysis_data_map=data, parameters=params, check_type="MIN_DRAFT_ANGLE")

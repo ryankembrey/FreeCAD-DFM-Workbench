@@ -25,6 +25,7 @@ from typing import Any, Generator
 
 from checks.base_check import BaseCheck
 from OCC.Core.TopoDS import TopoDS_Face
+from OCC.Core.GeomAbs import GeomAbs_Plane
 
 
 class DraftAngleCheck(BaseCheck):
