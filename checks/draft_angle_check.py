@@ -46,6 +46,7 @@ class DraftAngleCheck(BaseCheck):
         parameters: dict[str, Any],
         check_type,
     ):
+        print("\nRunning Draft Angle Checker\n")
         tolerance = 1e-4  # 0.0001 degrees
 
         if check_type == "MIN_DRAFT_ANGLE":
@@ -55,7 +56,7 @@ class DraftAngleCheck(BaseCheck):
             for face, draft_result in analysis_data_map.items():
                 if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
                     print(
-                        f"Angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
+                        f"Face ID: [{face.__hash__()}] | Angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
                     )
 
         elif check_type == "MAX_DRAFT_ANGLE":
@@ -68,5 +69,5 @@ class DraftAngleCheck(BaseCheck):
 
                 if not is_flat and draft_result > (max_angle + tolerance):
                     print(
-                        f"Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle:.2f}°."
+                        f"Face ID: [{face.__hash__()}] | Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle:.2f}°."
                     )
