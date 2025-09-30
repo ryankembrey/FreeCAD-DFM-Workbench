@@ -120,5 +120,6 @@ class DraftAnalyzer(BaseAnalyzer):
                 draft_angle_rad = (math.pi / 2) - angle_rad
                 min_draft_angle_rad = min(min_draft_angle_rad, draft_angle_rad)
 
-        print(f"{math.degrees(min_draft_angle_rad)}")
+        face_id: int = face.__hash__()
+        print(f"Face ID: [{face_id}] | Draft = {-1 * math.degrees(min_draft_angle_rad):.2f}°")
         return -1 * math.degrees(min_draft_angle_rad)
