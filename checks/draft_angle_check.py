@@ -24,8 +24,7 @@ import math
 from typing import Any, Generator
 
 from checks.base_check import BaseCheck
-from OCC.Core.TopoDS import TopoDS_Face
-from OCC.Core.GeomAbs import GeomAbs_Plane
+from OCC.Core.TopoDS import TopoDS_Face, TopoDS_Shape
 
 
 class DraftAngleCheck(BaseCheck):
@@ -50,6 +49,8 @@ class DraftAngleCheck(BaseCheck):
         print("\nRunning Draft Angle Checker\n")
         tolerance = 1e-4  # 0.0001 degrees
 
+        faces = []
+
         if check_type == "MIN_DRAFT_ANGLE":
             min_angle = parameters.get("min_angle")
             if min_angle is None:
@@ -59,6 +60,7 @@ class DraftAngleCheck(BaseCheck):
                     print(
                         f"Face ID: [{face.__hash__()}] | Angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
                     )
+                    faces.append(face)
 
         elif check_type == "MAX_DRAFT_ANGLE":
             max_angle = parameters.get("max_angle")
@@ -72,3 +74,5 @@ class DraftAngleCheck(BaseCheck):
                     print(
                         f"Face ID: [{face.__hash__()}] | Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle:.2f}°."
                     )
+                    faces.append(face)
+        return faces

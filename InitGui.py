@@ -22,6 +22,8 @@
 
 import FreeCADGui as Gui
 
+from gui import gui_runner
+
 
 class DFMWorkbench(Gui.Workbench):
     MenuText = "DFM"
@@ -32,7 +34,6 @@ class DFMWorkbench(Gui.Workbench):
         """This function is executed when the workbench is first activated.
         It is executed once in a FreeCAD session followed by the Activated function.
         """
-        from gui import task_setup
 
         self.list = [
             "DFM_RunAnalysis",

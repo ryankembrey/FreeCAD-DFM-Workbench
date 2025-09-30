@@ -22,6 +22,6 @@
 
 print("\n\n--- DFM Package Initializing: Discovering components... ---\n")
 
-from runner import run_draft
+# from runner import run_draft
 
-run_draft()
+# run_draft()

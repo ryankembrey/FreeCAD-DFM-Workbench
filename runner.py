@@ -1,5 +1,9 @@
 # This is a temporary file made for the purpose of testing the analyzers and checkers
 
+import FreeCAD
+import FreeCADGui as Gui
+import Part
+
 from OCC.Core.TopoDS import TopoDS_Shape
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.IFSelect import IFSelect_RetDone
@@ -30,13 +34,13 @@ def import_step(model_path: str) -> TopoDS_Shape:
     return shape
 
 
-def run_draft():
-    step_file = "/home/Ryan/documents/git/FreeCAD-DFM-Workbench/d1.step"
-    shape: TopoDS_Shape = import_step(step_file)
+def run_draft(subject: Part.Shape):
+    shape_to_analyze: TopoDS_Shape = Part.__toPythonOCC__(subject)
     analyzer_params = {"pull_direction": gp_Dir(0, 0, 1), "samples": 50}
 
     draft_analyzer = DraftAnalyzer()
-    data = draft_analyzer.execute(shape, **analyzer_params)
+    data = draft_analyzer.execute(shape_to_analyze, **analyzer_params)
     params = {"min_angle": 3.0}
     dac = DraftAngleCheck()
-    dac.run_check(analysis_data_map=data, parameters=params, check_type="MIN_DRAFT_ANGLE")
+    faces = dac.run_check(analysis_data_map=data, parameters=params, check_type="MIN_DRAFT_ANGLE")
+    return faces
