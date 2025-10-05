@@ -28,7 +28,7 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 class BaseAnalyzer(ABC):
     @property
     @abstractmethod
-    def analysis_type(self):
+    def analysis_type(self) -> str:
         """
         The unique type of analysis this class performs.
         This is the primary way to identify and retrieve this analyzer.

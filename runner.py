@@ -36,7 +36,7 @@ def import_step(model_path: str) -> TopoDS_Shape:
 
 def run_draft(subject: Part.Shape):
     shape_to_analyze: TopoDS_Shape = Part.__toPythonOCC__(subject)
-    analyzer_params = {"pull_direction": gp_Dir(0, 0, 1), "samples": 50}
+    analyzer_params = {"pull_direction": gp_Dir(0, 0, 1), "samples": 4}
 
     draft_analyzer = DraftAnalyzer()
     data = draft_analyzer.execute(shape_to_analyze, **analyzer_params)
