@@ -1,3 +1,5 @@
 pyrightconfig.json
 *.step
 *__pycache__
+*.FCBak
+*.FCStd
