@@ -25,12 +25,11 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Lin
+from OCC.Core.gp import gp_Pnt, gp_Lin
 from OCC.Core.BRepTools import breptools
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.BRep import BRep_Tool
-from OCC.Core.Geom import Geom_Surface
 
 from analyzers import BaseAnalyzer
 
@@ -57,7 +56,7 @@ class ThicknessAnalyzer(BaseAnalyzer):
         return result
 
     def _perform_ray_cast(self, shape: TopoDS_Shape) -> dict[TopoDS_Face, Any]:
-        """Calculates the minimum thickness for all faces of a given TopoDS_Shape"""
+        """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
         results: dict[TopoDS_Face, float] = {}
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
         while face_explorer.More():
@@ -99,8 +98,7 @@ class ThicknessAnalyzer(BaseAnalyzer):
         v: float,
     ) -> float:
         """
-        Returns the thickness at UV by determining the "inward" direction
-        using a parity check.
+        Returns the thickness at UV.
         """
         surface_geom = BRep_Tool.Surface(face)
         props = GeomLProp_SLProps(surface_geom, u, v, 1, 1e-6)
@@ -126,18 +124,19 @@ class ThicknessAnalyzer(BaseAnalyzer):
                 dist = point.Distance(intersector1.Pnt(1))
                 valid_distances.append(dist)
 
-        # Test the reversed normal direction
-        ray2 = gp_Lin(point, normal.Reversed())
-        intersector2 = IntCurvesFace_ShapeIntersector()
-        intersector2.Load(shape, 1e-6)
-        intersector2.Perform(ray2, epsilon, float("inf"))
+        # Only test the reversed normal direction if the first ray didn't find an inward hit
+        if not valid_distances:
+            ray2 = gp_Lin(point, normal.Reversed())
+            intersector2 = IntCurvesFace_ShapeIntersector()
+            intersector2.Load(shape, 1e-6)
+            intersector2.Perform(ray2, epsilon, float("inf"))
 
-        if intersector2.IsDone():
-            num_hits = intersector2.NbPnt()
-            # If number of hits is odd, ray is pointing inside
-            if num_hits > 0 and num_hits % 2 != 0:
-                dist = point.Distance(intersector2.Pnt(1))
-                valid_distances.append(dist)
+            if intersector2.IsDone():
+                num_hits = intersector2.NbPnt()
+                # If number of hits is odd, ray is pointing inside
+                if num_hits > 0 and num_hits % 2 != 0:
+                    dist = point.Distance(intersector2.Pnt(1))
+                    valid_distances.append(dist)
 
         if valid_distances:
             return min(valid_distances)
