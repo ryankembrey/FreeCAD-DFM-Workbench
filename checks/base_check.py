@@ -51,5 +51,5 @@ class BaseCheck(ABC):
         analysis_data_map,
         parameters: dict[str, Any],
         check_type,
-    ):
+    ) -> list[TopoDS_Face]:
         pass
