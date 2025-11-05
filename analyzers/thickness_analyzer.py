@@ -63,7 +63,7 @@ class ThicknessAnalyzer(BaseAnalyzer):
             current_face = topods.Face(face_explorer.Current())
             min_thickness = self._ray_cast_for_face(shape, current_face)
             results[current_face] = min_thickness
-            print(f"Distance was {min_thickness}")
+            print(f"Face ID: {current_face.__hash__()}. Thickness was {min_thickness:.2f}")
             face_explorer.Next()
         return results
 

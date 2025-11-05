@@ -5,7 +5,7 @@ import FreeCADGui as Gui
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 import Part
 
-from runner import run_draft
+from runner import run_draft, run_thickness
 
 
 class DFM_Runner:
@@ -23,7 +23,8 @@ class DFM_Runner:
             FreeCAD.Console.PrintError(f"ERROR: Could not get a valid shape to analyze. {e}\n")
             return
 
-        faces: list[TopoDS_Face] = run_draft(shape_to_analyze)
+        # faces: list[TopoDS_Face] = run_draft(shape_to_analyze)
+        faces: list[TopoDS_Face] = run_thickness(shape_to_analyze)
 
         Gui.Selection.clearSelection()
         self.highlight_faces(doc_object, faces)
