@@ -38,7 +38,7 @@ class DraftAngleCheck(BaseCheck):
 
     @property
     def name(self) -> str:
-        return "Draft Analyzer"
+        return "Draft Checker"
 
     def run_check(
         self,
