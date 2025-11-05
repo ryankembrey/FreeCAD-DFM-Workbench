@@ -28,11 +28,10 @@ import FreeCAD
 from OCC.Core.Geom import Geom_Surface
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_IN
+from OCC.Core.TopAbs import TopAbs_FACE
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Vec
+from OCC.Core.gp import gp_Dir
 from OCC.Core.GeomAbs import GeomAbs_Plane
-from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.GeomLProp import GeomLProp_SLProps
@@ -83,9 +82,7 @@ class DraftAnalyzer(BaseAnalyzer):
             face_explorer.Next()
         return results
 
-    def get_draft_for_face(
-        self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int, parent_solid
-    ) -> float:
+    def get_draft_for_face(self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int) -> float:
         """Returns the draft angle for any TopoDS_Face."""
         draft_angle = None
 
@@ -101,6 +98,7 @@ class DraftAnalyzer(BaseAnalyzer):
         return draft_angle
 
     def get_draft_for_curve(self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int) -> float:
+        """Returns the draft angle for any TopoDS_Face by sampling in a grid and finding the minimum draft angle."""
         surface = BRepAdaptor_Surface(face, True)
 
         u_min, u_max = surface.FirstUParameter(), surface.LastUParameter()
