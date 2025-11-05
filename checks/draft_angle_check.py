@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 import math
-from typing import Any, Generator
+from typing import Any
 
 from checks.base_check import BaseCheck
 from OCC.Core.TopoDS import TopoDS_Face, TopoDS_Shape
@@ -47,7 +47,7 @@ class DraftAngleCheck(BaseCheck):
         check_type,
     ):
         print("\nRunning Draft Angle Checker\n")
-        tolerance = 1e-4  # 0.0001 degrees
+        tolerance = 1e-3  # 0.001 degrees
 
         faces = []
 
@@ -58,7 +58,7 @@ class DraftAngleCheck(BaseCheck):
             for face, draft_result in analysis_data_map.items():
                 if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
                     print(
-                        f"Face ID: [{face.__hash__()}] | Angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
+                        f"Face ID: [{face.__hash__()}] | Angle is {draft_result}°, which is less than the required minimum of {min_angle:.2f}°."
                     )
                     faces.append(face)
 
