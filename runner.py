@@ -12,7 +12,7 @@ from OCC.Core.gp import gp_Dir
 import os
 
 
-from analyzers import DraftAnalyzer
+from analyzers import DraftAnalyzer, ThicknessAnalyzer
 from checks import DraftAngleCheck
 
 
@@ -43,4 +43,18 @@ def run_draft(subject: Part.Shape):
     params = {"min_angle": 3.0}
     dac = DraftAngleCheck()
     faces = dac.run_check(analysis_data_map=data, parameters=params, check_type="MIN_DRAFT_ANGLE")
+    return faces
+
+
+def run_thickness(subject: Part.Shape):
+    shape_to_analyze: TopoDS_Shape = Part.__toPythonOCC__(subject)
+    analyzer_params = {"method": "ray-cast"}
+
+    thickness_analyzer = ThicknessAnalyzer()
+    data = thickness_analyzer.execute(shape_to_analyze, **analyzer_params)
+    FreeCAD.Console.PrintMessage(f"{data}")
+
+    faces = []
+    for face in data:
+        faces.append(face)
     return faces
