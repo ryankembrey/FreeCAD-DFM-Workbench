@@ -57,23 +57,22 @@ class ThicknessAnalyzer(BaseAnalyzer):
 
     def _perform_ray_cast(self, shape: TopoDS_Shape) -> dict[TopoDS_Face, Any]:
         """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
-        results: dict[TopoDS_Face, float] = {}
+        results: dict[TopoDS_Face, list[float]] = {}
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
-            min_thickness = self._ray_cast_for_face(shape, current_face)
-            results[current_face] = min_thickness
-            print(f"Face ID: {current_face.__hash__()}. Thickness was {min_thickness:.2f}")
+            thicknesses = self._ray_cast_for_face(shape, current_face)
+            results[current_face] = thicknesses
             face_explorer.Next()
         return results
 
-    def _ray_cast_for_face(self, shape: TopoDS_Shape, face: TopoDS_Face) -> float:
+    def _ray_cast_for_face(self, shape: TopoDS_Shape, face: TopoDS_Face) -> list[float]:
         """
         Returns the minimum thickness found for a given face using the ray-cast method.
         Increase the samples parameter for a finer search.
         """
         samples = 20
-        min_thickness = float("inf")
+        thicknesses = []
         surface = BRepAdaptor_Surface(face, True)
         u_min, u_max, v_min, v_max = breptools.UVBounds(face)
 
@@ -85,9 +84,8 @@ class ThicknessAnalyzer(BaseAnalyzer):
             for j in range(samples):
                 v = v_min + j * v_step
                 current_thickness = self._ray_cast_for_uv(shape, face, surface, u, v)
-                if current_thickness < min_thickness:
-                    min_thickness = current_thickness
-        return min_thickness
+                thicknesses.append(current_thickness)
+        return thicknesses
 
     def _ray_cast_for_uv(
         self,

@@ -21,4 +21,5 @@
 #  ***************************************************************************
 
 from .base_check import BaseCheck
-from .draft_angle_check import DraftAngleCheck
+from .draft_angle_check import DraftAngleChecker
+from .thickness_check import ThicknessChecker

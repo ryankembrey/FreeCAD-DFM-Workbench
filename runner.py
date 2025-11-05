@@ -13,7 +13,8 @@ import os
 
 
 from analyzers import DraftAnalyzer, ThicknessAnalyzer
-from checks import DraftAngleCheck
+from checks import DraftAngleChecker
+from checks.thickness_check import ThicknessChecker
 
 
 def import_step(model_path: str) -> TopoDS_Shape:
@@ -40,9 +41,11 @@ def run_draft(subject: Part.Shape):
 
     draft_analyzer = DraftAnalyzer()
     data = draft_analyzer.execute(shape_to_analyze, **analyzer_params)
+
     params = {"min_angle": 3.0}
-    dac = DraftAngleCheck()
-    faces = dac.run_check(analysis_data_map=data, parameters=params, check_type="MIN_DRAFT_ANGLE")
+    faces = DraftAngleChecker().run_check(
+        analysis_data_map=data, parameters=params, check_type="MIN_DRAFT_ANGLE"
+    )
     return faces
 
 
@@ -50,11 +53,11 @@ def run_thickness(subject: Part.Shape):
     shape_to_analyze: TopoDS_Shape = Part.__toPythonOCC__(subject)
     analyzer_params = {"method": "ray-cast"}
 
-    thickness_analyzer = ThicknessAnalyzer()
-    data = thickness_analyzer.execute(shape_to_analyze, **analyzer_params)
-    FreeCAD.Console.PrintMessage(f"{data}")
+    data = ThicknessAnalyzer().execute(shape_to_analyze, **analyzer_params)
 
-    faces = []
-    for face in data:
-        faces.append(face)
+    handled_check_types = ["MIN_THICKNESS", "MAX_THICKNESS", "UNIFORM_THICKNESS"]
+    checker_params = {"min_thickness": 5, "max_thickness": 10, "uniform_thickness": 2}
+
+    faces = ThicknessChecker().run_check(data, checker_params, handled_check_types[0])
+
     return faces

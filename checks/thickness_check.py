@@ -20,59 +20,52 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import math
 from typing import Any
+import FreeCAD
 
-from checks.base_check import BaseCheck
-from OCC.Core.TopoDS import TopoDS_Face, TopoDS_Shape
+from OCC.Core.TopoDS import TopoDS_Face
+
+from checks import BaseCheck
 
 
-class DraftAngleChecker(BaseCheck):
-    """
-    A single, flexible class to handle all draft angle related checks.
-    Implements checks for minimum draft and maximum draft.
-    """
-
-    handled_check_types = ["MIN_DRAFT_ANGLE", "MAX_DRAFT_ANGLE"]
+class ThicknessChecker(BaseCheck):
+    handled_check_types = ["MIN_THICKNESS", "MAX_THICKNESS", "UNIFORM_THICKNESS"]
     dependencies = []
 
     @property
     def name(self) -> str:
-        return "Draft Checker"
+        return "Thickness Checker"
 
-    def run_check(
-        self,
-        analysis_data_map,
-        parameters: dict[str, Any],
-        check_type,
-    ):
-        print("\nRunning Draft Angle Checker\n")
-        tolerance = 1e-3  # 0.001 degrees
+    def run_check(self, analysis_data_map, parameters: dict[str, Any], check_type):
+        faces: list[TopoDS_Face] = []
 
-        faces = []
-
-        if check_type == "MIN_DRAFT_ANGLE":
-            min_angle = parameters.get("min_angle")
-            if min_angle is None:
-                raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_angle' parameter.")
-            for face, draft_result in analysis_data_map.items():
-                if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
-                    print(
-                        f"Face ID: [{face.__hash__()}] | Angle is {draft_result}°, which is less than the required minimum of {min_angle:.2f}°."
+        if check_type == "MIN_THICKNESS":
+            for face, thicknesses in analysis_data_map.items():
+                min_thickness = parameters.get("min_thickness")
+                minimum = min(thicknesses)
+                if minimum < min_thickness:
+                    FreeCAD.Console.PrintMessage(
+                        f"Face {face.__hash__()} recorded thickness {minimum:.2f}mm and exceeded minimum thickness of {min_thickness:.2f}mm\n"
                     )
                     faces.append(face)
+            return faces
 
-        elif check_type == "MAX_DRAFT_ANGLE":
-            max_angle = parameters.get("max_angle")
-            if max_angle is None:
-                raise ValueError(f"'MAX_DRAFT_ANGLE' requires a 'max_angle' parameter.")
-
-            for face, draft_result in analysis_data_map.items():
-                is_flat = math.isclose(draft_result, 90.0)
-
-                if not is_flat and draft_result > (max_angle + tolerance):
-                    print(
-                        f"Face ID: [{face.__hash__()}] | Angle is {draft_result:.2f}°, which is greater than the allowed maximum of {max_angle:.2f}°."
+        elif check_type == "MAX_THICKNESS":
+            for face, thicknesses in analysis_data_map.items():
+                max_thickness = parameters.get("max_thickness")
+                maximum = max(thicknesses)
+                if maximum > max_thickness:
+                    FreeCAD.Console.PrintMessage(
+                        f"Face {face.__hash__()} recorded thickness {maximum:.2f}mm and exceeded maximum thickness of {max_thickness:.2f}mm\n"
                     )
                     faces.append(face)
-        return faces
+            return faces
+
+        elif check_type == "UNIFORM_THICKNESS":
+            for face, thickness in analysis_data_map.items():
+                uniform_thickness = parameters.get("uniform_thickness")
+                # TODO:
+            return faces
+        else:
+            FreeCAD.Console.PrintDeveloperError(f"Invalid thickness check type {check_type}.")
+            return faces
