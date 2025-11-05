@@ -22,3 +22,4 @@
 
 from .base_analyzer import BaseAnalyzer
 from .draft_analyzer import DraftAnalyzer
+from .thickness_analyzer import ThicknessAnalyzer
