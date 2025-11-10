@@ -36,7 +36,7 @@ from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 
-from analyzers import BaseAnalyzer
+from .base_analyzer import BaseAnalyzer
 
 
 class DraftAnalyzer(BaseAnalyzer):

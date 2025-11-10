@@ -31,7 +31,7 @@ from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.BRep import BRep_Tool
 
-from analyzers import BaseAnalyzer
+from .base_analyzer import BaseAnalyzer
 
 
 class ThicknessAnalyzer(BaseAnalyzer):

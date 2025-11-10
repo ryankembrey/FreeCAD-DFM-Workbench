@@ -12,9 +12,9 @@ from OCC.Core.gp import gp_Dir
 import os
 
 
-from analyzers import DraftAnalyzer, ThicknessAnalyzer
-from checks import DraftAngleChecker
-from checks.thickness_check import ThicknessChecker
+from dfm.analyzers import DraftAnalyzer, ThicknessAnalyzer
+from dfm.checks import DraftAngleChecker
+from dfm.checks import ThicknessChecker
 
 
 def import_step(model_path: str) -> TopoDS_Shape:
