@@ -23,8 +23,9 @@
 import math
 from typing import Any
 
-from checks.base_check import BaseCheck
 from OCC.Core.TopoDS import TopoDS_Face, TopoDS_Shape
+
+from .base_check import BaseCheck
 
 
 class DraftAngleChecker(BaseCheck):

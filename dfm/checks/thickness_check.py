@@ -25,7 +25,7 @@ import FreeCAD
 
 from OCC.Core.TopoDS import TopoDS_Face
 
-from checks import BaseCheck
+from .base_check import BaseCheck
 
 
 class ThicknessChecker(BaseCheck):

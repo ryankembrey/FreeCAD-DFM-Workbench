@@ -5,7 +5,7 @@ import FreeCADGui as Gui
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 import Part
 
-from runner import run_draft, run_thickness
+from app.runner import run_draft, run_thickness
 
 
 class DFM_Runner:
