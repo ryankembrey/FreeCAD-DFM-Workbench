@@ -74,7 +74,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
-            draft_result = self.get_draft_for_face(current_face, pull_direction, samples, shape)
+            draft_result = self.get_draft_for_face(current_face, pull_direction, samples)
 
             if draft_result is not None:
                 results[current_face] = draft_result
@@ -92,8 +92,6 @@ class DraftAnalyzer(BaseAnalyzer):
             draft_angle = self.get_draft_for_plane(face, pull_direction)
         else:
             draft_angle = self.get_draft_for_curve(face, pull_direction, samples)
-
-        FreeCAD.Console.PrintMessage(f"Draft angle: {draft_angle}\n")
 
         return draft_angle
 
@@ -121,7 +119,6 @@ class DraftAnalyzer(BaseAnalyzer):
                     continue
 
                 draft_angle = self.get_draft_for_dir(normal_dir, pull_direction)
-                FreeCAD.Console.PrintMessage(f"u: {u}, v: {v} gave {draft_angle}\n")
                 min_draft_angle = min(min_draft_angle, draft_angle)
 
         return min_draft_angle

@@ -22,7 +22,7 @@
 
 import FreeCADGui as Gui
 
-from gui import gui_runner
+from gui import task_setup
 
 
 class DFMWorkbench(Gui.Workbench):
@@ -36,9 +36,11 @@ class DFMWorkbench(Gui.Workbench):
         """
 
         self.list = [
-            "DFM_RunAnalysis",
+            "DFM_SetupAnalysis",
         ]  # a list of command names created in the line above
-        self.appendToolbar("DFM_RunAnalysis", self.list)  # creates a new toolbar with your commands
+        self.appendToolbar(
+            "DFM_SetupAnalysis", self.list
+        )  # creates a new toolbar with your commands
         # self.appendMenu("My New Menu", self.list)  # creates a new menu
         # self.appendMenu(
         #     ["An existing Menu", "My submenu"], self.list
