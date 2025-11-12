@@ -1,0 +1,6 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/">
+    <file>ui/task_setup.ui</file>
+    <file>ui/task_results.ui</file>
+</qresource>
+</RCC>
