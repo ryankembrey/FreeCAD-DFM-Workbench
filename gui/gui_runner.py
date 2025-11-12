@@ -14,7 +14,7 @@ class DFM_Runner:
 
         try:
             doc_object = Gui.Selection.getSelection()[0]
-            shape_to_analyze = doc_object.Shape
+            shape_to_analyze = doc_object.Shape.Label
             FreeCAD.Console.PrintMessage(f"Subject: {doc_object.Label}\n")
         except IndexError:
             FreeCAD.Console.PrintUserError("ERROR: Select an object in the Tree view first.\n")
@@ -57,20 +57,20 @@ class DFM_Runner:
             Gui.Selection.addSelection(doc_object, failing_face_names)
 
 
-class DfmAnalysisCommand:
-    def GetResources(self):
-        return {
-            "Pixmap": "",
-            "MenuText": "Run DFM Analysis",
-            "ToolTip": "Opens the DFM Analysis task panel.",
-        }
+# class DfmAnalysisCommand:
+#     def GetResources(self):
+#         return {
+#             "Pixmap": "",
+#             "MenuText": "Run DFM Analysis",
+#             "ToolTip": "Opens the DFM Analysis task panel.",
+#         }
+#
+#     def Activated(self):
+#         dfm_runner = DFM_Runner()
+#
+#     def IsActive(self):
+#         return True
 
-    def Activated(self):
-        dfm_runner = DFM_Runner()
 
-    def IsActive(self):
-        return True
-
-
-if FreeCAD.GuiUp:
-    Gui.addCommand("DFM_RunAnalysis", DfmAnalysisCommand())
+# if FreeCAD.GuiUp:
+#     Gui.addCommand("DFM_RunAnalysis", DfmAnalysisCommand())
