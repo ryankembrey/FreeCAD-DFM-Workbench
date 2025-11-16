@@ -3,20 +3,11 @@
 > [!CAUTION]
 > NOTE THIS WORKBENCH IS IN AN UN-WORKING STATE, AND WILL BE SO UNTIL 2026
 
-FreeCAD. This workbench analyses 3D models and provides actionable feedback to
+This workbench analyses 3D models and provides actionable feedback to
 help designers create parts that are cheaper, faster, and more reliable to
 manufacture.
 
 Currently under heavy development as part of a university capstone project.
-
-## Roadmap (subject to change)
-* [ ] Injection molding process
-    - [ ] Draft angle check
-    - [ ] Undercut check
-    - [ ] Uniform thickness check
-    - [ ] Min/Max wall thickness check
-* [ ] Add GUI
-* [ ] Support for custom standards
 
 ## Contributing
 
