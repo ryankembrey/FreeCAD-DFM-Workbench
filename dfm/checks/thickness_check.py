@@ -24,48 +24,64 @@ from typing import Any
 import FreeCAD
 
 from OCC.Core.TopoDS import TopoDS_Face
+from dfm.models import CheckResult, Severity
+from dfm.rules import Rulebook
 
-from .base_check import BaseCheck
+from dfm.core.base_check import BaseCheck
+from dfm.registries import register_check
 
 
+@register_check(Rulebook.MIN_WALL_THICKNESS, Rulebook.MAX_WALL_THICKNESS)
 class ThicknessChecker(BaseCheck):
-    handled_check_types = ["MIN_THICKNESS", "MAX_THICKNESS", "UNIFORM_THICKNESS"]
-    dependencies = []
-
     @property
     def name(self) -> str:
         return "Thickness Checker"
 
-    def run_check(self, analysis_data_map, parameters: dict[str, Any], check_type):
-        faces: list[TopoDS_Face] = []
+    @property
+    def required_analyzer_id(self) -> str:
+        return "THICKNESS_ANALYZER"
 
-        if check_type == "MIN_THICKNESS":
+    def run_check(
+        self, analysis_data_map, parameters: dict[str, Any], check_type
+    ) -> list[CheckResult]:
+        results: list[CheckResult] = []
+
+        if check_type == Rulebook.MIN_WALL_THICKNESS:
             for face, thicknesses in analysis_data_map.items():
-                min_thickness = parameters.get("min_thickness")
+                min_thickness = parameters.get("min_wall_thickness")
                 minimum = min(thicknesses)
                 if minimum < min_thickness:
-                    FreeCAD.Console.PrintMessage(
-                        f"Face {face.__hash__()} recorded thickness {minimum:.2f}mm and exceeded minimum thickness of {min_thickness:.2f}mm\n"
-                    )
-                    faces.append(face)
-            return faces
+                    message = f"Face {face.__hash__()} recorded thickness {minimum:.2f}mm and exceeded minimum thickness of {min_thickness:.2f}mm\n"
 
-        elif check_type == "MAX_THICKNESS":
+                    result = CheckResult(
+                        rule_id=Rulebook.MIN_WALL_THICKNESS,
+                        message=message,
+                        severity=Severity.ERROR,
+                        failing_geometry=[face],
+                    )
+                    results.append(result)
+            return results
+
+        elif check_type == Rulebook.MAX_WALL_THICKNESS:
             for face, thicknesses in analysis_data_map.items():
-                max_thickness = parameters.get("max_thickness")
+                max_thickness = parameters.get("max_wall_thickness")
                 maximum = max(thicknesses)
                 if maximum > max_thickness:
-                    FreeCAD.Console.PrintMessage(
-                        f"Face {face.__hash__()} recorded thickness {maximum:.2f}mm and exceeded maximum thickness of {max_thickness:.2f}mm\n"
+                    message = f"Recorded thickness of {maximum:.2f}mm and exceeded maximum thickness of {max_thickness:.2f}mm\n"
+
+                    result = CheckResult(
+                        rule_id=Rulebook.MAX_WALL_THICKNESS,
+                        message=message,
+                        severity=Severity.ERROR,
+                        failing_geometry=[face],
                     )
-                    faces.append(face)
-            return faces
+                    results.append(result)
+            return results
 
         elif check_type == "UNIFORM_THICKNESS":
             for face, thickness in analysis_data_map.items():
                 uniform_thickness = parameters.get("uniform_thickness")
                 # TODO:
-            return faces
+            return results
         else:
-            FreeCAD.Console.PrintDeveloperError(f"Invalid thickness check type {check_type}.")
-            return faces
+            raise TypeError(f"Invalid THICKNESS check type {check_type}.")

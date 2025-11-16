@@ -31,9 +31,11 @@ from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.BRep import BRep_Tool
 
-from .base_analyzer import BaseAnalyzer
+from dfm.core.base_analyzer import BaseAnalyzer
+from dfm.registries import register_analyzer
 
 
+@register_analyzer("THICKNESS_ANALYZER")
 class ThicknessAnalyzer(BaseAnalyzer):
     @property
     def analysis_type(self) -> str:
@@ -58,7 +60,7 @@ class ThicknessAnalyzer(BaseAnalyzer):
     def _perform_ray_cast(self, shape: TopoDS_Shape) -> dict[TopoDS_Face, Any]:
         """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
         results: dict[TopoDS_Face, list[float]] = {}
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
             thicknesses = self._ray_cast_for_face(shape, current_face)

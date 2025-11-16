@@ -20,55 +20,37 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import Any
+from abc import ABC, abstractmethod
+from typing import Generator, Any
 
-from OCC.Core.TopoDS import TopoDS_Face, TopoDS_Shape
-from dfm.models import CheckResult, Severity
-
-from dfm.core.base_check import BaseCheck
-from dfm.rules import Rulebook
-from dfm.registries import register_check
+from OCC.Core.TopoDS import TopoDS_Face
+from dfm.models import CheckResult
 
 
-@register_check(Rulebook.MIN_DRAFT_ANGLE)
-class DraftAngleChecker(BaseCheck):
+class BaseCheck(ABC):
     """
-    A single, flexible class to handle all draft angle related checks.
-    Implements checks for minimum draft and maximum draft.
+    The base class for all checks. This class defines how all checks should behave.
     """
 
+    # Returns a human readable string for UI uses
     @property
+    @abstractmethod
     def name(self) -> str:
-        return "Draft Checker"
+        pass
 
     @property
+    @abstractmethod
     def required_analyzer_id(self) -> str:
-        return "DRAFT_ANALYZER"
+        """
+        A string ID for the analyzer this check depends on.
+        """
+        pass
 
+    @abstractmethod
     def run_check(
         self,
         analysis_data_map,
         parameters: dict[str, Any],
         check_type,
     ) -> list[CheckResult]:
-        tolerance = 1e-3  # 0.001 degrees
-
-        results: list[CheckResult] = []
-
-        if check_type == Rulebook.MIN_DRAFT_ANGLE:
-            min_angle = parameters.get("min_draft_angle")
-            if min_angle is None:
-                raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_angle' parameter.")
-            for face, draft_result in analysis_data_map.items():
-                if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
-                    message = f"Draft angle is {draft_result}°, which is less than the required minimum of {min_angle:.2f}°."
-                    result = CheckResult(
-                        rule_id=Rulebook.MIN_DRAFT_ANGLE,
-                        message=message,
-                        severity=Severity.ERROR,
-                        failing_geometry=[face],
-                    )
-                    results.append(result)
-            return results
-        else:
-            raise TypeError(f"Invalid DRAFT ANGLE check type {check_type}.")
+        pass

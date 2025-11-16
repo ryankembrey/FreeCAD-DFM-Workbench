@@ -20,5 +20,17 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from .draft_analyzer import DraftAnalyzer
-from .thickness_analyzer import ThicknessAnalyzer
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class Process:
+    """A representation of a single manufacturing process."""
+
+    id: str
+    name: str
+    category: str
+    description: str = ""
+    rules: list[str] = field(default_factory=list)
+    materials: dict[str, Any] = field(default_factory=dict)

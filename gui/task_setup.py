@@ -23,139 +23,146 @@
 import FreeCAD
 import FreeCADGui as Gui
 from PySide6 import QtCore, QtGui, QtWidgets
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 import Part
 
+from dfm.registries.process_registry import ProcessRegistry
+from app.analysis_runner import AnalysisRunner
+from dfm.models import CheckResult
+
 from . import DFM_rc
-
-from app.runner import run_draft, run_thickness
 from .task_results import TaskResults
-
-
-process_data = {
-    "Additive Manufacturing": [
-        "-- Select a process --",
-        "Fused Deposition Modeling (FDM)",
-        "Stereolithography (SLA)",
-        "Selective Laser Sintering (SLS)",
-        "Multi Jet Fusion (MJF)",
-        "Direct Metal Laser Sintering (DMLS)",
-    ],
-    "Injection Molding": [
-        "-- Select a process --",
-        "Plastic Injection Molding",
-        "Metal Injection Molding (MIM)",
-        "Liquid Silicone Rubber (LSR) Molding",
-        "Insert Molding",
-        "Overmolding",
-    ],
-    "Machining": [
-        "-- Select a process --",
-        "3-Axis CNC Milling",
-        "5-Axis CNC Milling",
-        "CNC Turning (Lathe)",
-        "Electrical Discharge Machining (EDM)",
-    ],
-    "Sheet Metal": ["-- Select a process --", "Bending / Forming", "Laser Cutting", "Punching"],
-}
 
 
 class TaskSetup:
     def __init__(self):
-        self.form = Gui.PySideUic.loadUi(":/ui/task_setup.ui")
+        self.form = Gui.PySideUic.loadUi(":/ui/task_setup.ui")  # type: ignore
+        if not self.form:
+            raise RuntimeError("Failed to load task_setup.ui from resources.")
         self.form.setWindowTitle("DFM Analysis")
-
         self.form.leSelectModel.setReadOnly(True)
 
-        self.list_of_categories = [
-            "-- Select a process --",
-            "Injection molding",
-            "Machining",
-            "Additive manufacturing",
-        ]
+        self.registry = ProcessRegistry.get_instance()
 
-        self.list_of_injection_molding = ["Plastic injection molding", "Metal injection moulding"]
-        self.list_of_machining = ["CNC machining"]
+        self.target_object = None
+        self.target_shape = None
 
-        if len(Gui.Selection.getSelection()) > 0:
-            try:
-                doc_object = Gui.Selection.getSelection()[0]
-                self.target_object = doc_object
-                self.target_shape = doc_object.Shape
-                self.form.leSelectModel.setText(doc_object.Label)
-            except Exception as e:
-                FreeCAD.Console.PrintError(f"{e}\n")
+        self.populate_categories()
+        self.setup_initial_state()
+        self.connect_signals()
+        self.auto_select_model()
 
+    def populate_categories(self):
+        """Populates the category dropdown from the registry."""
+        self.form.cbManCategory.addItems(
+            ["-- Select a category --"] + self.registry.get_categories()
+        )
+
+    def setup_initial_state(self):
+        """Sets the default state for conditional dropdowns."""
+        self.form.cbManProcess.addItems(["-- Select a category first --"])
+        self.form.cbManProcess.setEnabled(False)
+        self.form.cbMaterial.addItems(["-- Select a process first --"])
+        self.form.cbMaterial.setEnabled(False)
+
+    def connect_signals(self):
+        """Connects all widget signals to their handler methods."""
         self.form.pbRunAnalysis.clicked.connect(self.on_run_analysis)
         self.form.pbSelectModel.clicked.connect(self.on_select_shape)
-        self.form.cbManCategory.addItems(["-- Select a category --"] + list(process_data.keys()))
-
-        self.form.cbManProcess.addItems(["-- Select a process --"])
-        self.form.cbManProcess.setEnabled(False)
-
         self.form.cbManCategory.currentIndexChanged.connect(self.on_category_changed)
+        self.form.cbManProcess.currentIndexChanged.connect(self.on_process_changed)
 
-        self.form.pbRunAnalysis.clicked.connect(self.on_run_analysis)
-
-        self.form.cbMaterial.addItems(["-- Select a material --", "PLA", "ABS"])
+    def auto_select_model(self):
+        """Automatically selects the active object if one exists."""
+        if len(Gui.Selection.getSelection()) > 0:
+            self.on_select_shape()
 
     def on_category_changed(self):
+        """Handles changes in the Category dropdown to update the Process dropdown."""
         selected_category = self.form.cbManCategory.currentText()
-
         self.form.cbManProcess.clear()
 
-        processes_to_show = process_data.get(selected_category, [])
+        processes = self.registry.get_processes_for_category(selected_category)
 
-        if processes_to_show:
-            self.form.cbManProcess.addItems(processes_to_show)
+        if processes:
+            self.form.cbManProcess.addItem("-- Select a process --")
+            for process in processes:
+                self.form.cbManProcess.addItem(process.name, userData=process.id)
             self.form.cbManProcess.setEnabled(True)
         else:
-            self.form.cbManProcess.addItems(["-- Select a process"])
+            self.form.cbManProcess.addItem("-- Select a category first --")
             self.form.cbManProcess.setEnabled(False)
 
+        self.on_process_changed()
+
+    def on_process_changed(self):
+        """Handles changes in the Process dropdown to update the Material dropdown."""
+        self.form.cbMaterial.clear()
+
+        process_id = self.form.cbManProcess.currentData()
+        if not process_id:
+            self.form.cbMaterial.addItem("-- Select a process first --")
+            self.form.cbMaterial.setEnabled(False)
+            return
+
+        process = self.registry.get_process_by_id(process_id)
+        materials = list(process.materials.keys())
+
+        if materials:
+            self.form.cbMaterial.addItem("-- Select a material --")
+            self.form.cbMaterial.addItems(materials)
+            self.form.cbMaterial.setEnabled(True)
+        else:
+            self.form.cbMaterial.addItem("No materials defined")
+            self.form.cbMaterial.setEnabled(False)
+
     def on_run_analysis(self):
+        """Validates inputs and starts the analysis."""
         if not self.target_shape:
-            FreeCAD.Console.PrintError("No model selected to analyze\n")
+            FreeCAD.Console.PrintError("No model selected to analyze.\n")
             return
 
-        if "-- Select a process --" in self.form.cbManProcess.currentText():
-            FreeCAD.Console.PrintError("Select a manufacturing process\n")
+        process_id = self.form.cbManProcess.currentData()
+        if not process_id:
+            FreeCAD.Console.PrintError("Select a manufacturing process.\n")
             return
 
-        if "-- Select a material --" in self.form.cbMaterial.currentText():
-            FreeCAD.Console.PrintError("Select a material\n")
+        material_name = self.form.cbMaterial.currentText()
+        if "--" in material_name:
+            FreeCAD.Console.PrintError("Select a material.\n")
             return
 
-        process: str = self.form.cbManProcess.currentText()
         Gui.Control.closeDialog()
 
         try:
-            results = run_draft(self.target_shape)
-            TaskResults(results, self.target_object, process)
+            runner = AnalysisRunner()
+            results: list[CheckResult] = runner.run_analysis(
+                process_id=process_id, material_name=material_name, shape=self.target_shape
+            )
+
+            TaskResults(results, self.target_object, process_id, material=material_name)
         except Exception as e:
-            FreeCAD.Console.PrintError(f"{e}\n")
+            FreeCAD.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
 
     def on_select_shape(self):
-        print("Trying to select a model")
+        """Updates the selected shape from the user's selection in the document."""
         try:
-            doc_object = Gui.Selection.getSelection()[0]
-            self.target_object = doc_object
-            self.target_shape = doc_object.Shape
-            self.form.leSelectModel.setText(doc_object.Label)
+            self.target_object = Gui.Selection.getSelection()[0]
+            self.target_shape = self.target_object.Shape
+            self.form.leSelectModel.setText(self.target_object.Label)
         except IndexError:
-            FreeCAD.Console.PrintUserError("Select a shape in the Tree or 3D view first\n")
-            return
+            FreeCAD.Console.PrintUserError("Select a shape in the Tree or 3D view first.\n")
         except Exception as e:
-            FreeCAD.Console.PrintError(f"Could not get a valid shape to analyze. {e}\n")
-            return
+            FreeCAD.Console.PrintError(f"Could not use the selected object. {e}\n")
+        finally:
+            Gui.Selection.clearSelection()
 
 
 class DfmAnalysisCommand:
     def GetResources(self):
         return {
             "Pixmap": "",
-            "MenuText": "Run Analysis",
-            "ToolTip": "Opens the DFM Analysis Setup task panel.",
+            "MenuText": "DFM Analysis",
+            "ToolTip": "Opens the DFM Analysis task panel.",
         }
 
     def Activated(self):

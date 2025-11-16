@@ -1,0 +1,41 @@
+id: Plastic Injection Molding
+name: Plastic Injection Molding
+category: Injection Molding
+description: >
+  A high-volume manufacturing process that produces parts by injecting molten
+  plastic material into a precision-machined mold. Ideal for creating complex
+  and durable parts with high repeatability.
+
+rules:
+  - MIN_DRAFT_ANGLE
+  - MIN_WALL_THICKNESS
+  - MAX_WALL_THICKNESS
+
+materials:
+  Generic:
+    name: Generic
+    parameters: &generic_params
+      min_draft_angle: 1.0
+      min_wall_thickness: 1.0
+      max_wall_thickness: 4.0
+
+  PLA:
+    name: Polylactic Acid (PLA)
+    parameters:
+      <<: *generic_params
+      max_wall_thickness: 3.5
+
+  ABS:
+    name: Acrylonitrile Butadiene Styrene (ABS)
+    parameters:
+      <<: *generic_params
+      min_wall_thickness: 1.14
+      max_wall_thickness: 3.56
+  
+  Nylon:
+    name: Nylon
+    parameters:
+      min_draft_angle: 0.0
+      min_wall_thickness: 0.76
+      max_wall_thickness: 2.92
+
