@@ -20,36 +20,6 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from abc import ABC, abstractmethod
-from typing import Generator, Any
-
-from OCC.Core.TopoDS import TopoDS_Face
-
-
-class BaseCheck(ABC):
-    """
-    The base class for all checks. This class defines how all checks should behave.
-    """
-
-    # A list of check types this check can perform (some can check multiple things)
-    handled_check_types = []
-
-    # A list of the Analyzer dependencies needed for this check to run.
-    # (some Checks need data from multiple Analyzers)
-    dependencies = []
-
-    # Returns a human readable string for UI uses
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    # This is the method where the check is run
-    @abstractmethod
-    def run_check(
-        self,
-        analysis_data_map,
-        parameters: dict[str, Any],
-        check_type,
-    ) -> list[TopoDS_Face]:
-        pass
+from .analyzers_registry import register_analyzer, get_analyzer_class
+from .checks_registry import register_check, get_check_class
+from .process_registry import ProcessRegistry

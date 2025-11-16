@@ -24,28 +24,111 @@
 import FreeCAD
 import FreeCADGui as Gui
 from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtGui import QStandardItemModel, QStandardItem  # <-- Import the model classes
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 import Part
+from collections import defaultdict
 
+from dfm.models import CheckResult, Severity
+from dfm.rules import Rulebook
 from . import DFM_rc
 
 
 class TaskResults:
-    def __init__(self, results, target_object, process: str):
-        self.target = target_object
-        self.target_shape = target_object.Shape
-        self.target_label = target_object.Label
+    def __init__(self, results: list[CheckResult], target_object, process_id: str, material: str):
+        self.target_object = target_object
+        self.process_id = process_id
+        self.material_name = material
         self.results = results
-        self.process = process
 
-        self.form = Gui.PySideUic.loadUi(":/ui/task_results.ui")
+        self.form = Gui.PySideUic.loadUi(":/ui/task_results.ui")  # type: ignore
         self.form.setWindowTitle("DFM Analysis")
 
-        self.form.leTarget.setReadOnly(True)
-        self.form.leProcess.setReadOnly(True)
+        self.tree = self.form.tvResults
+        self.tree.setHeaderHidden(True)
 
-        self.form.leTarget.setText(self.target_label)
-        self.form.leProcess.setText(self.process)
+        self.model = QStandardItemModel()
+        self.tree.setModel(self.model)
+
+        self.populate_info_widgets()
+        self.populate_results_tree()
+        self.tree.clicked.connect(self.on_result_clicked)
 
         Gui.Control.showDialog(self)
         Gui.Selection.clearSelection()
+
+    def populate_info_widgets(self):
+        """Populates the top-level information widgets."""
+        self.form.leTarget.setText(self.target_object.Label)
+        self.form.leTarget.setReadOnly(True)
+        self.form.leProcess.setText(self.process_id)
+        self.form.leProcess.setReadOnly(True)
+        self.form.leMaterial.setText(self.material_name)
+        self.form.leMaterial.setReadOnly(True)
+
+    def populate_results_tree(self):
+        self.model.clear()
+
+        grouped_results = defaultdict(list)
+        for result in self.results:
+            grouped_results[result.rule_id].append(result)
+
+        if not grouped_results:
+            no_issues_item = QtWidgets.QTreeWidgetItem(self.tree)
+            no_issues_item.setText(0, "No DFM issues found.")
+            return
+
+        root_node = self.model.invisibleRootItem()
+
+        for rule_id, findings in grouped_results.items():
+            rule_item = QStandardItem(f"{rule_id.name} [{len(findings)} issues]")
+
+            for i, finding in enumerate(findings):
+                instance_item = QStandardItem(f"{finding.severity.name}: Instance [{i + 1}]")
+                instance_item.setToolTip(finding.message)
+
+                instance_item.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
+
+                rule_item.appendRow(instance_item)
+
+            root_node.appendRow(rule_item)
+
+        self.tree.expandAll()
+
+    def on_result_clicked(self, index: QtCore.QModelIndex):
+        """Called when a user clicks on any item in the tree."""
+        item = self.model.itemFromIndex(index)
+        if not item:
+            return
+
+        result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+
+        if isinstance(result_data, CheckResult):
+            FreeCAD.Console.PrintMessage(f"Highlighting geometry for: {result_data.rule_id.name}")
+            Gui.Selection.clearSelection()
+            self.highlight_faces(result_data.failing_geometry)
+        else:
+            Gui.Selection.clearSelection()
+
+    def highlight_faces(self, failing_topo_faces: list[TopoDS_Face]):
+        """Highlights the given faces on the document object."""
+        if not failing_topo_faces:
+            return
+
+        shape_faces = self.target_object.Shape.Faces
+        failing_face_names = []
+
+        for failing_face_occ in failing_topo_faces:
+            for i, part_face in enumerate(shape_faces):
+                part_face_occ = Part.__toPythonOCC__(part_face)
+
+                if part_face_occ.IsSame(failing_face_occ):
+                    face_name = f"Face{i + 1}"
+                    failing_face_names.append(face_name)
+                    break
+
+        if failing_face_names:
+            FreeCAD.Console.PrintMessage(
+                f"Highlighting sub-elements: {', '.join(failing_face_names)}"
+            )
+            Gui.Selection.addSelection(self.target_object, failing_face_names)

@@ -20,5 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from .draft_analyzer import DraftAnalyzer
-from .thickness_analyzer import ThicknessAnalyzer
+from . import core
+from . import registries
+from . import checks
+from . import analyzers

@@ -36,9 +36,11 @@ from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 
-from .base_analyzer import BaseAnalyzer
+from dfm.core.base_analyzer import BaseAnalyzer
+from dfm.registries import register_analyzer
 
 
+@register_analyzer("DRAFT_ANALYZER")
 class DraftAnalyzer(BaseAnalyzer):
     """
     Analyzes the minimum draft angle for all faces of a shape.
@@ -68,7 +70,7 @@ class DraftAnalyzer(BaseAnalyzer):
         if not isinstance(pull_direction, gp_Dir):
             raise ValueError(f"{self.name} requires a 'pull_direction' of type gp_Dir.")
 
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
 
         results: dict[TopoDS_Face, float] = {}
 

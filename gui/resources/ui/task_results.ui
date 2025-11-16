@@ -17,7 +17,11 @@
    <item>
     <layout class="QGridLayout" name="gridLayout" columnstretch="1,1">
      <item row="1" column="1">
-      <widget class="QLineEdit" name="leProcess"/>
+      <widget class="QLineEdit" name="leProcess">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The manufacturing process the design was checked against.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
      </item>
      <item row="0" column="0">
       <widget class="QLabel" name="lTarget">
@@ -34,7 +38,25 @@
       </widget>
      </item>
      <item row="0" column="1">
-      <widget class="QLineEdit" name="leTarget"/>
+      <widget class="QLineEdit" name="leTarget">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The model the analysis was run on.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="lMaterial">
+       <property name="text">
+        <string>Material</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QLineEdit" name="leMaterial">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The material of the design.&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;This may affect parameters the design is checked against, such as minimum thickness. &lt;/p&gt;&lt;p&gt;The parameters are editable in the Rule Manager.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>
@@ -62,7 +84,17 @@
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
        <layout class="QGridLayout" name="gridLayout_2">
-        <item row="1" column="0">
+        <item row="0" column="0">
+         <widget class="QPushButton" name="pbSaveResults">
+          <property name="toolTip">
+           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Saves the results to a local file so that the results can be reviewed later.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          </property>
+          <property name="text">
+           <string>Save Results</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
          <widget class="QPushButton" name="pbExportResults">
           <property name="maximumSize">
            <size>
@@ -70,15 +102,11 @@
             <height>16777215</height>
            </size>
           </property>
-          <property name="text">
-           <string>Export Results Report</string>
+          <property name="toolTip">
+           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Exports a report of the DFM analysis results to a CSV file to be viewed in a spreadsheet editor.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
-         </widget>
-        </item>
-        <item row="0" column="0">
-         <widget class="QPushButton" name="pbSaveResults">
           <property name="text">
-           <string>Save Results</string>
+           <string>Export Report</string>
           </property>
          </widget>
         </item>
@@ -86,19 +114,6 @@
       </item>
      </layout>
     </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>
