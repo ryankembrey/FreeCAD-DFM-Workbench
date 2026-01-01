@@ -27,7 +27,7 @@ from gui import task_setup
 
 class DFMWorkbench(Gui.Workbench):
     MenuText = "DFM"
-    ToolTip = "Design For Manufacturing Workbench"
+    ToolTip = "Design for manufacturing workbench"
     Icon = ""
 
     def Initialize(self):
