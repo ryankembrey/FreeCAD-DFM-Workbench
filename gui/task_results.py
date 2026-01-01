@@ -93,8 +93,6 @@ class TaskResults:
 
             root_node.appendRow(rule_item)
 
-        self.tree.expandAll()
-
     def on_result_clicked(self, index: QtCore.QModelIndex):
         """Called when a user clicks on any item in the tree."""
         item = self.model.itemFromIndex(index)
