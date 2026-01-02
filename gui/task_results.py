@@ -24,7 +24,7 @@
 import FreeCAD
 import FreeCADGui as Gui
 from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtGui import QStandardItemModel, QStandardItem  # <-- Import the model classes
+from PySide6.QtGui import QStandardItemModel, QStandardItem
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 import Part
 from collections import defaultdict
