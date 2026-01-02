@@ -102,7 +102,7 @@ class TaskResults:
         result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
 
         if isinstance(result_data, CheckResult):
-            FreeCAD.Console.PrintMessage(f"Highlighting geometry for: {result_data.rule_id.name}")
+            FreeCAD.Console.PrintMessage(f"Highlighting geometry for: {result_data.rule_id.name}\n")
             Gui.Selection.clearSelection()
             self.highlight_faces(result_data.failing_geometry)
         else:
