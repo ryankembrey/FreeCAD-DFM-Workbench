@@ -51,7 +51,7 @@ class ThicknessChecker(BaseCheck):
                 min_thickness = parameters.get("min_wall_thickness")
                 minimum = min(thicknesses)
                 if minimum < min_thickness:
-                    message = f"Face {face.__hash__()} recorded thickness {minimum:.2f}mm and exceeded minimum thickness of {min_thickness:.2f}mm\n"
+                    message = f"Recorded thickness of {minimum:.2f}mm and exceeded minimum thickness of {min_thickness:.2f}mm\n"
 
                     result = CheckResult(
                         rule_id=Rulebook.MIN_WALL_THICKNESS,

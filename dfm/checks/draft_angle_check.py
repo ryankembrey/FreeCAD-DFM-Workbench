@@ -61,7 +61,7 @@ class DraftAngleChecker(BaseCheck):
                 raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_angle' parameter.")
             for face, draft_result in analysis_data_map.items():
                 if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
-                    message = f"Draft angle is {draft_result}°, which is less than the required minimum of {min_angle:.2f}°."
+                    message = f"Draft angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
                     result = CheckResult(
                         rule_id=Rulebook.MIN_DRAFT_ANGLE,
                         message=message,
