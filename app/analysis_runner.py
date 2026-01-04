@@ -85,7 +85,7 @@ class AnalysisRunner:
         # 2. Iterate through all the rule IDs declared in the process's YAML file
         for rule_string in process.rules:
             try:
-                rule_id = Rulebook(rule_string)
+                rule_id = Rulebook[rule_string]
             except ValueError:
                 FreeCAD.Console.PrintDeveloperError(
                     f"Skipping unknown rule '{rule_string}' defined in '{process_id}.yaml'.\n"

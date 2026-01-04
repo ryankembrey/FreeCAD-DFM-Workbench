@@ -93,7 +93,7 @@ class TaskResults:
         root_node = self.model.invisibleRootItem()
 
         for rule_id, findings in grouped_results.items():
-            rule_item = QStandardItem(f"{rule_id.name} [{len(findings)} issues]")
+            rule_item = QStandardItem(f"{rule_id.label} [{len(findings)} issues]")
 
             for i, finding in enumerate(findings):
                 instance_item = QStandardItem(f"{finding.severity.name}: Instance [{i + 1}]")
