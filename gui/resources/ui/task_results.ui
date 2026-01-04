@@ -83,6 +83,13 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
+       <widget class="QPushButton" name="pbAllFaces">
+        <property name="text">
+         <string>Highlight All Problematic Faces</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <layout class="QGridLayout" name="gridLayout_2">
         <item row="0" column="0">
          <widget class="QPushButton" name="pbSaveResults">
