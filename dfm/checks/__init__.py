@@ -20,5 +20,5 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from .draft_angle_check import DraftAngleChecker
-from .thickness_check import ThicknessChecker
+from .draft_angle_check import DraftAngleCheck
+from .thickness_check import MinThicknessCheck, MaxThicknessCheck
