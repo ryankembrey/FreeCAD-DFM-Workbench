@@ -28,7 +28,7 @@ import FreeCAD
 from OCC.Core.Geom import Geom_Surface
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_REVERSED
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Dir
 from OCC.Core.GeomAbs import GeomAbs_Plane
@@ -159,9 +159,19 @@ class DraftAnalyzer(BaseAnalyzer):
 
     def get_face_uv_normal(self, face: TopoDS_Face, u: float, v: float) -> gp_Dir | None:
         """Returns the normal of a TopoDS_Face at UV"""
-        surface: Geom_Surface = BRep_Tool.Surface(face)
 
+        surface = BRep_Tool.Surface(face)
         props = GeomLProp_SLProps(surface, u, v, 1, 1e-6)
 
         if props.IsNormalDefined():
-            return props.Normal()
+            pnt = props.Value()
+            norm = props.Normal()
+
+            if not face.Location().IsIdentity():
+                pnt.Transform(face.Location().Transformation())
+                norm.Transform(face.Location().Transformation())
+
+            if face.Orientation() == TopAbs_REVERSED:
+                norm.Reverse()
+
+            return norm
