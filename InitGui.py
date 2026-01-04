@@ -22,7 +22,7 @@
 
 import FreeCADGui as Gui
 
-from gui import task_setup
+from gui import task_setup, task_show_normals
 
 
 class DFMWorkbench(Gui.Workbench):
@@ -37,6 +37,7 @@ class DFMWorkbench(Gui.Workbench):
 
         self.list = [
             "DFM_SetupAnalysis",
+            "DFM_ShowNormals",
         ]  # a list of command names created in the line above
         self.appendToolbar(
             "DFM_SetupAnalysis", self.list
