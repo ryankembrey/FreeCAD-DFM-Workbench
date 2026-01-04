@@ -20,6 +20,46 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from .draft_angle_check import DraftAngleCheck
-from .thickness_check import MinThicknessCheck, MaxThicknessCheck
-from .undercut_check import UndercutCheck
+from typing import Any
+
+from OCC.Core.TopoDS import TopoDS_Face
+
+from dfm.models import CheckResult, Severity
+from dfm.rules import Rulebook
+from dfm.core.base_check import BaseCheck
+from dfm.registries import register_check
+
+
+@register_check(Rulebook.NO_UNDERCUTS)
+class UndercutCheck(BaseCheck):
+    @property
+    def name(self) -> str:
+        return "Undercut Check"
+
+    @property
+    def required_analyzer_id(self) -> str:
+        return "UNDERCUT_ANALYZER"
+
+    def run_check(
+        self, analysis_data_map: dict[TopoDS_Face, float], parameters: dict[str, Any], check_type
+    ) -> list[CheckResult]:
+        results: list[CheckResult] = []
+
+        for face, undercut_ratio in analysis_data_map.items():
+            if undercut_ratio > 0.05:  # Allow 5% noise tolerance
+                percentage = undercut_ratio * 100
+                message = (
+                    f"Undercut detected. {percentage:.1f}% of this face is "
+                    "trapped (occluded from both Top and Bottom)."
+                )
+
+                results.append(
+                    CheckResult(
+                        rule_id=Rulebook.NO_UNDERCUTS,
+                        message=message,
+                        severity=Severity.ERROR,
+                        failing_geometry=[face],
+                    )
+                )
+
+        return results

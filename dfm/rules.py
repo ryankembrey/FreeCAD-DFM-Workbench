@@ -34,6 +34,7 @@ class Rulebook(Enum):
     MIN_DRAFT_ANGLE = ("MIN_DRAFT_ANGLE", "Minimum Draft Angle")
     MIN_WALL_THICKNESS = ("MIN_WALL_THICKNESS", "Minimum Wall Thickness")
     MAX_WALL_THICKNESS = ("MAX_WALL_THICKNESS", "Maximum Wall Thickness")
+    NO_UNDERCUTS = ("NO_UNDERCUTS", "Undercut")
 
     def __init__(self, id_str, label):
         self._value_ = id_str

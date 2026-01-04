@@ -20,6 +20,5 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from .draft_angle_check import DraftAngleCheck
-from .thickness_check import MinThicknessCheck, MaxThicknessCheck
-from .undercut_check import UndercutCheck
+from .base_analyzer import BaseAnalyzer
+from .base_check import BaseCheck

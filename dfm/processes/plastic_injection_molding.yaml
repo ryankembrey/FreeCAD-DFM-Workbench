@@ -10,6 +10,7 @@ rules:
   - MIN_DRAFT_ANGLE
   - MIN_WALL_THICKNESS
   - MAX_WALL_THICKNESS
+  - NO_UNDERCUTS
 
 materials:
   Generic:
