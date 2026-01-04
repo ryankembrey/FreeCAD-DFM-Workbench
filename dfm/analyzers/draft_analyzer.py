@@ -34,7 +34,7 @@ from OCC.Core.GeomAbs import GeomAbs_Plane
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
-from dfm.utils import get_face_uv_center, get_face_uv_normal
+from dfm.utils import get_face_uv_center, get_face_uv_normal, yield_face_uv_grid
 
 
 @register_analyzer("DRAFT_ANALYZER")
@@ -96,29 +96,16 @@ class DraftAnalyzer(BaseAnalyzer):
 
     def get_draft_for_curve(self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int) -> float:
         """Returns the draft angle for any TopoDS_Face by sampling in a grid and finding the minimum draft angle."""
-        surface = BRepAdaptor_Surface(face, True)
-
-        u_min, u_max = surface.FirstUParameter(), surface.LastUParameter()
-        v_min, v_max = surface.FirstVParameter(), surface.LastVParameter()
-
-        u_range = u_max - u_min
-        v_range = v_max - v_min
-        u_step = u_range / (samples - 1)
-        v_step = v_range / (samples - 1)
-
         min_draft_angle = 180
 
-        for i in range(samples):
-            u = u_min + i * u_step
-            for j in range(samples):
-                v = v_min + j * v_step
-                normal_dir = get_face_uv_normal(face, u, v)
-                if not normal_dir:
-                    FreeCAD.Console.PrintError(f"Normal returned None for face {face.__hash__()}")
-                    continue
+        for u, v in yield_face_uv_grid(face, samples):
+            normal_dir = get_face_uv_normal(face, u, v)
+            if not normal_dir:
+                FreeCAD.Console.PrintError(f"Normal returned None for face {face.__hash__()}")
+                continue
 
-                draft_angle = self.get_draft_for_dir(normal_dir, pull_direction)
-                min_draft_angle = min(min_draft_angle, draft_angle)
+            draft_angle = self.get_draft_for_dir(normal_dir, pull_direction)
+            min_draft_angle = min(min_draft_angle, draft_angle)
 
         return min_draft_angle
 
