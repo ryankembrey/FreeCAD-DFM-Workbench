@@ -21,4 +21,4 @@
 #  ***************************************************************************
 
 from .draft_analyzer import DraftAnalyzer
-from .thickness_analyzer import ThicknessAnalyzer
+from .ray_thickness_analyzer import RayThicknessAnalyzer

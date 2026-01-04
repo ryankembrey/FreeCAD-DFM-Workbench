@@ -31,57 +31,102 @@ from dfm.core.base_check import BaseCheck
 from dfm.registries import register_check
 
 
-@register_check(Rulebook.MIN_WALL_THICKNESS, Rulebook.MAX_WALL_THICKNESS)
-class ThicknessChecker(BaseCheck):
+@register_check(Rulebook.MIN_WALL_THICKNESS)
+class MinThicknessCheck(BaseCheck):
+    """
+    Checks for walls that are too thin using Ray Casting.
+    """
+
     @property
     def name(self) -> str:
-        return "Thickness Checker"
+        return "Min Thickness Check"
 
     @property
     def required_analyzer_id(self) -> str:
-        return "THICKNESS_ANALYZER"
+        return "RAY_THICKNESS_ANALYZER"
+
+    def run_check(
+        self,
+        analysis_data_map: dict[TopoDS_Face, list[float]],
+        parameters: dict[str, Any],
+        check_type,
+    ) -> list[CheckResult]:
+        results: list[CheckResult] = []
+
+        min_allowed = parameters.get("min_wall_thickness")
+        if min_allowed is None:
+            return []
+
+        for face, thicknesses in analysis_data_map.items():
+            if not thicknesses:
+                continue
+
+            # Filter out rays that hit nothing
+            valid_thicknesses = [t for t in thicknesses if t != float("inf")]
+
+            if not valid_thicknesses:
+                continue
+
+            measured_min = min(valid_thicknesses)
+
+            if measured_min < (min_allowed):
+                message = (
+                    f"Minimum thickness violation. Measured: {measured_min:.2f}mm "
+                    f"(Limit: {min_allowed:.2f}mm)"
+                )
+
+                result = CheckResult(
+                    rule_id=Rulebook.MIN_WALL_THICKNESS,
+                    message=message,
+                    severity=Severity.ERROR,
+                    failing_geometry=[face],
+                )
+                results.append(result)
+
+        return results
+
+
+@register_check(Rulebook.MAX_WALL_THICKNESS)
+class MaxThicknessCheck(BaseCheck):
+    """
+    Checks for walls that are too thick using Rolling Ball / Sphere method.
+    """
+
+    @property
+    def name(self) -> str:
+        return "Max Thickness Check"
+
+    @property
+    def required_analyzer_id(self) -> str:
+        return "SPHERE_THICKNESS_ANALYZER"
 
     def run_check(
         self, analysis_data_map, parameters: dict[str, Any], check_type
     ) -> list[CheckResult]:
         results: list[CheckResult] = []
 
-        if check_type == Rulebook.MIN_WALL_THICKNESS:
-            for face, thicknesses in analysis_data_map.items():
-                min_thickness = parameters.get("min_wall_thickness")
-                minimum = min(thicknesses)
-                if minimum < min_thickness:
-                    message = f"Recorded thickness of {minimum:.2f}mm and exceeded minimum thickness of {min_thickness:.2f}mm\n"
+        max_allowed = parameters.get("max_wall_thickness")
+        if max_allowed is None:
+            return []
 
-                    result = CheckResult(
-                        rule_id=Rulebook.MIN_WALL_THICKNESS,
-                        message=message,
-                        severity=Severity.ERROR,
-                        failing_geometry=[face],
-                    )
-                    results.append(result)
-            return results
+        for face, diameters in analysis_data_map.items():
+            if not diameters:
+                continue
 
-        elif check_type == Rulebook.MAX_WALL_THICKNESS:
-            for face, thicknesses in analysis_data_map.items():
-                max_thickness = parameters.get("max_wall_thickness")
-                maximum = max(thicknesses)
-                if maximum > max_thickness:
-                    message = f"Recorded thickness of {maximum:.2f}mm and exceeded maximum thickness of {max_thickness:.2f}mm\n"
+            measured_max = max(diameters)
 
-                    result = CheckResult(
-                        rule_id=Rulebook.MAX_WALL_THICKNESS,
-                        message=message,
-                        severity=Severity.ERROR,
-                        failing_geometry=[face],
-                    )
-                    results.append(result)
-            return results
+            if measured_max > (max_allowed):
+                message = (
+                    f"Maximum thickness violation. Measured: {measured_max:.2f}mm "
+                    f"(Limit: {max_allowed:.2f}mm). Risk of sink marks."
+                )
 
-        elif check_type == "UNIFORM_THICKNESS":
-            for face, thickness in analysis_data_map.items():
-                uniform_thickness = parameters.get("uniform_thickness")
-                # TODO:
-            return results
-        else:
-            raise TypeError(f"Invalid THICKNESS check type {check_type}.")
+                result = CheckResult(
+                    rule_id=Rulebook.MAX_WALL_THICKNESS,
+                    message=message,
+                    severity=Severity.WARNING,
+                    failing_geometry=[face],
+                )
+                results.append(result)
+
+        return results
