@@ -22,3 +22,4 @@
 
 from .draft_analyzer import DraftAnalyzer
 from .ray_thickness_analyzer import RayThicknessAnalyzer
+from .sphere_thickness_analyzer import SphereThicknessAnalyzer
