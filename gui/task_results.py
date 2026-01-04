@@ -53,9 +53,21 @@ class TaskResults:
         self.populate_info_widgets()
         self.populate_results_tree()
         self.tree.clicked.connect(self.on_result_clicked)
+        self.form.pbAllFaces.clicked.connect(self.on_save_clicked)
 
         Gui.Control.showDialog(self)
         Gui.Selection.clearSelection()
+
+    def on_save_clicked(self):
+        """Secretly just highlights all the problematic faces"""
+        failing_faces: list[TopoDS_Face] = []
+
+        for result in self.results:
+            for r in result.failing_geometry:
+                failing_faces.append(r)
+
+        Gui.Selection.clearSelection()
+        self.highlight_faces(failing_faces)
 
     def populate_info_widgets(self):
         """Populates the top-level information widgets."""
@@ -74,8 +86,8 @@ class TaskResults:
             grouped_results[result.rule_id].append(result)
 
         if not grouped_results:
-            no_issues_item = QtWidgets.QTreeWidgetItem(self.tree)
-            no_issues_item.setText(0, "No DFM issues found.")
+            no_issues_item = QStandardItem("No DFM issues found.")
+            self.model.invisibleRootItem().appendRow(no_issues_item)
             return
 
         root_node = self.model.invisibleRootItem()
@@ -92,6 +104,8 @@ class TaskResults:
                 rule_item.appendRow(instance_item)
 
             root_node.appendRow(rule_item)
+
+        self.tree.expandAll()
 
     def on_result_clicked(self, index: QtCore.QModelIndex):
         """Called when a user clicks on any item in the tree."""
