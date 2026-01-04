@@ -22,7 +22,6 @@
 
 from typing import Any
 
-from OCC.Core.TopoDS import TopoDS_Face, TopoDS_Shape
 from dfm.models import CheckResult, Severity
 
 from dfm.core.base_check import BaseCheck
@@ -31,7 +30,7 @@ from dfm.registries import register_check
 
 
 @register_check(Rulebook.MIN_DRAFT_ANGLE)
-class DraftAngleChecker(BaseCheck):
+class DraftAngleCheck(BaseCheck):
     """
     A single, flexible class to handle all draft angle related checks.
     Implements checks for minimum draft and maximum draft.
@@ -56,12 +55,13 @@ class DraftAngleChecker(BaseCheck):
         results: list[CheckResult] = []
 
         if check_type == Rulebook.MIN_DRAFT_ANGLE:
-            min_angle = parameters.get("min_draft_angle")
-            if min_angle is None:
-                raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_angle' parameter.")
-            for face, draft_result in analysis_data_map.items():
-                if draft_result < (min_angle - tolerance) and abs(draft_result) != 90.0:
-                    message = f"Draft angle is {draft_result:.2f}°, which is less than the required minimum of {min_angle:.2f}°."
+            min_allowed = parameters.get("min_draft_angle")
+            if min_allowed is None:
+                raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_draft_angle' parameter.")
+            for face, measured_min in analysis_data_map.items():
+                if measured_min < (min_allowed - tolerance) and abs(measured_min) != 90.0:
+                    message = f"Minimum draft violation. Measured: {measured_min:.2f}°"
+                    f"(Limit: {min_allowed:.2f}°)"
                     result = CheckResult(
                         rule_id=Rulebook.MIN_DRAFT_ANGLE,
                         message=message,
