@@ -25,19 +25,16 @@ from typing import Any
 
 import FreeCAD
 
-from OCC.Core.Geom import Geom_Surface
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_REVERSED
+from OCC.Core.TopAbs import TopAbs_FACE
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Dir
 from OCC.Core.GeomAbs import GeomAbs_Plane
-from OCC.Core.BRepTools import breptools
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.GeomLProp import GeomLProp_SLProps
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
+from dfm.utils import get_face_uv_center, get_face_uv_normal
 
 
 @register_analyzer("DRAFT_ANALYZER")
@@ -115,7 +112,7 @@ class DraftAnalyzer(BaseAnalyzer):
             u = u_min + i * u_step
             for j in range(samples):
                 v = v_min + j * v_step
-                normal_dir = self.get_face_uv_normal(face, u, v)
+                normal_dir = get_face_uv_normal(face, u, v)
                 if not normal_dir:
                     FreeCAD.Console.PrintError(f"Normal returned None for face {face.__hash__()}")
                     continue
@@ -130,9 +127,9 @@ class DraftAnalyzer(BaseAnalyzer):
         Returns the draft angle for a face from its center.
         To be used on faces of GeomAbs_Plane type for efficiency.
         """
-        u_mid, v_mid = self.get_face_uv_center(face)
+        u_mid, v_mid = get_face_uv_center(face)
 
-        normal_dir = self.get_face_uv_normal(face, u_mid, v_mid)
+        normal_dir = get_face_uv_normal(face, u_mid, v_mid)
         if not normal_dir:
             return 999
 
@@ -148,30 +145,3 @@ class DraftAnalyzer(BaseAnalyzer):
             return -90.0
 
         return angle_deg - 90
-
-    def get_face_uv_center(self, face: TopoDS_Face) -> tuple[(float, float)]:
-        """Returns the center of the UV parametric space for a TopoDS_Face."""
-        u_min, u_max, v_min, v_max = breptools.UVBounds(face)
-        u_mid: float = (u_max + u_min) / 2
-        v_mid: float = (v_max + v_min) / 2
-
-        return (u_mid, v_mid)
-
-    def get_face_uv_normal(self, face: TopoDS_Face, u: float, v: float) -> gp_Dir | None:
-        """Returns the normal of a TopoDS_Face at UV"""
-
-        surface = BRep_Tool.Surface(face)
-        props = GeomLProp_SLProps(surface, u, v, 1, 1e-6)
-
-        if props.IsNormalDefined():
-            pnt = props.Value()
-            norm = props.Normal()
-
-            if not face.Location().IsIdentity():
-                pnt.Transform(face.Location().Transformation())
-                norm.Transform(face.Location().Transformation())
-
-            if face.Orientation() == TopAbs_REVERSED:
-                norm.Reverse()
-
-            return norm
