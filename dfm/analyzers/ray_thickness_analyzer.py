@@ -21,6 +21,7 @@
 #  ***************************************************************************
 
 from typing import Any, Optional
+import math
 import FreeCAD
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
@@ -118,25 +119,30 @@ class RayThicknessAnalyzer(BaseAnalyzer):
 
         intersector.Perform(ray, epsilon, float("inf"))
 
-        if intersector.IsDone():
-            for i in range(1, intersector.NbPnt() + 1):
-                p_hit = intersector.Pnt(i)
-                dist = point.Distance(p_hit)
+        # At acute corners, thickness is reported as zero. This is intuitively incorrect for
+        # a DFM analysis. So we compare the normal directions of the origin face and the hit
+        # face, and filter out any faces whose angle between them is more than 60° away
+        # from being parallel, and return inf
+        # 180 - 60 = 120 -> cos(120) = -0.5
+        acute_filter_angle = 60
+        threshold_rad = math.radians(180 - acute_filter_angle)
+        acute_filter = math.cos(threshold_rad)
 
-                hit_face = intersector.Face(i)
-                hit_u = intersector.UParameter(i)
-                hit_v = intersector.VParameter(i)
+        if intersector.IsDone() and intersector.NbPnt() > 0:
+            p_hit = intersector.Pnt(1)
+            dist = point.Distance(p_hit)
 
-                hit_normal = get_face_uv_normal(hit_face, hit_u, hit_v)
-                if not hit_normal:
-                    continue
+            hit_face = intersector.Face(1)
+            hit_u = intersector.UParameter(1)
+            hit_v = intersector.VParameter(1)
 
+            hit_normal = get_face_uv_normal(hit_face, hit_u, hit_v)
+
+            if hit_normal:
                 dot_prod = inward_norm.Dot(hit_normal)
 
-                # Threshold: -0.707 corresponds to 45 degrees.
-                # If dot > -0.5, the wall is too "steep" relative to the ray.
-                # It's likely a side wall or acute corner artifact.
-                if dot_prod < -0.5:
+                if dot_prod < acute_filter:
                     return dist
 
+                return float("inf")
         return float("inf")
