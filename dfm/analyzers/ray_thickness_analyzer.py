@@ -119,7 +119,24 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         intersector.Perform(ray, epsilon, float("inf"))
 
         if intersector.IsDone():
-            if intersector.NbPnt() > 0:
-                return point.Distance(intersector.Pnt(1))
+            for i in range(1, intersector.NbPnt() + 1):
+                p_hit = intersector.Pnt(i)
+                dist = point.Distance(p_hit)
+
+                hit_face = intersector.Face(i)
+                hit_u = intersector.UParameter(i)
+                hit_v = intersector.VParameter(i)
+
+                hit_normal = get_face_uv_normal(hit_face, hit_u, hit_v)
+                if not hit_normal:
+                    continue
+
+                dot_prod = inward_norm.Dot(hit_normal)
+
+                # Threshold: -0.707 corresponds to 45 degrees.
+                # If dot > -0.5, the wall is too "steep" relative to the ray.
+                # It's likely a side wall or acute corner artifact.
+                if dot_prod < -0.5:
+                    return dist
 
         return float("inf")
