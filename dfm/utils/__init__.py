@@ -21,4 +21,4 @@
 #  ***************************************************************************
 
 
-from .geometry import get_face_uv_center, get_face_uv_normal
+from .geometry import get_face_uv_center, get_face_uv_normal, yield_face_uv_grid

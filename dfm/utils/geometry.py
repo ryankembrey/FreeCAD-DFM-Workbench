@@ -22,6 +22,8 @@
 
 # This file defines geometry functions that are often reused between analyzers
 
+from typing import Generator
+
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.GeomLProp import GeomLProp_SLProps
@@ -57,3 +59,43 @@ def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> gp_Dir | None:
             norm.Reverse()
 
         return norm
+
+
+def yield_face_uv_grid(
+    face: TopoDS_Face, samples: int, margin: float = 0.00
+) -> Generator[tuple[float, float], None, None]:
+    """
+    Generates (u, v) coordinates for a grid covering the face.
+
+    Args:
+        face: The face to sample.
+        samples: Number of points along each axis.
+        margin: Percentage (0.0 to 0.5) to crop from edges to avoid corner noise.
+                Default 0.05 (5%) ensures rays don't graze adjacent faces.
+    """
+    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+
+    # Apply margin (Default to none)
+    u_len = u_max - u_min
+    v_len = v_max - v_min
+
+    s_u_min = u_min + (u_len * margin)
+    s_u_max = u_max - (u_len * margin)
+    s_v_min = v_min + (v_len * margin)
+    s_v_max = v_max - (v_len * margin)
+
+    # Handle single point (center)
+    if samples <= 1:
+        yield (s_u_min + s_u_max) / 2.0, (s_v_min + s_v_max) / 2.0
+        return
+
+    # Calculate step
+    u_step = (s_u_max - s_u_min) / (samples - 1)
+    v_step = (s_v_max - s_v_min) / (samples - 1)
+
+    # Iterate
+    for i in range(samples):
+        u = s_u_min + i * u_step
+        for j in range(samples):
+            v = s_v_min + j * v_step
+            yield u, v
