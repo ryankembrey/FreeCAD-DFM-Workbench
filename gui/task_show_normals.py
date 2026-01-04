@@ -27,10 +27,9 @@ import Part
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_REVERSED
 from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRepTools import breptools
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.TopoDS import topods
-from OCC.Core.gp import gp_Pnt
+from dfm.utils.geometry import get_face_uv_center
 
 
 class TaskShowNormals:
@@ -50,9 +49,7 @@ class TaskShowNormals:
         while explorer.More():
             face = topods.Face(explorer.Current())
 
-            u_min, u_max, v_min, v_max = breptools.UVBounds(face)
-            u = (u_min + u_max) / 2.0
-            v = (v_min + v_max) / 2.0
+            u, v = get_face_uv_center(face)
 
             surface = BRep_Tool.Surface(face)
             props = GeomLProp_SLProps(surface, u, v, 1, 1e-6)

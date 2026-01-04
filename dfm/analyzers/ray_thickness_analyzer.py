@@ -22,19 +22,17 @@
 
 from typing import Any, Optional
 import math
-import FreeCAD
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin
-from OCC.Core.BRepTools import breptools
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
-from dfm.utils import get_face_uv_normal
+from dfm.utils import get_face_uv_normal, yield_face_uv_grid
 
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
@@ -76,22 +74,14 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         """
         Returns the thicknesses found at each point UV for a given face.
         """
-        thicknesses = []
         surface = BRepAdaptor_Surface(face, True)
-        u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+        thicknesses = []
 
-        u_step = (u_max - u_min) / (samples - 1) if samples > 1 else 0
-        v_step = (v_max - v_min) / (samples - 1) if samples > 1 else 0
+        for u, v in yield_face_uv_grid(face, samples):
+            thick = self.ray_cast_at_uv(face, surface, u, v, intersector)
 
-        for i in range(samples):
-            u = u_min + i * u_step
-            for j in range(samples):
-                v = v_min + j * v_step
-
-                thick = self.ray_cast_at_uv(face, surface, u, v, intersector)
-
-                if thick is not None and thick != float("inf"):
-                    thicknesses.append(thick)
+            if thick is not None and thick != float("inf"):
+                thicknesses.append(thick)
 
         return thicknesses
 
