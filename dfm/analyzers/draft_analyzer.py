@@ -87,7 +87,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
         surface = BRepAdaptor_Surface(face)
 
-        if surface.GetType == GeomAbs_Plane:
+        if surface.GetType() == GeomAbs_Plane:
             draft_angle = self.get_draft_for_plane(face, pull_direction)
         else:
             draft_angle = self.get_draft_for_curve(face, pull_direction, samples)
