@@ -111,12 +111,23 @@ class TaskResults:
         if not item:
             return
 
+        failing_faces: list[TopoDS_Face] = []
         result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
 
         if isinstance(result_data, CheckResult):
-            FreeCAD.Console.PrintMessage(f"Highlighting geometry for: {result_data.rule_id.name}\n")
+            failing_faces = result_data.failing_geometry
+        elif item.hasChildren():
+            for row in range(item.rowCount()):
+                child_item = item.child(row)
+                child_data = child_item.data(QtCore.Qt.ItemDataRole.UserRole)
+                if isinstance(child_data, CheckResult):
+                    failing_faces.extend(child_data.failing_geometry)
+
+        if failing_faces:
+            unique_faces = list(set(failing_faces))
+
             Gui.Selection.clearSelection()
-            self.highlight_faces(result_data.failing_geometry)
+            self.highlight_faces(unique_faces)
         else:
             Gui.Selection.clearSelection()
 
