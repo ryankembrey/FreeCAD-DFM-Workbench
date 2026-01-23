@@ -48,6 +48,7 @@ class UndercutCheck(BaseCheck):
         for face, undercut_ratio in analysis_data_map.items():
             if undercut_ratio > 0.05:  # Allow 5% noise tolerance
                 percentage = undercut_ratio * 100
+                overview = f"Undercut {percentage:.1f}%"
                 message = (
                     f"Undercut detected. {percentage:.1f}% of this face is "
                     "trapped (occluded from both Top and Bottom)."
@@ -56,6 +57,7 @@ class UndercutCheck(BaseCheck):
                 results.append(
                     CheckResult(
                         rule_id=Rulebook.NO_UNDERCUTS,
+                        overview=overview,
                         message=message,
                         severity=Severity.ERROR,
                         failing_geometry=[face],
