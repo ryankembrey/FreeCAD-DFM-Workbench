@@ -53,21 +53,13 @@ class TaskResults:
         self.populate_info_widgets()
         self.populate_results_tree()
         self.tree.clicked.connect(self.on_result_clicked)
-        self.form.pbAllFaces.clicked.connect(self.on_save_clicked)
 
         Gui.Control.showDialog(self)
         Gui.Selection.clearSelection()
 
     def on_save_clicked(self):
-        """Secretly just highlights all the problematic faces"""
-        failing_faces: list[TopoDS_Face] = []
-
-        for result in self.results:
-            for r in result.failing_geometry:
-                failing_faces.append(r)
-
-        Gui.Selection.clearSelection()
-        self.highlight_faces(failing_faces)
+        """"""
+        pass
 
     def populate_info_widgets(self):
         """Populates the top-level information widgets."""
@@ -77,6 +69,10 @@ class TaskResults:
         self.form.leProcess.setReadOnly(True)
         self.form.leMaterial.setText(self.material_name)
         self.form.leMaterial.setReadOnly(True)
+        self.form.tbDetails.setHtml(
+            "Select a result in the tree to view details of the DFM issues."
+        )
+        self.adjust_details_height()
 
     def populate_results_tree(self):
         self.model.clear()
@@ -87,6 +83,9 @@ class TaskResults:
 
         if not grouped_results:
             no_issues_item = QStandardItem("No DFM issues found.")
+            no_issues_item.setFlags(
+                QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
+            )
             self.model.invisibleRootItem().appendRow(no_issues_item)
             return
 
@@ -95,15 +94,35 @@ class TaskResults:
         for rule_id, findings in grouped_results.items():
             rule_item = QStandardItem(f"{rule_id.label} [{len(findings)} issues]")
 
+            rule_item.setFlags(
+                QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
+            )
+
+            most_critical_finding = max(findings, key=lambda f: f.severity.value)
+            rule_item.setIcon(self._get_severity_icon(most_critical_finding.severity))
+
             for i, finding in enumerate(findings):
                 instance_item = QStandardItem(f"{finding.severity.name}: Instance [{i + 1}]")
-                instance_item.setToolTip(finding.message)
 
+                instance_item.setFlags(
+                    QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
+                )
+                instance_item.setIcon(self._get_severity_icon(finding.severity))
+
+                instance_item.setToolTip(finding.message)
                 instance_item.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
 
                 rule_item.appendRow(instance_item)
 
             root_node.appendRow(rule_item)
+
+    def adjust_details_height(self):
+        """Adjusts the height of the text browser based on its content."""
+        doc = self.form.tbDetails.document()
+        content_height = doc.documentLayout().documentSize().height()
+        final_height = int(content_height) + 5
+        final_height = max(60, min(final_height, 250))
+        self.form.tbDetails.setFixedHeight(final_height)
 
     def on_result_clicked(self, index: QtCore.QModelIndex):
         """Called when a user clicks on any item in the tree."""
@@ -115,13 +134,24 @@ class TaskResults:
         result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
 
         if isinstance(result_data, CheckResult):
+            self.form.tbDetails.clear()
+            message = f"<div style='margin-top: 4px;'>{result_data.message}</div>"
+            self.form.tbDetails.setHtml(message)
+            self.adjust_details_height()
             failing_faces = result_data.failing_geometry
+
         elif item.hasChildren():
             for row in range(item.rowCount()):
                 child_item = item.child(row)
                 child_data = child_item.data(QtCore.Qt.ItemDataRole.UserRole)
                 if isinstance(child_data, CheckResult):
                     failing_faces.extend(child_data.failing_geometry)
+        else:
+            self.form.tbDetails.clear()
+            self.form.tbDetails.setHtml(
+                "Select a result in the tree to view details of the DFM issues."
+            )
+            self.adjust_details_height()
 
         if failing_faces:
             unique_faces = list(set(failing_faces))
@@ -153,3 +183,16 @@ class TaskResults:
                 f"Highlighting sub-elements: {', '.join(failing_face_names)}"
             )
             Gui.Selection.addSelection(self.target_object, failing_face_names)
+
+    def _get_severity_icon(self, severity: Severity) -> QtGui.QIcon:
+        """Returns a standard Qt icon based on the Severity level."""
+        style = QtWidgets.QApplication.style()
+
+        if severity == Severity.ERROR:
+            return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical)
+
+        elif severity == Severity.WARNING:
+            return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning)
+
+        else:
+            return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation)
