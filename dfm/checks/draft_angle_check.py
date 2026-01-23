@@ -50,7 +50,7 @@ class DraftAngleCheck(BaseCheck):
         parameters: dict[str, Any],
         check_type,
     ) -> list[CheckResult]:
-        tolerance = 1e-4  # 0.001 degrees
+        tolerance = 1e-4  # 0.0001 degrees
 
         results: list[CheckResult] = []
 
