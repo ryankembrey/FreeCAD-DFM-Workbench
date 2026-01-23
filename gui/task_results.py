@@ -117,6 +117,12 @@ class TaskResults:
 
             root_node.appendRow(rule_item)
 
+    def set_details_text(self, message: str):
+        """Sets the message to be displayed in the QTextBrowser"""
+        self.form.tbDetails.clear()
+        self.form.tbDetails.setHtml(message)
+        self.adjust_details_height()
+
     def adjust_details_height(self):
         """Adjusts the height of the text browser based on its content."""
         doc = self.form.tbDetails.document()
@@ -135,10 +141,8 @@ class TaskResults:
         result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
 
         if isinstance(result_data, CheckResult):
-            self.form.tbDetails.clear()
             message = f"<div style='margin-top: 4px;'>{result_data.message}</div>"
-            self.form.tbDetails.setHtml(message)
-            self.adjust_details_height()
+            self.set_details_text(message)
             failing_faces = result_data.failing_geometry
 
         elif item.hasChildren():
@@ -147,12 +151,8 @@ class TaskResults:
                 child_data = child_item.data(QtCore.Qt.ItemDataRole.UserRole)
                 if isinstance(child_data, CheckResult):
                     failing_faces.extend(child_data.failing_geometry)
-        else:
-            self.form.tbDetails.clear()
-            self.form.tbDetails.setHtml(
-                "Select a result in the tree to view details of the DFM issues."
-            )
-            self.adjust_details_height()
+            message = "Select a result in the tree to view details of the DFM issues."
+            self.set_details_text(message)
 
         if failing_faces:
             unique_faces = list(set(failing_faces))
