@@ -21,6 +21,7 @@
 #  ***************************************************************************
 
 from typing import Any
+import math
 
 from dfm.models import CheckResult, Severity
 
@@ -60,12 +61,38 @@ class DraftAngleCheck(BaseCheck):
                 raise ValueError(f"'MIN_DRAFT_ANGLE' requires a 'min_draft_angle' parameter.")
             for face, measured_min in analysis_data_map.items():
                 if measured_min < (min_allowed - tolerance) and abs(measured_min) != 90.0:
-                    message = f"Minimum draft violation. Measured: {measured_min:.2f}°"
-                    f"(Limit: {min_allowed:.2f}°)"
+                    if measured_min < 0:
+                        severity = Severity.ERROR
+                        message = (
+                            f"<b>Reverse Draft ({measured_min:.2f}°):</b> This face tapers inward relative to the "
+                            f"mold opening direction. This is a critical error because the part is physically "
+                            f"trapped; attempting to eject it will likely tear the plastic or damage the mold."
+                            f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                            f"Suggestion: Increase draft angle or change the pull direction.</div>"
+                        )
+                    elif math.isclose(measured_min, 0.0, abs_tol=1e-3):
+                        severity = Severity.ERROR
+                        message = (
+                            f"<b>Vertical Face (0.00°):</b> This surface has no taper. Because plastic shrinks "
+                            f"as it cools, it will grip the mold tightly. Without an angle to create an immediate "
+                            f"air gap, friction during ejection will cause 'drag marks' or scratches on the part."
+                            f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                            f"Suggestion: Apply a positive draft angle to the face.</div>"
+                        )
+                    else:
+                        severity = Severity.WARNING
+                        message = (
+                            f"<b>Insufficient Draft ({measured_min:.2f}°):</b> This angle is below the required "
+                            f"{min_allowed:.2f}°. While tilted correctly, it is too shallow to guarantee a clean "
+                            f"release. Increasing the angle will improve surface quality and reduce the risk of "
+                            f"the part deforming during ejection."
+                            f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                            f"Suggestion: Increase draft angle.</div>"
+                        )
                     result = CheckResult(
                         rule_id=Rulebook.MIN_DRAFT_ANGLE,
                         message=message,
-                        severity=Severity.ERROR,
+                        severity=severity,
                         failing_geometry=[face],
                     )
                     results.append(result)
