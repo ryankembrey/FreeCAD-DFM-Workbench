@@ -20,6 +20,8 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+import html
+from collections import defaultdict
 
 import FreeCAD
 import FreeCADGui as Gui
@@ -27,7 +29,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 import Part
-from collections import defaultdict
 
 from dfm.models import CheckResult, Severity
 from dfm.rules import Rulebook
@@ -124,8 +125,9 @@ class TaskResults:
                 rule_item.setIcon(self._get_severity_icon(findings[0].severity))
 
             for i, finding in enumerate(findings):
-                prefix = "IGNORED" if finding.ignore else finding.severity.name
-                instance_item = QStandardItem(f"{prefix}: Instance [{i + 1}]")
+                instance_item = QStandardItem(
+                    f"{self.get_face_name(finding.failing_geometry[0])}  ({finding.overview}) [{i + 1}]"
+                )
 
                 instance_item.setFlags(
                     QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
@@ -218,7 +220,11 @@ class TaskResults:
         result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
 
         if isinstance(result_data, CheckResult):
-            message = f"<div style='margin-top: 4px;'>{result_data.message}</div>"
+            safe_overview = html.escape(result_data.overview)
+            message = (
+                f"<div style='margin-top: 4px; font-weight: bold;'>{safe_overview}</div>"
+                f"<div style='margin-top: 4px;'>{result_data.message}</div>"
+            )
             self.set_details_text(message)
             failing_faces = result_data.failing_geometry
 
@@ -290,3 +296,17 @@ class TaskResults:
             # TODO: Make the AlignToSelection aware of material volume
             Gui.SendMsgToActiveView("ViewSelection")
             Gui.SendMsgToActiveView("AlignToSelection")
+
+    def get_face_name(self, target_occ_face: TopoDS_Face) -> str:
+        """
+        Inputs a TopoDS_Face and returns the FreeCAD internal name (e.g., 'Face4').
+        """
+        shape_faces = self.target_object.Shape.Faces
+
+        for i, part_face in enumerate(shape_faces, start=1):
+            part_face_occ = Part.__toPythonOCC__(part_face)
+
+            if part_face_occ.IsSame(target_occ_face):
+                return f"Face{i}"
+
+        return "Unknown Face"

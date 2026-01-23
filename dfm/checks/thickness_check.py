@@ -70,6 +70,7 @@ class MinThicknessCheck(BaseCheck):
             measured_min = min(valid_thicknesses)
 
             if measured_min < (min_allowed):
+                overview = f"{measured_min:.2f}° < {min_allowed:.2f}°"
                 message = (
                     f"Minimum thickness violation. Measured: {measured_min:.2f}mm "
                     f"(Limit: {min_allowed:.2f}mm)"
@@ -77,9 +78,11 @@ class MinThicknessCheck(BaseCheck):
 
                 result = CheckResult(
                     rule_id=Rulebook.MIN_WALL_THICKNESS,
+                    overview=overview,
                     message=message,
                     severity=Severity.ERROR,
                     failing_geometry=[face],
+                    ignore=False,
                 )
                 results.append(result)
 
@@ -116,6 +119,7 @@ class MaxThicknessCheck(BaseCheck):
             measured_max = max(diameters)
 
             if measured_max > (max_allowed):
+                overview = f"{measured_max:.2f}° > {max_allowed:.2f}°\n"
                 message = (
                     f"Maximum thickness violation. Measured: {measured_max:.2f}mm "
                     f"(Limit: {max_allowed:.2f}mm). Risk of sink marks."
@@ -123,6 +127,7 @@ class MaxThicknessCheck(BaseCheck):
 
                 result = CheckResult(
                     rule_id=Rulebook.MAX_WALL_THICKNESS,
+                    overview=overview,
                     message=message,
                     severity=Severity.WARNING,
                     failing_geometry=[face],

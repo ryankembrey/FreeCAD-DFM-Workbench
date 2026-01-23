@@ -63,8 +63,9 @@ class DraftAngleCheck(BaseCheck):
                 if measured_min < (min_allowed - tolerance) and abs(measured_min) != 90.0:
                     if measured_min < 0:
                         severity = Severity.ERROR
+                        overview = f"{measured_min:.2f}° < {min_allowed:.2f}°"
                         message = (
-                            f"<b>Reverse Draft ({measured_min:.2f}°):</b> This face tapers inward relative to the "
+                            f"Reverse Draft ({measured_min:.2f}°): This face tapers inward relative to the "
                             f"mold opening direction. This is a critical error because the part is physically "
                             f"trapped; attempting to eject it will likely tear the plastic or damage the mold."
                             f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
@@ -72,8 +73,9 @@ class DraftAngleCheck(BaseCheck):
                         )
                     elif math.isclose(measured_min, 0.0, abs_tol=1e-3):
                         severity = Severity.ERROR
+                        overview = f"{measured_min:.2f}° < {min_allowed:.2f}°"
                         message = (
-                            f"<b>Vertical Face (0.00°):</b> This surface has no taper. Because plastic shrinks "
+                            f"Vertical Face (0.00°): This surface has no taper. Because plastic shrinks "
                             f"as it cools, it will grip the mold tightly. Without an angle to create an immediate "
                             f"air gap, friction during ejection will cause 'drag marks' or scratches on the part."
                             f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
@@ -81,8 +83,9 @@ class DraftAngleCheck(BaseCheck):
                         )
                     else:
                         severity = Severity.WARNING
+                        overview = f"{measured_min:.2f}° < {min_allowed:.2f}°"
                         message = (
-                            f"<b>Insufficient Draft ({measured_min:.2f}°):</b> This angle is below the required "
+                            f"Insufficient Draft ({measured_min:.2f}°): This angle is below the required "
                             f"{min_allowed:.2f}°. While tilted correctly, it is too shallow to guarantee a clean "
                             f"release. Increasing the angle will improve surface quality and reduce the risk of "
                             f"the part deforming during ejection."
@@ -91,6 +94,7 @@ class DraftAngleCheck(BaseCheck):
                         )
                     result = CheckResult(
                         rule_id=Rulebook.MIN_DRAFT_ANGLE,
+                        overview=overview,
                         message=message,
                         severity=severity,
                         failing_geometry=[face],
