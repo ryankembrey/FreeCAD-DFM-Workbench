@@ -27,7 +27,7 @@ from typing import Generator
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.GeomLProp import GeomLProp_SLProps
-from OCC.Core.gp import gp_Dir
+from OCC.Core.gp import gp_Dir, gp_Pnt
 from OCC.Core.TopAbs import TopAbs_REVERSED
 from OCC.Core.TopoDS import TopoDS_Face
 
@@ -99,3 +99,24 @@ def yield_face_uv_grid(
         for j in range(samples):
             v = s_v_min + j * v_step
             yield u, v
+
+
+def get_point_from_uv(
+    face: TopoDS_Face, normal: gp_Dir, u: float, v: float, epsilon: float
+) -> gp_Pnt:
+    """
+    Returns the geometric point in 3D space for a given UV coordinate on a face.
+
+    Epsilon controls the distance the point is from the face in the normal direction.
+    This can be useful to cast rays that do not intersect with the face of origin.
+    """
+    surface = BRep_Tool.Surface(face)
+    p_surf = surface.Value(u, v)
+
+    point = gp_Pnt(
+        p_surf.X() + normal.X() * epsilon,
+        p_surf.Y() + normal.Y() * epsilon,
+        p_surf.Z() + normal.Z() * epsilon,
+    )
+
+    return point
