@@ -126,6 +126,7 @@ class MaxThicknessCheck(BaseCheck):
                     message=message,
                     severity=Severity.WARNING,
                     failing_geometry=[face],
+                    ignore=False,
                 )
                 results.append(result)
 

@@ -94,6 +94,7 @@ class DraftAngleCheck(BaseCheck):
                         message=message,
                         severity=severity,
                         failing_geometry=[face],
+                        ignore=False,
                     )
                     results.append(result)
             return results

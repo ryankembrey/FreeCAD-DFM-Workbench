@@ -22,3 +22,4 @@ class CheckResult:
     severity: Severity
     message: str
     failing_geometry: List[TopoDS_Face]
+    ignore: bool
