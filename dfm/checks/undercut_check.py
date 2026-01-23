@@ -59,6 +59,7 @@ class UndercutCheck(BaseCheck):
                         message=message,
                         severity=Severity.ERROR,
                         failing_geometry=[face],
+                        ignore=False,
                     )
                 )
 

@@ -50,6 +50,9 @@ class TaskResults:
         self.model = QStandardItemModel()
         self.tree.setModel(self.model)
 
+        self.tree.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.on_context_menu)
+
         self.populate_info_widgets()
         self.populate_results_tree()
         self.tree.clicked.connect(self.on_result_clicked)
@@ -76,6 +79,18 @@ class TaskResults:
         self.adjust_details_height()
 
     def populate_results_tree(self):
+        """
+        Populates the tree.
+        Sorts items so ignored findings are at the bottom and styled gray.
+        """
+        expanded_rules = set()
+        root = self.model.invisibleRootItem()
+        for i in range(root.rowCount()):
+            item = root.child(i)
+            index = self.model.indexFromItem(item)
+            if self.tree.isExpanded(index):
+                expanded_rules.add(item.text())
+
         self.model.clear()
 
         grouped_results = defaultdict(list)
@@ -84,38 +99,100 @@ class TaskResults:
 
         if not grouped_results:
             no_issues_item = QStandardItem("No DFM issues found.")
-            no_issues_item.setFlags(
-                QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
-            )
+            no_issues_item.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
             self.model.invisibleRootItem().appendRow(no_issues_item)
             return
 
         root_node = self.model.invisibleRootItem()
 
         for rule_id, findings in grouped_results.items():
-            rule_item = QStandardItem(f"{rule_id.label} [{len(findings)} issues]")
+            findings.sort(key=lambda x: (x.ignore, -x.severity.value))
 
+            active_count = sum(1 for f in findings if not f.ignore)
+            rule_label = f"{rule_id.label} [{active_count} issues]"
+
+            rule_item = QStandardItem(rule_label)
             rule_item.setFlags(
                 QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
             )
 
-            most_critical_finding = max(findings, key=lambda f: f.severity.value)
-            rule_item.setIcon(self._get_severity_icon(most_critical_finding.severity))
+            active_findings = [f for f in findings if not f.ignore]
+            if active_findings:
+                worst_severity = max(active_findings, key=lambda f: f.severity.value).severity
+                rule_item.setIcon(self._get_severity_icon(worst_severity))
+            else:
+                rule_item.setIcon(self._get_severity_icon(findings[0].severity))
 
             for i, finding in enumerate(findings):
-                instance_item = QStandardItem(f"{finding.severity.name}: Instance [{i + 1}]")
+                prefix = "IGNORED" if finding.ignore else finding.severity.name
+                instance_item = QStandardItem(f"{prefix}: Instance [{i + 1}]")
 
                 instance_item.setFlags(
                     QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
                 )
                 instance_item.setIcon(self._get_severity_icon(finding.severity))
-
                 instance_item.setToolTip(finding.message)
                 instance_item.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
+
+                if finding.ignore:
+                    instance_item.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.gray))
+                    font = instance_item.font()
+                    font.setStrikeOut(True)
+                    instance_item.setFont(font)
 
                 rule_item.appendRow(instance_item)
 
             root_node.appendRow(rule_item)
+
+            if any(rule_id.label in ex for ex in expanded_rules):
+                self.tree.setExpanded(rule_item.index(), True)
+
+    def on_context_menu(self, point):
+        """Handles the right-click context menu."""
+        index = self.tree.indexAt(point)
+        if not index.isValid():
+            return
+
+        item = self.model.itemFromIndex(index)
+        data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+
+        if isinstance(data, CheckResult):
+            menu = QtWidgets.QMenu()
+
+            if data.ignore:
+                action_text = "Restore Item"
+                icon = QtGui.QIcon.fromTheme("list-add")
+            else:
+                action_text = "Ignore Item"
+                icon = QtGui.QIcon.fromTheme("list-remove")
+
+            action = menu.addAction(icon, action_text)
+            action.triggered.connect(lambda: self.toggle_ignore_state(data))
+
+            menu.exec(self.tree.viewport().mapToGlobal(point))
+
+    def toggle_ignore_state(self, finding: CheckResult):
+        """Toggles the ignore boolean and refreshes the tree."""
+        finding.ignore = not finding.ignore
+
+        self.populate_results_tree()
+        self.restore_selection(finding)
+
+    def restore_selection(self, target_finding: CheckResult):
+        """Attempts to re-select the item corresponding to the modified finding."""
+        root = self.model.invisibleRootItem()
+        for r in range(root.rowCount()):
+            rule_item = root.child(r)
+            for c in range(rule_item.rowCount()):
+                child = rule_item.child(c)
+                data = child.data(QtCore.Qt.ItemDataRole.UserRole)
+                if data == target_finding:
+                    selection_model = self.tree.selectionModel()
+                    selection_model.select(
+                        child.index(), QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
+                    )
+                    self.tree.scrollTo(child.index())
+                    return
 
     def set_details_text(self, message: str):
         """Sets the message to be displayed in the QTextBrowser"""
