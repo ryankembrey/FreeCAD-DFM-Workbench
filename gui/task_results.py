@@ -53,6 +53,7 @@ class TaskResults:
         self.populate_info_widgets()
         self.populate_results_tree()
         self.tree.clicked.connect(self.on_result_clicked)
+        self.tree.doubleClicked.connect(self.on_result_double_clicked)
 
         Gui.Control.showDialog(self)
         Gui.Selection.clearSelection()
@@ -196,3 +197,19 @@ class TaskResults:
 
         else:
             return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation)
+
+    def on_result_double_clicked(self, index: QtCore.QModelIndex):
+        """Called when a user double-clicks an item. Zooms and aligns to the selected geometry."""
+        item = self.model.itemFromIndex(index)
+        if not item:
+            return
+
+        result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+
+        if isinstance(result_data, CheckResult):
+            Gui.Selection.clearSelection()
+            self.highlight_faces(result_data.failing_geometry)
+
+            # TODO: Make the AlignToSelection aware of material volume
+            Gui.SendMsgToActiveView("ViewSelection")
+            Gui.SendMsgToActiveView("AlignToSelection")
