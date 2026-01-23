@@ -103,12 +103,6 @@ class DraftAnalyzer(BaseAnalyzer):
         else:
             draft_angle = self.get_draft_for_curve(face, pull_direction, samples)
 
-        if self.core_cavity_mapping[face] == MoldSide.CORE:
-            print("Core")
-        else:
-            print("Cavity")
-
-        print(f"D: {draft_angle}")
         return draft_angle
 
     def get_draft_for_curve(self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int) -> float:
