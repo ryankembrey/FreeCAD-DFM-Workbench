@@ -54,6 +54,8 @@ class TaskResults:
         self.tree.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.on_context_menu)
 
+        self.verdict = self.find_verdict(self.results)
+
         self.populate_info_widgets()
         self.populate_results_tree()
         self.tree.clicked.connect(self.on_result_clicked)
@@ -74,6 +76,8 @@ class TaskResults:
         self.form.leProcess.setReadOnly(True)
         self.form.leMaterial.setText(self.material_name)
         self.form.leMaterial.setReadOnly(True)
+        self.form.leVerdict.setText(self.verdict)
+        self.form.leVerdict.setReadOnly(True)
         self.form.tbDetails.setHtml(
             "Select a result in the tree to view details of the DFM issues."
         )
@@ -176,6 +180,9 @@ class TaskResults:
     def toggle_ignore_state(self, finding: CheckResult):
         """Toggles the ignore boolean and refreshes the tree."""
         finding.ignore = not finding.ignore
+
+        self.verdict = self.find_verdict(self.results)
+        self.form.leVerdict.setText(self.verdict)
 
         self.populate_results_tree()
         self.restore_selection(finding)
@@ -310,3 +317,16 @@ class TaskResults:
                 return f"Face{i}"
 
         return "Unknown Face"
+
+    def find_verdict(self, results: list[CheckResult]) -> str:
+        errors = sum(1 for r in results if r.severity == Severity.ERROR and not r.ignore)
+        warnings = sum(1 for r in results if r.severity == Severity.WARNING and not r.ignore)
+
+        if errors > 0 and warnings == 0:
+            return f"Failed with errors ({errors})"
+        if errors > 0 and warnings > 0:
+            return f"Failed with errors ({errors}) and warnings ({warnings})"
+        elif warnings > 0:
+            return f"Successful with warnings ({warnings})"
+        else:
+            return "Successful"
