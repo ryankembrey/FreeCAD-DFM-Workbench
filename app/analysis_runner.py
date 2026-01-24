@@ -25,6 +25,7 @@ from typing import Any
 
 import Part
 from OCC.Core.TopoDS import TopoDS_Shape
+from OCC.Core.gp import gp_Dir
 
 from dfm.registries.process_registry import ProcessRegistry
 from dfm.registries.checks_registry import get_check_class
@@ -44,7 +45,7 @@ class AnalysisRunner:
         self.analyzer_cache: dict[str, Any] = {}
 
     def run_analysis(
-        self, process_name: str, material_name: str, shape: Part.Shape
+        self, process_name: str, material_name: str, shape: Part.Shape, **kwargs: Any
     ) -> list[CheckResult]:
         """
         The main entry point for running a complete DFM analysis.
@@ -57,6 +58,8 @@ class AnalysisRunner:
         Returns:
             A list of CheckResult objects detailing all the findings.
         """
+
+        pull_direction = kwargs.get("pull_direction", gp_Dir(0, 0, 1))
         print(f"\n--- Starting DFM Analysis ---")
         print(f"Process: {process_name}, Material: {material_name}")
 
@@ -126,7 +129,7 @@ class AnalysisRunner:
                 analyzer_instance = analyzer_class()
 
                 # 7. Execute the analysis and store its results in the cache
-                analysis_data = analyzer_instance.execute(shape_occ)
+                analysis_data = analyzer_instance.execute(shape_occ, pull_direction=pull_direction)
                 self.analyzer_cache[analyzer_id] = analysis_data
                 print(f"Analyzer '{analyzer_id}' finished.")
             else:
