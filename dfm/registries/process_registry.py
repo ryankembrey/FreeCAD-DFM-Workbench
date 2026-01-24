@@ -29,7 +29,7 @@ class ProcessRegistry:
                 with open(filepath, "r") as f:
                     data = yaml.safe_load(f)
                     process = Process(**data)  # type: ignore
-                    self.processes[process.id] = process
+                    self.processes[process.name] = process
         print(f"Discovered {len(self.processes)} DFM processes.")
 
     def get_categories(self) -> list[str]:

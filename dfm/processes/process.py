@@ -28,7 +28,6 @@ from typing import Any
 class Process:
     """A representation of a single manufacturing process."""
 
-    id: str
     name: str
     category: str
     description: str = ""
