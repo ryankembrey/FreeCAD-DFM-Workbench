@@ -22,13 +22,17 @@
 
 import html
 from collections import defaultdict
+import csv
 
 import FreeCAD
 import FreeCADGui as Gui
+import Part
+
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtWidgets import QFileDialog, QMessageBox
+
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
-import Part
 
 from dfm.models import CheckResult, Severity
 from dfm.rules import Rulebook
@@ -56,6 +60,8 @@ class TaskResults:
 
         self.verdict = self.find_verdict(self.results)
 
+        self.form.pbExportResults.clicked.connect(self.on_export_clicked)
+
         self.populate_info_widgets()
         self.populate_results_tree()
         self.tree.clicked.connect(self.on_result_clicked)
@@ -63,6 +69,69 @@ class TaskResults:
 
         Gui.Control.showDialog(self)
         Gui.Selection.clearSelection()
+
+    def on_export_clicked(self):
+        """Exports the current results to a CSV file selected by the user."""
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self.form,
+            "Export DFM Results",
+            "",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+
+        if not filename:
+            return
+
+        if not filename.lower().endswith(".csv"):
+            filename += ".csv"
+
+        try:
+            with open(filename, mode="w", newline="", encoding="utf-8") as csv_file:
+                writer = csv.writer(csv_file)
+
+                writer.writerow(["Design", self.target_object.Label])
+                writer.writerow(["Manufacturing Process", self.process_id])
+                writer.writerow(["Material", self.material_name])
+                writer.writerow(["Verdict", self.verdict])
+                writer.writerow(
+                    [
+                        "Status",
+                        "Rule Name",
+                        "Face ID",
+                        "Value / Limit",
+                    ]
+                )
+
+                for result in self.results:
+                    face_names = []
+                    if result.failing_geometry and not result.ignore:
+                        for face in result.failing_geometry:
+                            face_names.append(self.get_face_name(face))
+                        face_str = "; ".join(face_names)
+                    else:
+                        continue  # Issue was ignored
+
+                    writer.writerow(
+                        [
+                            result.severity.name,
+                            result.rule_id.label,
+                            face_str,
+                            result.overview,
+                        ]
+                    )
+
+            QMessageBox.information(
+                self.form,
+                "Export Successful",
+                f"Successfully exported {len(self.results)} results to:\n{filename}",
+            )
+
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"CSV Export failed: {e}\n")
+            QMessageBox.critical(
+                self.form, "Export Failed", f"An error occurred while writing the file:\n{str(e)}"
+            )
 
     def on_save_clicked(self):
         """"""
