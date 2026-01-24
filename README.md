@@ -1,11 +1,10 @@
-# FreeCAD DFM workbench
-
-![DFM Workbench](.github/images/showcase.png)
+# FreeCAD DFM Workbench
 
 > [!CAUTION]
 > NOTE THIS WORKBENCH IS IN PRE-ALPHA AND IS NOT READY FOR USE
 
 ---
+![DFM Workbench](.github/images/showcase.png)
 
 This workbench analyses 3D models and provides actionable feedback to
 help designers create parts that are cheaper, faster, and more reliable to
