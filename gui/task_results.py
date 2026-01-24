@@ -35,14 +35,15 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 
 from dfm.models import CheckResult, Severity
+from dfm.processes.process import Process
 from dfm.rules import Rulebook
 from . import DFM_rc
 
 
 class TaskResults:
-    def __init__(self, results: list[CheckResult], target_object, process_id: str, material: str):
+    def __init__(self, results: list[CheckResult], target_object, process: Process, material: str):
         self.target_object = target_object
-        self.process_id = process_id
+        self.process = process
         self.material_name = material
         self.results = results
 
@@ -92,7 +93,7 @@ class TaskResults:
                 writer = csv.writer(csv_file)
 
                 writer.writerow(["Design", self.target_object.Label])
-                writer.writerow(["Manufacturing Process", self.process_id])
+                writer.writerow(["Manufacturing Process", self.process.id])
                 writer.writerow(["Material", self.material_name])
                 writer.writerow(["Verdict", self.verdict])
                 writer.writerow(
@@ -146,7 +147,7 @@ class TaskResults:
         """Populates the top-level information widgets."""
         self.form.leTarget.setText(self.target_object.Label)
         self.form.leTarget.setReadOnly(True)
-        self.form.leProcess.setText(self.process_id)
+        self.form.leProcess.setText(self.process.id)
         self.form.leProcess.setReadOnly(True)
         self.form.leMaterial.setText(self.material_name)
         self.form.leMaterial.setReadOnly(True)
@@ -176,15 +177,10 @@ class TaskResults:
         for result in self.results:
             grouped_results[result.rule_id].append(result)
 
-        if not grouped_results:
-            no_issues_item = QStandardItem("No DFM issues found.")
-            no_issues_item.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
-            self.model.invisibleRootItem().appendRow(no_issues_item)
-            return
-
         root_node = self.model.invisibleRootItem()
 
         for rule_id, findings in grouped_results.items():
+            # Sort findings by severity
             findings.sort(key=lambda x: (x.ignore, -x.severity.value))
 
             active_count = sum(1 for f in findings if not f.ignore)
@@ -202,6 +198,7 @@ class TaskResults:
             else:
                 rule_item.setIcon(self._get_severity_icon(findings[0].severity))
 
+            # Create result tree child items for geometry that failed the rule
             for i, finding in enumerate(findings):
                 instance_item = QStandardItem(
                     f"{self.get_face_name(finding.failing_geometry[0])}  ({finding.overview}) [{i + 1}]"
@@ -226,6 +223,24 @@ class TaskResults:
 
             if any(rule_id.label in ex for ex in expanded_rules):
                 self.tree.setExpanded(rule_item.index(), True)
+
+        # Check if a rule declared in the process yaml file did not appear in the results. If it
+        # did not, this means that all faces on the model passed this rule.
+        for rule_id in self.process.rules:
+            # Convert rule_id string to Rulebook member
+            if Rulebook[rule_id] not in grouped_results.keys():
+                rule_item = QStandardItem(f"{rule_id} [Passed]")
+                rule_item.setFlags(
+                    QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
+                )
+                style = QtWidgets.QApplication.style()
+                icon = style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton)
+                rule_item.setIcon(icon)
+
+                root_node.appendRow(rule_item)
+                rule_index = self.model.indexFromItem(rule_item)
+                self.tree.setFirstColumnSpanned(rule_index.row(), QtCore.QModelIndex(), True)
+                continue
 
     def on_context_menu(self, point):
         """Handles the right-click context menu."""
