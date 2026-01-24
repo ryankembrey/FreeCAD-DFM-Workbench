@@ -86,7 +86,7 @@ class TaskSetup:
         if processes:
             self.form.cbManProcess.addItem("-- Select a process --")
             for process in processes:
-                self.form.cbManProcess.addItem(process.name, userData=process.id)
+                self.form.cbManProcess.addItem(process.name, userData=process.name)
             self.form.cbManProcess.setEnabled(True)
         else:
             self.form.cbManProcess.addItem("-- Select a category first --")
@@ -121,8 +121,8 @@ class TaskSetup:
             FreeCAD.Console.PrintError("No model selected to analyze.\n")
             return
 
-        process_id = self.form.cbManProcess.currentData()
-        if not process_id:
+        process_name = self.form.cbManProcess.currentData()
+        if not process_name:
             FreeCAD.Console.PrintError("Select a manufacturing process.\n")
             return
 
@@ -136,7 +136,7 @@ class TaskSetup:
         try:
             runner = AnalysisRunner()
             results: list[CheckResult] = runner.run_analysis(
-                process_id=process_id, material_name=material_name, shape=self.target_shape
+                process_name=process_name, material_name=material_name, shape=self.target_shape
             )
 
             TaskResults(results, self.target_object, self.process, material=material_name)

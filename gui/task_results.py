@@ -93,7 +93,7 @@ class TaskResults:
                 writer = csv.writer(csv_file)
 
                 writer.writerow(["Design", self.target_object.Label])
-                writer.writerow(["Manufacturing Process", self.process.id])
+                writer.writerow(["Manufacturing Process", self.process.name])
                 writer.writerow(["Material", self.material_name])
                 writer.writerow(["Verdict", self.verdict])
                 writer.writerow(
@@ -147,7 +147,7 @@ class TaskResults:
         """Populates the top-level information widgets."""
         self.form.leTarget.setText(self.target_object.Label)
         self.form.leTarget.setReadOnly(True)
-        self.form.leProcess.setText(self.process.id)
+        self.form.leProcess.setText(self.process.name)
         self.form.leProcess.setReadOnly(True)
         self.form.leMaterial.setText(self.material_name)
         self.form.leMaterial.setReadOnly(True)

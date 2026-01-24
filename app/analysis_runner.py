@@ -44,13 +44,13 @@ class AnalysisRunner:
         self.analyzer_cache: dict[str, Any] = {}
 
     def run_analysis(
-        self, process_id: str, material_name: str, shape: Part.Shape
+        self, process_name: str, material_name: str, shape: Part.Shape
     ) -> list[CheckResult]:
         """
         The main entry point for running a complete DFM analysis.
 
         Args:
-            process_id: The unique ID of the process to run (e.g., "PIM_STANDARD").
+            process_name: The unique ID of the process to run (e.g., "PIM_STANDARD").
             material_name: The name of the material to use (e.g., "ABS").
             shape: The FreeCAD Part.Shape object to be analyzed.
 
@@ -58,24 +58,24 @@ class AnalysisRunner:
             A list of CheckResult objects detailing all the findings.
         """
         print(f"\n--- Starting DFM Analysis ---")
-        print(f"Process: {process_id}, Material: {material_name}")
+        print(f"Process: {process_name}, Material: {material_name}")
 
         all_results: list[CheckResult] = []
         self.analyzer_cache.clear()
 
         # 1. Get the Process definition from the ProcessRegistry
         process_registry = ProcessRegistry.get_instance()
-        process = process_registry.get_process_by_id(process_id)
+        process = process_registry.get_process_by_id(process_name)
         if not process:
             FreeCAD.Console.PrintDeveloperError(
-                f"Analysis failed: Process ID '{process_id}' not found in registry.\n"
+                f"Analysis failed: Process ID '{process_name}' not found in registry.\n"
             )
             return []
 
         material = process.materials.get(material_name)
         if not material:
             FreeCAD.Console.PrintDeveloperError(
-                f"Analysis failed: Material '{material_name}' not found in process '{process_id}'.\n"
+                f"Analysis failed: Material '{material_name}' not found in process '{process_name}'.\n"
             )
             return []
 
@@ -88,7 +88,7 @@ class AnalysisRunner:
                 rule_id = Rulebook[rule_string]
             except ValueError:
                 FreeCAD.Console.PrintDeveloperError(
-                    f"Skipping unknown rule '{rule_string}' defined in '{process_id}.yaml'.\n"
+                    f"Skipping unknown rule '{rule_string}' defined in '{process_name}.yaml'.\n"
                 )
                 continue
 
