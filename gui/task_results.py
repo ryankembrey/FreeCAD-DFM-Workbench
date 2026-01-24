@@ -229,7 +229,7 @@ class TaskResults:
         for rule_id in self.process.rules:
             # Convert rule_id string to Rulebook member
             if Rulebook[rule_id] not in grouped_results.keys():
-                rule_item = QStandardItem(f"{rule_id} [Passed]")
+                rule_item = QStandardItem(f"{Rulebook[rule_id].label} [Passed]")
                 rule_item.setFlags(
                     QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
                 )
