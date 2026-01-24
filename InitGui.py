@@ -37,7 +37,6 @@ class DFMWorkbench(Gui.Workbench):
 
         self.list = [
             "DFM_SetupAnalysis",
-            "DFM_ShowNormals",
         ]  # a list of command names created in the line above
         self.appendToolbar(
             "DFM_SetupAnalysis", self.list
