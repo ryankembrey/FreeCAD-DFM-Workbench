@@ -104,8 +104,8 @@ class TaskSetup:
             self.form.cbMaterial.setEnabled(False)
             return
 
-        process = self.registry.get_process_by_id(process_id)
-        materials = list(process.materials.keys())
+        self.process = self.registry.get_process_by_id(process_id)
+        materials = list(self.process.materials.keys())
 
         if materials:
             self.form.cbMaterial.addItem("-- Select a material --")
@@ -139,7 +139,7 @@ class TaskSetup:
                 process_id=process_id, material_name=material_name, shape=self.target_shape
             )
 
-            TaskResults(results, self.target_object, process_id, material=material_name)
+            TaskResults(results, self.target_object, self.process, material=material_name)
         except Exception as e:
             FreeCAD.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
 
