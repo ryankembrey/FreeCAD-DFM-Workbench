@@ -1,5 +1,7 @@
 # FreeCAD DFM workbench
 
+![DFM Workbench](.github/images/showcase.png)
+
 > [!CAUTION]
 > NOTE THIS WORKBENCH IS IN AN UN-WORKING STATE, AND WILL BE SO UNTIL 2026
 
