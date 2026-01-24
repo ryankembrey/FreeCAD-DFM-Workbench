@@ -22,6 +22,7 @@
 
 import FreeCAD
 import FreeCADGui as Gui
+from OCC.Core.gp import gp_Dir
 from PySide6 import QtCore, QtGui, QtWidgets
 import Part
 
@@ -70,6 +71,7 @@ class TaskSetup:
         self.form.pbSelectModel.clicked.connect(self.on_select_shape)
         self.form.cbManCategory.currentIndexChanged.connect(self.on_category_changed)
         self.form.cbManProcess.currentIndexChanged.connect(self.on_process_changed)
+        self.form.pbPullDir.clicked.connect(self.on_select_pull_dir)
 
     def auto_select_model(self):
         """Automatically selects the active object if one exists."""
@@ -115,6 +117,45 @@ class TaskSetup:
             self.form.cbMaterial.addItem("No materials defined")
             self.form.cbMaterial.setEnabled(False)
 
+    def on_select_pull_dir(self):
+        try:
+            sel = Gui.Selection.getSelectionEx()
+
+            if not sel:
+                FreeCAD.Console.PrintError("Select a face in the 3D view.\n")
+                return
+
+            sub = sel[0].SubObjects
+            if not sub:
+                FreeCAD.Console.PrintError("Select a face, not an object.\n")
+                return
+
+            face = sub[0]
+
+            if not isinstance(face, Part.Face):
+                FreeCAD.Console.PrintError("Selected sub-element is not a face.\n")
+                return
+
+            u0, u1, v0, v1 = face.ParameterRange
+            u = (u0 + u1) * 0.5
+            v = (v0 + v1) * 0.5
+
+            pull_dir = face.normalAt(u, v).normalize()
+            x = pull_dir.x
+            y = pull_dir.y
+            z = pull_dir.z
+
+            self.pull_dir = gp_Dir(x, y, z)
+            self.form.lePullDir.setText(f"[{x:.2f}] [{y:.2f}] [{z:.2f}]")
+            self.form.lePullDir.setReadOnly(True)
+
+            FreeCAD.Console.PrintMessage(
+                f"Pull direction set to: ({pull_dir.x:.2f}, {pull_dir.y:.2f}, {pull_dir.z:.2f})\n"
+            )
+
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"Failed to compute pull direction: {e}\n")
+
     def on_run_analysis(self):
         """Validates inputs and starts the analysis."""
         if not self.target_shape:
@@ -136,7 +177,10 @@ class TaskSetup:
         try:
             runner = AnalysisRunner()
             results: list[CheckResult] = runner.run_analysis(
-                process_name=process_name, material_name=material_name, shape=self.target_shape
+                process_name=process_name,
+                material_name=material_name,
+                shape=self.target_shape,
+                pull_direction=self.pull_dir,
             )
 
             TaskResults(results, self.target_object, self.process, material=material_name)
