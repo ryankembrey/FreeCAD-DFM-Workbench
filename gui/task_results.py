@@ -61,6 +61,7 @@ class TaskResults:
         self.verdict = self.find_verdict(self.results)
 
         self.form.pbExportResults.clicked.connect(self.on_export_clicked)
+        self.form.pbSaveResults.clicked.connect(self.on_save_clicked)
 
         self.populate_info_widgets()
         self.populate_results_tree()
@@ -135,7 +136,11 @@ class TaskResults:
 
     def on_save_clicked(self):
         """"""
-        pass
+        QMessageBox.information(
+            self.form,
+            "Save Not Implemented",
+            "Save results to .FCStd file is not currently implemented.",
+        )
 
     def populate_info_widgets(self):
         """Populates the top-level information widgets."""
