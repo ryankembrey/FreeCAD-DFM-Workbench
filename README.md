@@ -3,13 +3,13 @@
 ![DFM Workbench](.github/images/showcase.png)
 
 > [!CAUTION]
-> NOTE THIS WORKBENCH IS IN AN UN-WORKING STATE, AND WILL BE SO UNTIL 2026
+> NOTE THIS WORKBENCH IS IN PRE-ALPHA AND IS NOT READY FOR USE
+
+---
 
 This workbench analyses 3D models and provides actionable feedback to
 help designers create parts that are cheaper, faster, and more reliable to
 manufacture.
-
-Currently under heavy development as part of a university capstone project.
 
 ## Contributing
 
