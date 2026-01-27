@@ -407,15 +407,27 @@ class TaskResults:
 
         return "Unknown Face"
 
+    def _pluralise(self, count: int, noun: str) -> str:
+        """Pluralises a word based on an integer value"""
+        suffix = "s" if count != 1 else ""
+        return f"{count} {noun}{suffix}"
+
     def find_verdict(self, results: list[CheckResult]) -> str:
+        "Finds the verdict of the DFM analysis and returns the message as a string."
         errors = sum(1 for r in results if r.severity == Severity.ERROR and not r.ignore)
         warnings = sum(1 for r in results if r.severity == Severity.WARNING and not r.ignore)
 
-        if errors > 0 and warnings == 0:
-            return f"Failed with errors ({errors})"
-        if errors > 0 and warnings > 0:
-            return f"Failed with errors ({errors}) and warnings ({warnings})"
+        parts = []
+        if errors > 0:
+            parts.append(self._pluralise(errors, "error"))
+        if warnings > 0:
+            parts.append(self._pluralise(warnings, "warning"))
+
+        details = ", ".join(parts)
+
+        if errors > 0:
+            return f"Failed ({details})"
         elif warnings > 0:
-            return f"Successful with warnings ({warnings})"
+            return f"Successful ({details})"
         else:
             return "Successful"
