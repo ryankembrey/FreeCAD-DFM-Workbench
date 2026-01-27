@@ -145,14 +145,19 @@ class TaskResults:
 
     def populate_info_widgets(self):
         """Populates the top-level information widgets."""
+
         self.form.leTarget.setText(self.target_object.Label)
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setText(self.process.name)
         self.form.leProcess.setReadOnly(True)
         self.form.leMaterial.setText(self.material_name)
         self.form.leMaterial.setReadOnly(True)
-        self.form.leVerdict.setText(self.verdict)
+
+        verdict_text, verdict_color = self.find_verdict(self.results)
+        self.form.leVerdict.setStyleSheet(f"color: {verdict_color}; font-weight: bold;")
+        self.form.leVerdict.setText(verdict_text)
         self.form.leVerdict.setReadOnly(True)
+
         self.form.tbDetails.setHtml(
             "Select a result in the tree to view details of the DFM issues."
         )
@@ -270,8 +275,9 @@ class TaskResults:
         """Toggles the ignore boolean and refreshes the tree."""
         finding.ignore = not finding.ignore
 
-        self.verdict = self.find_verdict(self.results)
-        self.form.leVerdict.setText(self.verdict)
+        verdict_text, verdict_color = self.find_verdict(self.results)
+        self.form.leVerdict.setStyleSheet(f"color: {verdict_color};")
+        self.form.leVerdict.setText(verdict_text)
 
         self.populate_results_tree()
         self.restore_selection(finding)
@@ -412,8 +418,10 @@ class TaskResults:
         suffix = "s" if count != 1 else ""
         return f"{count} {noun}{suffix}"
 
-    def find_verdict(self, results: list[CheckResult]) -> str:
-        "Finds the verdict of the DFM analysis and returns the message as a string."
+    def find_verdict(self, results: list[CheckResult]) -> tuple[str, str]:
+        """
+        Returns a tuple: (Verdict Text, CSS Color String)
+        """
         errors = sum(1 for r in results if r.severity == Severity.ERROR and not r.ignore)
         warnings = sum(1 for r in results if r.severity == Severity.WARNING and not r.ignore)
 
@@ -425,9 +433,13 @@ class TaskResults:
 
         details = ", ".join(parts)
 
+        COLOR_RED = "#D32F2F"
+        COLOR_ORANGE = "#E65100"
+        COLOR_GREEN = "#2E7D32"
+
         if errors > 0:
-            return f"Failed ({details})"
+            return f"Failed ({details})", COLOR_RED
         elif warnings > 0:
-            return f"Successful ({details})"
+            return f"Successful ({details})", COLOR_ORANGE
         else:
-            return "Successful"
+            return "Successful", COLOR_GREEN
