@@ -145,7 +145,6 @@ class TaskResults:
 
     def populate_info_widgets(self):
         """Populates the top-level information widgets."""
-
         self.form.leTarget.setText(self.target_object.Label)
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setText(self.process.name)
