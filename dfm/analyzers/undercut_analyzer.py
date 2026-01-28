@@ -30,7 +30,7 @@ from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Dir
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core import BaseAnalyzer
-from dfm.utils import yield_face_uv_grid, get_face_uv_normal
+from dfm.utils import yield_face_uv_grid, get_face_uv_normal, get_point_from_uv
 from dfm.registries import register_analyzer
 
 
@@ -101,16 +101,10 @@ class UndercutAnalyzer(BaseAnalyzer):
         if not normal:
             return None
 
-        p_surf = surface.Value(u, v)
         epsilon = 1e-3
+        point = get_point_from_uv(face, normal, u, v, epsilon)
 
-        p_start = gp_Pnt(
-            p_surf.X() + normal.X() * epsilon,
-            p_surf.Y() + normal.Y() * epsilon,
-            p_surf.Z() + normal.Z() * epsilon,
-        )
-
-        ray_up = gp_Lin(p_start, pull_direction)
+        ray_up = gp_Lin(point, pull_direction)
         intersector.Perform(ray_up, 0, float("inf"))
 
         blocked_top = intersector.IsDone() and intersector.NbPnt() > 0
@@ -118,7 +112,7 @@ class UndercutAnalyzer(BaseAnalyzer):
         if not blocked_top:
             return False
 
-        ray_down = gp_Lin(p_start, pull_direction.Reversed())
+        ray_down = gp_Lin(point, pull_direction.Reversed())
         intersector.Perform(ray_down, 0, float("inf"))
 
         blocked_bottom = intersector.IsDone() and intersector.NbPnt() > 0
