@@ -68,7 +68,7 @@ class DraftAngleCheck(BaseCheck):
                             f"Reverse Draft ({measured_min:.2f}°): This face tapers inward relative to the "
                             f"mold opening direction. This is a critical error because the part is physically "
                             f"trapped; attempting to eject it will likely tear the plastic or damage the mold."
-                            f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                            f"<div style='margin-top: 8px; font-style: italic;'>"
                             f"Suggestion: Increase draft angle or change the pull direction.</div>"
                         )
                     elif math.isclose(measured_min, 0.0, abs_tol=1e-3):
@@ -78,7 +78,7 @@ class DraftAngleCheck(BaseCheck):
                             f"Vertical Face (0.00°): This surface has no taper. Because plastic shrinks "
                             f"as it cools, it will grip the mold tightly. Without an angle to create an immediate "
                             f"air gap, friction during ejection will cause 'drag marks' or scratches on the part."
-                            f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                            f"<div style='margin-top: 8px; font-style: italic;'>"
                             f"Suggestion: Apply a positive draft angle to the face.</div>"
                         )
                     else:
@@ -89,7 +89,7 @@ class DraftAngleCheck(BaseCheck):
                             f"{min_allowed:.2f}°. While tilted correctly, it is too shallow to guarantee a clean "
                             f"release. Increasing the angle will improve surface quality and reduce the risk of "
                             f"the part deforming during ejection."
-                            f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                            f"<div style='margin-top: 8px; font-style: italic;'>"
                             f"Suggestion: Increase draft angle.</div>"
                         )
                     result = CheckResult(

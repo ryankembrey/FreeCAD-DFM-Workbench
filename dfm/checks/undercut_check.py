@@ -52,7 +52,7 @@ class UndercutCheck(BaseCheck):
                 message = (
                     f"Undercut detected. {percentage:.1f}% of this face is "
                     "trapped (occluded from both Top and Bottom)."
-                    f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                    f"<div style='margin-top: 8px; font-style: italic;'>"
                     f"<b>Suggestions:</b><br>"
                     f"1) Remove the overhang or align the feature with the pull direction.<br>"
                     f"2) Create a hole beneath/above the feature to allow the core/cavity to form the underside.<br>"
