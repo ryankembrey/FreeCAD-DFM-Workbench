@@ -48,10 +48,16 @@ class UndercutCheck(BaseCheck):
         for face, undercut_ratio in analysis_data_map.items():
             if undercut_ratio > 0.05:  # Allow 5% noise tolerance
                 percentage = undercut_ratio * 100
-                overview = f"Undercut {percentage:.1f}%"
+                overview = f"{percentage:.1f}% occlusion"
                 message = (
                     f"Undercut detected. {percentage:.1f}% of this face is "
                     "trapped (occluded from both Top and Bottom)."
+                    f"<div style='margin-top: 8px; font-style: italic; color: #aaaaaa;'>"
+                    f"<b>Suggestions:</b><br>"
+                    f"1) Remove the overhang or align the feature with the pull direction.<br>"
+                    f"2) Create a hole beneath/above the feature to allow the core/cavity to form the underside.<br>"
+                    f"3) If this feature is critical, note that it will require expensive sliding mechanisms in the mold."
+                    f"</div>"
                 )
 
                 results.append(
