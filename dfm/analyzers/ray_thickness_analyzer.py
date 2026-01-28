@@ -32,7 +32,7 @@ from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
-from dfm.utils import get_face_uv_normal, yield_face_uv_grid
+from dfm.utils import get_face_uv_normal, yield_face_uv_grid, get_point_from_uv
 
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
@@ -101,13 +101,12 @@ class RayThicknessAnalyzer(BaseAnalyzer):
             return None
 
         inward_norm = outward_norm.Reversed()
-        point: gp_Pnt = surface_adaptor.Value(u, v)
 
         epsilon = 1e-4
-
+        point = get_point_from_uv(face, inward_norm, u, v, epsilon)
         ray = gp_Lin(point, inward_norm)
 
-        intersector.Perform(ray, epsilon, float("inf"))
+        intersector.Perform(ray, 0, float("inf"))
 
         # At acute corners, thickness is reported as zero. This is intuitively incorrect for
         # a DFM analysis. So we compare the normal directions of the origin face and the hit
