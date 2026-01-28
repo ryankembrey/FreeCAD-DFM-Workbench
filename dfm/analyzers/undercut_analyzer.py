@@ -79,7 +79,7 @@ class UndercutAnalyzer(BaseAnalyzer):
         for u, v in yield_face_uv_grid(face, samples, 0.05):
             total_points += 1
 
-            if self._is_point_trapped(face, surface, u, v, intersector, pull_direction):
+            if self._is_point_trapped(face, u, v, intersector, pull_direction):
                 trapped_points += 1
 
         if total_points == 0:
@@ -90,7 +90,6 @@ class UndercutAnalyzer(BaseAnalyzer):
     def _is_point_trapped(
         self,
         face: TopoDS_Face,
-        surface: BRepAdaptor_Surface,
         u: float,
         v: float,
         intersector: IntCurvesFace_ShapeIntersector,
