@@ -128,7 +128,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
             hit_normal = get_face_uv_normal(hit_face, hit_u, hit_v)
 
             if hit_normal:
-                dot_prod = inward_norm.Dot(hit_normal)
+                dot_prod = outward_norm.Dot(hit_normal)
 
                 if dot_prod < acute_filter:
                     return dist
