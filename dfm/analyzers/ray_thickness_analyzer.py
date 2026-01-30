@@ -74,11 +74,10 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         """
         Returns the thicknesses found at each point UV for a given face.
         """
-        surface = BRepAdaptor_Surface(face, True)
         thicknesses = []
 
         for u, v in yield_face_uv_grid(face, samples):
-            thick = self.ray_cast_at_uv(face, surface, u, v, intersector)
+            thick = self.ray_cast_at_uv(face, u, v, intersector)
 
             if thick is not None and thick != float("inf"):
                 thicknesses.append(thick)
@@ -88,7 +87,6 @@ class RayThicknessAnalyzer(BaseAnalyzer):
     def ray_cast_at_uv(
         self,
         face: TopoDS_Face,
-        surface_adaptor: BRepAdaptor_Surface,
         u: float,
         v: float,
         intersector: IntCurvesFace_ShapeIntersector,
