@@ -70,7 +70,7 @@ class MinThicknessCheck(BaseCheck):
             measured_min = min(valid_thicknesses)
 
             if measured_min < (min_allowed):
-                overview = f"{measured_min:.2f}° < {min_allowed:.2f}°"
+                overview = f"{measured_min:.2f}mm < {min_allowed:.2f}mm"
                 message = (
                     f"Minimum thickness violation. Measured: {measured_min:.2f}mm "
                     f"(Limit: {min_allowed:.2f}mm)"
@@ -119,7 +119,7 @@ class MaxThicknessCheck(BaseCheck):
             measured_max = max(diameters)
 
             if measured_max > (max_allowed):
-                overview = f"{measured_max:.2f}° > {max_allowed:.2f}°\n"
+                overview = f"{measured_max:.2f}mm > {max_allowed:.2f}mm\n"
                 message = (
                     f"Maximum thickness violation. Measured: {measured_max:.2f}mm "
                     f"(Limit: {max_allowed:.2f}mm). Risk of sink marks."
