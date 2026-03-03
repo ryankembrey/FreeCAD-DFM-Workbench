@@ -31,7 +31,7 @@ from app.analysis_runner import AnalysisRunner
 from dfm.models import CheckResult
 
 from . import DFM_rc
-from .task_results import TaskResults
+from .task_results import TaskResults, DFMReportModel, DFMViewProvider, TaskResultsPresenter
 
 
 class TaskSetup:
@@ -183,9 +183,23 @@ class TaskSetup:
                 pull_direction=self.pull_dir,
             )
 
-            TaskResults(results, self.target_object, self.process, material=material_name)
+            report_model = DFMReportModel(
+                results=results, process=self.process, material=material_name
+            )
+
+            view_bridge = DFMViewProvider(self.target_object)
+
+            results_view = TaskResults()
+
+            self.results_presenter = TaskResultsPresenter(
+                view=results_view, model=report_model, bridge=view_bridge
+            )
+
         except Exception as e:
             FreeCAD.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
+            import traceback
+
+            FreeCAD.Console.PrintError(traceback.format_exc())
 
     def on_select_shape(self):
         """Updates the selected shape from the user's selection in the document."""

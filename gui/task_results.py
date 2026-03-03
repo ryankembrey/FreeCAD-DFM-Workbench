@@ -20,383 +20,247 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+import csv
 import html
 from collections import defaultdict
-import csv
+from typing import Any, Callable
 
-import FreeCAD
-import FreeCADGui as Gui
-import Part
-
+import FreeCAD  # type: ignore
+import FreeCADGui as Gui  # type: ignore
+import Part  # type: ignore
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
+from OCC.Core.TopoDS import TopoDS_Face
 
 from dfm.models import CheckResult, Severity
 from dfm.processes.process import Process
 from dfm.rules import Rulebook
-from . import DFM_rc
 
 
 class TaskResults:
-    def __init__(self, results: list[CheckResult], target_object, process: Process, material: str):
-        self.target_object = target_object
-        self.process = process
-        self.material_name = material
-        self.results = results
+    """Passive View: Only handles Widgets and Signals."""
 
-        self.form = Gui.PySideUic.loadUi(":/ui/task_results.ui")  # type: ignore
+    def __init__(self):
+        self.form: Any = Gui.PySideUic.loadUi(":/ui/task_results.ui", None)  # type: ignore
         self.form.setWindowTitle("DFM Analysis")
-
-        self.tree = self.form.tvResults
-        self.tree.setHeaderHidden(True)
-
         self.model = QStandardItemModel()
-        self.tree.setModel(self.model)
+        self.form.tvResults.setModel(self.model)
+        self.form.tvResults.setHeaderHidden(True)
 
-        self.tree.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self.on_context_menu)
-
-        self.verdict = self.find_verdict(self.results)
-
-        self.form.pbExportResults.clicked.connect(self.on_export_clicked)
-        self.form.pbSaveResults.clicked.connect(self.on_save_clicked)
-
-        self.populate_info_widgets()
-        self.populate_results_tree()
-        self.tree.clicked.connect(self.on_result_clicked)
-        self.tree.doubleClicked.connect(self.on_result_double_clicked)
-
-        Gui.Control.showDialog(self)
-        Gui.Selection.clearSelection()
-
-    def on_export_clicked(self):
-        """Exports the current results to a CSV file selected by the user."""
-
-        filename, _ = QFileDialog.getSaveFileName(
-            self.form,
-            "Export DFM Results",
-            "",
-            "CSV Files (*.csv);;All Files (*)",
-        )
-
-        if not filename:
-            return
-
-        if not filename.lower().endswith(".csv"):
-            filename += ".csv"
-
-        try:
-            with open(filename, mode="w", newline="", encoding="utf-8") as csv_file:
-                writer = csv.writer(csv_file)
-
-                writer.writerow(["Design", self.target_object.Label])
-                writer.writerow(["Manufacturing Process", self.process.name])
-                writer.writerow(["Material", self.material_name])
-                writer.writerow(["Verdict", self.verdict])
-                writer.writerow(
-                    [
-                        "Status",
-                        "Rule Name",
-                        "Face ID",
-                        "Value / Limit",
-                    ]
-                )
-
-                for result in self.results:
-                    face_names = []
-                    if result.failing_geometry and not result.ignore:
-                        for face in result.failing_geometry:
-                            face_names.append(self.get_face_name(face))
-                        face_str = "; ".join(face_names)
-                    else:
-                        continue  # Issue was ignored
-
-                    writer.writerow(
-                        [
-                            result.severity.name,
-                            result.rule_id.label,
-                            face_str,
-                            result.overview,
-                        ]
-                    )
-
-            QMessageBox.information(
-                self.form,
-                "Export Successful",
-                f"Successfully exported {len(self.results)} results to:\n{filename}",
-            )
-
-        except Exception as e:
-            FreeCAD.Console.PrintError(f"CSV Export failed: {e}\n")
-            QMessageBox.critical(
-                self.form, "Export Failed", f"An error occurred while writing the file:\n{str(e)}"
-            )
-
-    def on_save_clicked(self):
-        """"""
-        QMessageBox.information(
-            self.form,
-            "Save Not Implemented",
-            "Save results to .FCStd file is not currently implemented.",
-        )
-
-    def populate_info_widgets(self):
-        """Populates the top-level information widgets."""
-        self.form.leTarget.setText(self.target_object.Label)
         self.form.leTarget.setReadOnly(True)
-        self.form.leProcess.setText(self.process.name)
         self.form.leProcess.setReadOnly(True)
-        self.form.leMaterial.setText(self.material_name)
         self.form.leMaterial.setReadOnly(True)
-
-        verdict_text, verdict_color = self.find_verdict(self.results)
-        self.form.leVerdict.setStyleSheet(f"color: {verdict_color}; font-weight: bold;")
-        self.form.leVerdict.setText(verdict_text)
         self.form.leVerdict.setReadOnly(True)
+        self.form.tbDetails.setReadOnly(True)
 
         self.form.tbDetails.setHtml(
             "Select a result in the tree to view details of the DFM issues."
         )
-        self.adjust_details_height()
 
-    def populate_results_tree(self):
-        """
-        Populates the tree.
-        Sorts items so ignored findings are at the bottom and styled gray.
-        """
-        expanded_rules = set()
-        root = self.model.invisibleRootItem()
-        for i in range(root.rowCount()):
-            item = root.child(i)
-            index = self.model.indexFromItem(item)
-            if self.tree.isExpanded(index):
-                expanded_rules.add(item.text())
+        self.on_row_selected: Callable[[CheckResult | list[CheckResult]], None] | None = None
+        self.on_row_double_clicked: Callable[[CheckResult], None] | None = None
+        self.on_toggle_ignore: Callable[[CheckResult], None] | None = None
+        self.on_export_clicked: Callable[[], None] | None = None
 
-        self.model.clear()
-
-        grouped_results = defaultdict(list)
-        for result in self.results:
-            grouped_results[result.rule_id].append(result)
-
-        root_node = self.model.invisibleRootItem()
-
-        for rule_id, findings in grouped_results.items():
-            # Sort findings by severity
-            findings.sort(key=lambda x: (x.ignore, -x.severity.value))
-
-            active_count = sum(1 for f in findings if not f.ignore)
-            rule_label = f"{rule_id.label} [{active_count} issues]"
-
-            rule_item = QStandardItem(rule_label)
-            rule_item.setFlags(
-                QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
-            )
-
-            active_findings = [f for f in findings if not f.ignore]
-            if active_findings:
-                worst_severity = max(active_findings, key=lambda f: f.severity.value).severity
-                rule_item.setIcon(self._get_severity_icon(worst_severity))
-            else:
-                rule_item.setIcon(self._get_severity_icon(findings[0].severity))
-
-            # Create result tree child items for geometry that failed the rule
-            for i, finding in enumerate(findings):
-                instance_item = QStandardItem(
-                    f"{self.get_face_name(finding.failing_geometry[0])}  ({finding.overview}) [{i + 1}]"
-                )
-
-                instance_item.setFlags(
-                    QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
-                )
-                instance_item.setIcon(self._get_severity_icon(finding.severity))
-                instance_item.setToolTip(finding.message)
-                instance_item.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
-
-                if finding.ignore:
-                    instance_item.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.gray))
-                    font = instance_item.font()
-                    font.setStrikeOut(True)
-                    instance_item.setFont(font)
-
-                rule_item.appendRow(instance_item)
-
-            root_node.appendRow(rule_item)
-
-            if any(rule_id.label in ex for ex in expanded_rules):
-                self.tree.setExpanded(rule_item.index(), True)
-
-        # Check if a rule declared in the process yaml file did not appear in the results. If it
-        # did not, this means that all faces on the model passed this rule.
-        for rule_id in self.process.rules:
-            # Convert rule_id string to Rulebook member
-            if Rulebook[rule_id] not in grouped_results.keys():
-                rule_item = QStandardItem(f"{Rulebook[rule_id].label} [Passed]")
-                rule_item.setFlags(
-                    QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable
-                )
-                style = QtWidgets.QApplication.style()
-                icon = style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton)
-                rule_item.setIcon(icon)
-
-                root_node.appendRow(rule_item)
-                rule_index = self.model.indexFromItem(rule_item)
-                self.tree.setFirstColumnSpanned(rule_index.row(), QtCore.QModelIndex(), True)
-                continue
-
-    def on_context_menu(self, point):
-        """Handles the right-click context menu."""
-        index = self.tree.indexAt(point)
-        if not index.isValid():
-            return
-
-        item = self.model.itemFromIndex(index)
-        data = item.data(QtCore.Qt.ItemDataRole.UserRole)
-
-        if isinstance(data, CheckResult):
-            menu = QtWidgets.QMenu()
-
-            if data.ignore:
-                action_text = "Restore Item"
-                icon = QtGui.QIcon.fromTheme("list-add")
-            else:
-                action_text = "Ignore Item"
-                icon = QtGui.QIcon.fromTheme("list-remove")
-
-            action = menu.addAction(icon, action_text)
-            action.triggered.connect(lambda: self.toggle_ignore_state(data))
-
-            menu.exec(self.tree.viewport().mapToGlobal(point))
-
-    def toggle_ignore_state(self, finding: CheckResult):
-        """Toggles the ignore boolean and refreshes the tree."""
-        finding.ignore = not finding.ignore
-
-        verdict_text, verdict_color = self.find_verdict(self.results)
-        self.form.leVerdict.setStyleSheet(f"color: {verdict_color};")
-        self.form.leVerdict.setText(verdict_text)
-
-        self.populate_results_tree()
-        self.restore_selection(finding)
-
-    def restore_selection(self, target_finding: CheckResult):
-        """Attempts to re-select the item corresponding to the modified finding."""
-        root = self.model.invisibleRootItem()
-        for r in range(root.rowCount()):
-            rule_item = root.child(r)
-            for c in range(rule_item.rowCount()):
-                child = rule_item.child(c)
-                data = child.data(QtCore.Qt.ItemDataRole.UserRole)
-                if data == target_finding:
-                    selection_model = self.tree.selectionModel()
-                    selection_model.select(
-                        child.index(), QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
-                    )
-                    self.tree.scrollTo(child.index())
-                    return
-
-    def set_details_text(self, message: str):
-        """Sets the message to be displayed in the QTextBrowser"""
-        self.form.tbDetails.clear()
-        self.form.tbDetails.setHtml(message)
-        self.adjust_details_height()
+        self.form.tvResults.clicked.connect(self._handle_click)
+        self.form.tvResults.doubleClicked.connect(self._handle_double_click)
+        self.form.pbExportResults.clicked.connect(self._handle_export_btn)
+        self.form.tvResults.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.form.tvResults.customContextMenuRequested.connect(self._show_context_menu)
 
     def adjust_details_height(self):
-        """Adjusts the height of the text browser based on its content."""
+        """Dynamic resizing of the description box based on content."""
         doc = self.form.tbDetails.document()
         content_height = doc.documentLayout().documentSize().height()
-        final_height = int(content_height) + 5
-        final_height = max(60, min(final_height, 250))
-        self.form.tbDetails.setFixedHeight(final_height)
+        final_height = int(content_height) + 10  # Padding
+        self.form.tbDetails.setFixedHeight(max(60, min(final_height, 300)))
 
-    def on_result_clicked(self, index: QtCore.QModelIndex):
-        """Called when a user clicks on any item in the tree."""
-        item = self.model.itemFromIndex(index)
-        if not item:
-            return
+    def render_tree(self, grouped_data: dict, face_namer_func: Callable, all_process_rules: list):
+        """Renders the DFM results tree"""
+        expanded_rules = set()
+        for i in range(self.model.rowCount()):
+            idx = self.model.index(i, 0)
+            if self.form.tvResults.isExpanded(idx):
+                expanded_rules.add(self.model.item(i).text().split(" [")[0])
 
-        failing_faces: list[TopoDS_Face] = []
-        result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        self.model.clear()
+        root = self.model.invisibleRootItem()
 
-        if isinstance(result_data, CheckResult):
-            safe_overview = html.escape(result_data.overview)
-            message = (
-                f"<div style='margin-top: 4px; font-weight: bold;'>{safe_overview}</div>"
-                f"<div style='margin-top: 4px;'>{result_data.message}</div>"
-            )
-            self.set_details_text(message)
-            failing_faces = result_data.failing_geometry
+        # Failed/Warning Rules
+        for rule_id, findings in grouped_data.items():
+            active_count = sum(1 for f in findings if not f.ignore)
+            rule_item = QStandardItem(f"{rule_id.label} [{active_count}]")
+            rule_item.setEditable(False)
+            rule_item.setData(findings, QtCore.Qt.ItemDataRole.UserRole)
+            rule_item.setIcon(self._get_icon(findings[0].severity))
 
-        elif item.hasChildren():
-            for row in range(item.rowCount()):
-                child_item = item.child(row)
-                child_data = child_item.data(QtCore.Qt.ItemDataRole.UserRole)
-                if isinstance(child_data, CheckResult):
-                    failing_faces.extend(child_data.failing_geometry)
-            message = "Select a result in the tree to view details of the DFM issues."
-            self.set_details_text(message)
+            for finding in findings:
+                name = face_namer_func(finding.failing_geometry[0])
+                child = QStandardItem(f"{name} ({finding.overview})")
+                child.setEditable(False)
+                child.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
+                child.setIcon(self._get_icon(finding.severity))
+                if finding.ignore:
+                    child.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.gray))
+                    font = child.font()
+                    font.setStrikeOut(True)
+                    child.setFont(font)
+                rule_item.appendRow(child)
+            root.appendRow(rule_item)
+            if rule_id.label in expanded_rules:
+                self.form.tvResults.setExpanded(rule_item.index(), True)
 
-        if failing_faces:
-            unique_faces = list(set(failing_faces))
+        # Add Passed Rules
+        for rule_key in all_process_rules:
+            rule_enum = Rulebook[rule_key]
+            if rule_enum not in grouped_data:
+                pass_item = QStandardItem(f"{rule_enum.label} [Passed]")
+                pass_item.setEditable(False)
+                pass_item.setIcon(
+                    QtWidgets.QApplication.style().standardIcon(
+                        QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton
+                    )
+                )
+                root.appendRow(pass_item)
 
-            Gui.Selection.clearSelection()
-            self.highlight_faces(unique_faces)
-        else:
-            Gui.Selection.clearSelection()
-
-    def highlight_faces(self, failing_topo_faces: list[TopoDS_Face]):
-        """Highlights the given faces on the document object."""
-        if not failing_topo_faces:
-            return
-
-        shape_faces = self.target_object.Shape.Faces
-        failing_face_names = []
-
-        for failing_face_occ in failing_topo_faces:
-            for i, part_face in enumerate(shape_faces):
-                part_face_occ = Part.__toPythonOCC__(part_face)
-
-                if part_face_occ.IsSame(failing_face_occ):
-                    face_name = f"Face{i + 1}"
-                    failing_face_names.append(face_name)
-                    break
-
-        if failing_face_names:
-            FreeCAD.Console.PrintMessage(
-                f"Highlighting sub-elements: {', '.join(failing_face_names)}"
-            )
-            Gui.Selection.addSelection(self.target_object, failing_face_names)
-
-    def _get_severity_icon(self, severity: Severity) -> QtGui.QIcon:
-        """Returns a standard Qt icon based on the Severity level."""
+    def _get_icon(self, severity: Severity):
+        """Helper function to get the icon for a given severity."""
         style = QtWidgets.QApplication.style()
+        px = {
+            Severity.ERROR: QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical,
+            Severity.WARNING: QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning,
+        }.get(severity, QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation)
+        return style.standardIcon(px)
 
-        if severity == Severity.ERROR:
-            return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical)
-
-        elif severity == Severity.WARNING:
-            return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning)
-
-        else:
-            return style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation)
-
-    def on_result_double_clicked(self, index: QtCore.QModelIndex):
-        """Called when a user double-clicks an item. Zooms and aligns to the selected geometry."""
+    def _handle_click(self, index: QtCore.QModelIndex):
+        """Helper function to handle row selection."""
         item = self.model.itemFromIndex(index)
-        if not item:
-            return
+        if item and self.on_row_selected:
+            data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+            if data:
+                self.on_row_selected(data)
 
-        result_data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+    def _handle_double_click(self, index: QtCore.QModelIndex):
+        """Helper function to handle row double-click."""
+        item = self.model.itemFromIndex(index)
+        if item:
+            data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+            if isinstance(data, CheckResult) and self.on_row_double_clicked:
+                self.on_row_double_clicked(data)
 
-        if isinstance(result_data, CheckResult):
-            Gui.Selection.clearSelection()
-            self.highlight_faces(result_data.failing_geometry)
+    def _handle_export_btn(self):
+        """Helper function to handle export button click."""
+        if self.on_export_clicked:
+            self.on_export_clicked()
 
-            # TODO: Make the AlignToSelection aware of material volume
-            Gui.SendMsgToActiveView("ViewSelection")
-            Gui.SendMsgToActiveView("AlignToSelection")
+    def _show_context_menu(self, point: QtCore.QPoint):
+        """Helper function to show context menu at a given point."""
+        index = self.form.tvResults.indexAt(point)
+        item = self.model.itemFromIndex(index)
+        if item:
+            data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+            if isinstance(data, CheckResult):
+                menu = QtWidgets.QMenu()
+                txt = "Restore" if data.ignore else "Ignore"
+                action = menu.addAction(txt)
+                if self.on_toggle_ignore:
+                    action.triggered.connect(lambda: self.on_toggle_ignore(data))  # type: ignore
+                menu.exec(self.form.tvResults.viewport().mapToGlobal(point))
+
+
+class DFMReportModel:
+    """Holds the data of a DFM report and handles grouping and verdicts."""
+
+    STATUS_THEMES = {
+        "FAILED": {"text": "Failed", "color": "#D32F2F"},
+        "WARNING": {"text": "Warning", "color": "#E65100"},
+        "SUCCESSFUL": {"text": "Successful", "color": "#2E7D32"},
+    }
+
+    def __init__(self, results: list[CheckResult], process: Process, material: str):
+        self.results = results
+        self.process = process
+        self.material = material
+
+    @property
+    def active_results(self):
+        """Returns only active results (not ignored)"""
+        return [r for r in self.results if not r.ignore]
+
+    def get_grouped_results(self) -> dict:
+        """Returns results grouped by rule id"""
+        grouped = defaultdict(list)
+        for result in self.results:
+            grouped[result.rule_id].append(result)
+
+        for rule_id in grouped:
+            grouped[rule_id].sort(key=lambda x: (x.ignore, -x.severity.value))
+
+        return dict(sorted(grouped.items(), key=lambda item: item[0].label))
+
+    def get_verdict(self) -> tuple[str, str]:
+        """Returns verdict string based on active results"""
+        errors = sum(1 for r in self.active_results if r.severity == Severity.ERROR)
+        warnings = sum(1 for r in self.active_results if r.severity == Severity.WARNING)
+
+        parts = []
+        if errors:
+            parts.append(f"{errors} error{'s' if errors != 1 else ''}")
+        if warnings:
+            parts.append(f"{warnings} warning{'s' if warnings != 1 else ''}")
+
+        details = f" ({', '.join(parts)})" if parts else ""
+
+        if errors:
+            theme = self.STATUS_THEMES["FAILED"]
+        elif warnings:
+            theme = self.STATUS_THEMES["WARNING"]
+        else:
+            theme = self.STATUS_THEMES["SUCCESSFUL"]
+
+        return f"{theme['text']}{details}", theme["color"]
+
+    def toggle_ignore_state(self, finding: CheckResult):
+        """Toggles the ignore state of a finding."""
+        finding.ignore = not finding.ignore
+
+
+class CSVResultExporter:
+    """Writes DFM report data to a CSV file."""
+
+    @staticmethod
+    def export(filepath: str, target_label: str, model: DFMReportModel, face_namer_func: Callable):
+        """Writes the DFM report data to a CSV file."""
+        try:
+            with open(filepath, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                verdict_text, _ = model.get_verdict()
+                writer.writerow(["Design", target_label])
+                writer.writerow(["Process", model.process.name])
+                writer.writerow(["Material", model.material])
+                writer.writerow(["Verdict", verdict_text])
+                writer.writerow(["Status", "Rule Name", "Faces", "Details"])
+
+                for result in model.results:
+                    if result.ignore:
+                        continue
+                    faces = "; ".join([face_namer_func(f) for f in result.failing_geometry])
+                    writer.writerow(
+                        [result.severity.name, result.rule_id.label, faces, result.overview]
+                    )
+            return True
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"Export failed: {e}\n")
+            return False
+
+
+class DFMViewProvider:
+    """Handles interaction with the FreeCAD 3D viewport using geometric identity."""
+
+    def __init__(self, target_object):
+        self.target_object = target_object
 
     def get_face_name(self, target_occ_face: TopoDS_Face) -> str:
         """
@@ -412,33 +276,103 @@ class TaskResults:
 
         return "Unknown Face"
 
-    def _pluralise(self, count: int, noun: str) -> str:
-        """Pluralises a word based on an integer value"""
-        suffix = "s" if count != 1 else ""
-        return f"{count} {noun}{suffix}"
+    def highlight_faces(self, topo_faces: list[Any]):
+        """Clears current selection and selects the failing faces."""
+        Gui.Selection.clearSelection()
 
-    def find_verdict(self, results: list[CheckResult]) -> tuple[str, str]:
-        """
-        Returns a tuple: (Verdict Text, CSS Color String)
-        """
-        errors = sum(1 for r in results if r.severity == Severity.ERROR and not r.ignore)
-        warnings = sum(1 for r in results if r.severity == Severity.WARNING and not r.ignore)
+        if not topo_faces:
+            return
 
-        parts = []
-        if errors > 0:
-            parts.append(self._pluralise(errors, "error"))
-        if warnings > 0:
-            parts.append(self._pluralise(warnings, "warning"))
+        face_names = []
+        for face in topo_faces:
+            name = self.get_face_name(face)
+            if name:
+                face_names.append(name)
 
-        details = ", ".join(parts)
+        if face_names:
+            Gui.Selection.addSelection(self.target_object, face_names)
 
-        COLOR_RED = "#D32F2F"
-        COLOR_ORANGE = "#E65100"
-        COLOR_GREEN = "#2E7D32"
+    def zoom_to_selection(self):
+        """Zooms the 3D view to the current selection."""
+        if Gui.ActiveDocument and Gui.activeView():
+            Gui.SendMsgToActiveView("ViewSelection")
+            Gui.SendMsgToActiveView("AlignToSelection")
 
-        if errors > 0:
-            return f"Failed ({details})", COLOR_RED
-        elif warnings > 0:
-            return f"Successful ({details})", COLOR_ORANGE
-        else:
-            return "Successful", COLOR_GREEN
+
+class TaskResultsPresenter:
+    """Presenter for the TaskResults view.  Handles UI updates and event handling."""
+
+    def __init__(self, view: TaskResults, model: DFMReportModel, bridge: DFMViewProvider):
+        self.view = view
+        self.model = model
+        self.bridge = bridge
+
+        self.view.on_row_selected = self.handle_selection
+        self.view.on_row_double_clicked = self.handle_zoom
+        self.view.on_toggle_ignore = self.handle_ignore
+        self.view.on_export_clicked = self.handle_export
+
+        self.refresh_ui()
+        Gui.Control.showDialog(self.view)
+
+    def refresh_ui(self):
+        """Refreshes the UI with current model data."""
+        self.view.form.leTarget.setText(self.bridge.target_object.Label)
+        self.view.form.leProcess.setText(self.model.process.name)
+        self.view.form.leMaterial.setText(self.model.material)
+
+        text, color = self.model.get_verdict()
+        self.view.form.leVerdict.setText(text)
+        self.view.form.leVerdict.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+        self.view.render_tree(
+            self.model.get_grouped_results(), self.bridge.get_face_name, self.model.process.rules
+        )
+
+    def handle_selection(self, data: CheckResult | list[CheckResult]):
+        """Highlights faces based on selection. Can be a single result or a group."""
+        Gui.Selection.clearSelection()
+
+        if isinstance(data, list):
+            # Parent rule clicked: highlight all non-ignored child faces
+            all_faces = []
+            for result in data:
+                if not result.ignore:
+                    all_faces.extend(result.failing_geometry)
+
+            rule_name = data[0].rule_id.label if data else "Rule"
+            self.view.form.tbDetails.setHtml(
+                f"<b>Rule: {rule_name}</b><br>Showing all findings for this rule."
+            )
+            self.bridge.highlight_faces(all_faces)
+
+        elif isinstance(data, CheckResult):
+            # Individual finding clicked
+            overview = html.escape(data.overview)
+            message = (
+                f"<div style='margin-top: 4px; font-weight: bold;'>{overview}</div>"
+                f"<div style='margin-top: 4px;'>{data.message}</div>"
+            )
+            self.view.form.tbDetails.setHtml(message)
+            self.bridge.highlight_faces(data.failing_geometry)
+
+        self.view.adjust_details_height()
+
+    def handle_zoom(self, result: CheckResult):
+        """Handle zooming to the selected issue."""
+        self.handle_selection(result)
+        self.bridge.zoom_to_selection()
+
+    def handle_ignore(self, result: CheckResult):
+        """Handle ignoring the selected issue."""
+        self.model.toggle_ignore_state(result)
+        self.refresh_ui()
+
+    def handle_export(self):
+        """Handle exporting the selected geometry to a CSV file."""
+        path, _ = QFileDialog.getSaveFileName(self.view.form, "Export CSV", "", "CSV (*.csv)")
+        if path:
+            if CSVResultExporter.export(
+                path, self.bridge.target_object.Label, self.model, self.bridge.get_face_name
+            ):
+                QMessageBox.information(self.view.form, "Done", "Export Successful")
