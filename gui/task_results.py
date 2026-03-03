@@ -32,7 +32,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from OCC.Core.TopoDS import TopoDS_Face
+# Removed unused TopoDS_Face import to clear linter note
 
 from dfm.models import CheckResult, Severity
 from dfm.processes.process import Process
@@ -59,6 +59,7 @@ class TaskResults:
             "Select a result in the tree to view details of the DFM issues."
         )
 
+        self.on_closed: Callable[[], None] | None = None
         self.on_row_selected: Callable[[CheckResult | list[CheckResult]], None] | None = None
         self.on_row_double_clicked: Callable[[CheckResult], None] | None = None
         self.on_toggle_ignore: Callable[[CheckResult], None] | None = None
@@ -74,7 +75,7 @@ class TaskResults:
         """Dynamic resizing of the description box based on content."""
         doc = self.form.tbDetails.document()
         content_height = doc.documentLayout().documentSize().height()
-        final_height = int(content_height) + 10  # Padding
+        final_height = int(content_height) + 10
         self.form.tbDetails.setFixedHeight(max(60, min(final_height, 300)))
 
     def render_tree(self, grouped_data: dict, face_namer_func: Callable, all_process_rules: list):
@@ -88,7 +89,6 @@ class TaskResults:
         self.model.clear()
         root = self.model.invisibleRootItem()
 
-        # Failed/Warning Rules
         for rule_id, findings in grouped_data.items():
             active_count = sum(1 for f in findings if not f.ignore)
             rule_item = QStandardItem(f"{rule_id.label} [{active_count}]")
@@ -112,7 +112,6 @@ class TaskResults:
             if rule_id.label in expanded_rules:
                 self.form.tvResults.setExpanded(rule_item.index(), True)
 
-        # Add Passed Rules
         for rule_key in all_process_rules:
             rule_enum = Rulebook[rule_key]
             if rule_enum not in grouped_data:
@@ -126,7 +125,6 @@ class TaskResults:
                 root.appendRow(pass_item)
 
     def _get_icon(self, severity: Severity):
-        """Helper function to get the icon for a given severity."""
         style = QtWidgets.QApplication.style()
         px = {
             Severity.ERROR: QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical,
@@ -135,7 +133,6 @@ class TaskResults:
         return style.standardIcon(px)
 
     def _handle_click(self, index: QtCore.QModelIndex):
-        """Helper function to handle row selection."""
         item = self.model.itemFromIndex(index)
         if item and self.on_row_selected:
             data = item.data(QtCore.Qt.ItemDataRole.UserRole)
@@ -143,7 +140,6 @@ class TaskResults:
                 self.on_row_selected(data)
 
     def _handle_double_click(self, index: QtCore.QModelIndex):
-        """Helper function to handle row double-click."""
         item = self.model.itemFromIndex(index)
         if item:
             data = item.data(QtCore.Qt.ItemDataRole.UserRole)
@@ -151,12 +147,10 @@ class TaskResults:
                 self.on_row_double_clicked(data)
 
     def _handle_export_btn(self):
-        """Helper function to handle export button click."""
         if self.on_export_clicked:
             self.on_export_clicked()
 
     def _show_context_menu(self, point: QtCore.QPoint):
-        """Helper function to show context menu at a given point."""
         index = self.form.tvResults.indexAt(point)
         item = self.model.itemFromIndex(index)
         if item:
@@ -168,6 +162,19 @@ class TaskResults:
                 if self.on_toggle_ignore:
                     action.triggered.connect(lambda: self.on_toggle_ignore(data))  # type: ignore
                 menu.exec(self.form.tvResults.viewport().mapToGlobal(point))
+
+    def getStandardButtons(self):
+        return QtWidgets.QDialogButtonBox.StandardButton.Close
+
+    def reject(self):
+        if self.on_closed:
+            self.on_closed()
+        Gui.Control.closeDialog()
+
+    def accept(self):
+        if self.on_closed:
+            self.on_closed()
+        Gui.Control.closeDialog()
 
 
 class DFMReportModel:
@@ -186,22 +193,17 @@ class DFMReportModel:
 
     @property
     def active_results(self):
-        """Returns only active results (not ignored)"""
         return [r for r in self.results if not r.ignore]
 
     def get_grouped_results(self) -> dict:
-        """Returns results grouped by rule id"""
         grouped = defaultdict(list)
         for result in self.results:
             grouped[result.rule_id].append(result)
-
         for rule_id in grouped:
             grouped[rule_id].sort(key=lambda x: (x.ignore, -x.severity.value))
-
         return dict(sorted(grouped.items(), key=lambda item: item[0].label))
 
     def get_verdict(self) -> tuple[str, str]:
-        """Returns verdict string based on active results"""
         errors = sum(1 for r in self.active_results if r.severity == Severity.ERROR)
         warnings = sum(1 for r in self.active_results if r.severity == Severity.WARNING)
 
@@ -212,7 +214,6 @@ class DFMReportModel:
             parts.append(f"{warnings} warning{'s' if warnings != 1 else ''}")
 
         details = f" ({', '.join(parts)})" if parts else ""
-
         if errors:
             theme = self.STATUS_THEMES["FAILED"]
         elif warnings:
@@ -223,16 +224,12 @@ class DFMReportModel:
         return f"{theme['text']}{details}", theme["color"]
 
     def toggle_ignore_state(self, finding: CheckResult):
-        """Toggles the ignore state of a finding."""
         finding.ignore = not finding.ignore
 
 
 class CSVResultExporter:
-    """Writes DFM report data to a CSV file."""
-
     @staticmethod
     def export(filepath: str, target_label: str, model: DFMReportModel, face_namer_func: Callable):
-        """Writes the DFM report data to a CSV file."""
         try:
             with open(filepath, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -256,51 +253,147 @@ class CSVResultExporter:
             return False
 
 
+class DFMAnnotation:
+    """Specialized component for creating and styling 3D UI callouts."""
+
+    def __init__(self, name="DFM_Issue_Annotation"):
+        self.name = name
+        self._active_name = None
+
+    def remove(self, doc):
+        if self._active_name:
+            try:
+                if obj := doc.getObject(self._active_name):
+                    doc.removeObject(obj.Name)
+            except Exception:
+                pass
+            self._active_name = None
+
+    def create(self, doc, base_pos, text_pos, text, style_cfg):
+        self.remove(doc)
+        label = doc.addObject("App::AnnotationLabel", self.name)
+        self._active_name = label.Name
+        label.LabelText = [text]
+        label.BasePosition = base_pos
+        label.TextPosition = text_pos
+
+        vo = label.ViewObject
+        if vo:
+            vo.TextColor = style_cfg.get("text_color", (0.95, 0.95, 0.95))
+            vo.BackgroundColor = style_cfg.get("bg_color", (0.15, 0.15, 0.15))
+            if "DisplayMode" in vo.PropertiesList:
+                vo.DisplayMode = "Line"
+            font_size = style_cfg.get("font_size", 14)
+            for target in [vo, label]:
+                if hasattr(target, "PropertiesList") and "FontSize" in target.PropertiesList:
+                    target.FontSize = font_size
+        return label
+
+
 class DFMViewProvider:
-    """Handles interaction with the FreeCAD 3D viewport using geometric identity."""
+    """The Coordinator: Orchestrates viewport state and visual feedback."""
 
     def __init__(self, target_object):
-        self.target_object = target_object
+        self.target_object = target_object  # Fixed naming
+        self.view_object = target_object.ViewObject
+        self.anno_mgr = DFMAnnotation()
 
-    def get_face_name(self, target_occ_face: TopoDS_Face) -> str:
-        """
-        Inputs a TopoDS_Face and returns the FreeCAD internal name (e.g., 'Face4').
-        """
-        shape_faces = self.target_object.Shape.Faces
+        self._backup = {
+            "diffuse": list(self.view_object.DiffuseColor),
+            "shape": self.view_object.ShapeColor,
+            "trans": self.view_object.Transparency,
+        }
+        self._highlighted_face_names = []
 
-        for i, part_face in enumerate(shape_faces, start=1):
-            part_face_occ = Part.__toPythonOCC__(part_face)
+    def _get_face_index(self, target_occ_face) -> int:
+        for i, part_face in enumerate(self.target_object.Shape.Faces):
+            if Part.__toPythonOCC__(part_face).IsSame(target_occ_face):
+                return i
+        return -1
 
-            if part_face_occ.IsSame(target_occ_face):
-                return f"Face{i}"
+    def get_face_name(self, target_occ_face) -> str:
+        """Helper for Presenter and CSV Export."""
+        idx = self._get_face_index(target_occ_face)
+        return f"Face{idx + 1}" if idx != -1 else "Unknown Face"
 
-        return "Unknown Face"
+    def restore(self):
+        self.anno_mgr.remove(FreeCAD.ActiveDocument)
+        if self.view_object:
+            vo = self.view_object
+            vo.Transparency = self._backup["trans"]
+            vo.ShapeColor = self._backup["shape"]
+            vo.DiffuseColor = [(1.0, 1.0, 1.0, 1.0)]
+            vo.DiffuseColor = self._backup["diffuse"]
+            vo.update()
 
-    def highlight_faces(self, topo_faces: list[Any]):
-        """Clears current selection and selects the failing faces."""
-        Gui.Selection.clearSelection()
-
-        if not topo_faces:
+    def highlight_faces(self, topo_faces: list):
+        self.anno_mgr.remove(FreeCAD.ActiveDocument)
+        if not self.view_object:
             return
 
-        face_names = []
-        for face in topo_faces:
-            name = self.get_face_name(face)
-            if name:
-                face_names.append(name)
+        Gui.Selection.clearSelection()
+        target_indices = {
+            self._get_face_index(f) for f in topo_faces if self._get_face_index(f) != -1
+        }
+        self._highlighted_face_names = [f"Face{i + 1}" for i in target_indices]
 
-        if face_names:
-            Gui.Selection.addSelection(self.target_object, face_names)
+        if not target_indices:
+            self.restore()
+            return
+
+        num_faces = len(self.target_object.Shape.Faces)
+        base = self._backup["diffuse"][0] if self._backup["diffuse"] else self._backup["shape"]
+
+        new_colors = []
+        for i in range(num_faces):
+            if i in target_indices:
+                new_colors.append((1.0, 0.0, 0.0, 0.0))
+            else:
+                c = (
+                    self._backup["diffuse"][i]
+                    if len(self._backup["diffuse"]) == num_faces
+                    else base
+                )
+                new_colors.append((c[0], c[1], c[2], 0.0))
+
+        self.view_object.DiffuseColor = []
+        self.view_object.DiffuseColor = new_colors
+        self.view_object.Transparency = 50
+        self.view_object.update()
+
+        if self._highlighted_face_names:
+            # Trick to make FreeCAD update the colors in 3D view
+            Gui.Selection.addSelection(self.target_object, self._highlighted_face_names[0])
+            Gui.Selection.clearSelection()
+
+    def annotate_issue(self, topo_faces: list, text: str):
+        if not topo_faces:
+            return
+        idx = self._get_face_index(topo_faces[0])
+        if idx == -1:
+            return
+
+        center = self.target_object.Shape.Faces[idx].CenterOfMass
+        offset = FreeCAD.Vector(15, 15, 15)
+        self.anno_mgr.create(
+            doc=FreeCAD.ActiveDocument,
+            base_pos=center,
+            text_pos=center.add(offset),
+            text=text,
+            style_cfg={"font_size": 14},
+        )
+        FreeCAD.ActiveDocument.recompute()  # type: ignore
 
     def zoom_to_selection(self):
-        """Zooms the 3D view to the current selection."""
-        if Gui.ActiveDocument and Gui.activeView():
+        if self._highlighted_face_names and Gui.activeView():
+            Gui.Selection.addSelection(self.target_object, self._highlighted_face_names)
             Gui.SendMsgToActiveView("ViewSelection")
             Gui.SendMsgToActiveView("AlignToSelection")
+            Gui.Selection.clearSelection()
 
 
 class TaskResultsPresenter:
-    """Presenter for the TaskResults view.  Handles UI updates and event handling."""
+    """Presenter for the TaskResults view. Handles UI updates and event handling."""
 
     def __init__(self, view: TaskResults, model: DFMReportModel, bridge: DFMViewProvider):
         self.view = view
@@ -311,12 +404,12 @@ class TaskResultsPresenter:
         self.view.on_row_double_clicked = self.handle_zoom
         self.view.on_toggle_ignore = self.handle_ignore
         self.view.on_export_clicked = self.handle_export
+        self.view.on_closed = self.handle_cleanup
 
         self.refresh_ui()
         Gui.Control.showDialog(self.view)
 
     def refresh_ui(self):
-        """Refreshes the UI with current model data."""
         self.view.form.leTarget.setText(self.bridge.target_object.Label)
         self.view.form.leProcess.setText(self.model.process.name)
         self.view.form.leMaterial.setText(self.model.material)
@@ -330,49 +423,36 @@ class TaskResultsPresenter:
         )
 
     def handle_selection(self, data: CheckResult | list[CheckResult]):
-        """Highlights faces based on selection. Can be a single result or a group."""
         Gui.Selection.clearSelection()
-
         if isinstance(data, list):
-            # Parent rule clicked: highlight all non-ignored child faces
-            all_faces = []
-            for result in data:
-                if not result.ignore:
-                    all_faces.extend(result.failing_geometry)
-
+            all_faces = [f for r in data if not r.ignore for f in r.failing_geometry]
             rule_name = data[0].rule_id.label if data else "Rule"
-            self.view.form.tbDetails.setHtml(
-                f"<b>Rule: {rule_name}</b><br>Showing all findings for this rule."
-            )
+            self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
             self.bridge.highlight_faces(all_faces)
-
         elif isinstance(data, CheckResult):
-            # Individual finding clicked
             overview = html.escape(data.overview)
-            message = (
-                f"<div style='margin-top: 4px; font-weight: bold;'>{overview}</div>"
-                f"<div style='margin-top: 4px;'>{data.message}</div>"
-            )
-            self.view.form.tbDetails.setHtml(message)
+            self.view.form.tbDetails.setHtml(f"<b>{overview}</b><br>{data.message}")
             self.bridge.highlight_faces(data.failing_geometry)
-
+            self.bridge.annotate_issue(data.failing_geometry, data.overview)
         self.view.adjust_details_height()
 
     def handle_zoom(self, result: CheckResult):
-        """Handle zooming to the selected issue."""
         self.handle_selection(result)
         self.bridge.zoom_to_selection()
 
     def handle_ignore(self, result: CheckResult):
-        """Handle ignoring the selected issue."""
         self.model.toggle_ignore_state(result)
         self.refresh_ui()
 
     def handle_export(self):
-        """Handle exporting the selected geometry to a CSV file."""
         path, _ = QFileDialog.getSaveFileName(self.view.form, "Export CSV", "", "CSV (*.csv)")
         if path:
             if CSVResultExporter.export(
                 path, self.bridge.target_object.Label, self.model, self.bridge.get_face_name
             ):
                 QMessageBox.information(self.view.form, "Done", "Export Successful")
+
+    def handle_cleanup(self):
+        self.bridge.restore()
+        Gui.Selection.addSelection(self.bridge.target_object)
+        Gui.Selection.clearSelection()
