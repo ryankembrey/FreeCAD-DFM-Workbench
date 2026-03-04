@@ -3,3 +3,4 @@ pyrightconfig.json
 *__pycache__
 *.FCBak
 *.FCStd
+docs/build/

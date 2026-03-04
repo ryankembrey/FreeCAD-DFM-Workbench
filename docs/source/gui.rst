@@ -1,0 +1,37 @@
+gui package
+===========
+
+Submodules
+----------
+
+gui.task\_results module
+------------------------
+
+.. automodule:: gui.task_results
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.task\_setup module
+----------------------
+
+.. automodule:: gui.task_setup
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.task\_show\_normals module
+------------------------------
+
+.. automodule:: gui.task_show_normals
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: gui
+   :members:
+   :show-inheritance:
+   :undoc-members:

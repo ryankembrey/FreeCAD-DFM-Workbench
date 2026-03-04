@@ -62,12 +62,6 @@ class DraftAnalyzer(BaseAnalyzer):
     def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, float]:
         """
         Runs a full draft analysis on an inputted shape.
-        **kwargs:
-            pull_direction (gp_Dir): Direction of mold opening. Defaults to +Z.
-            samples (int): Grid density for curved face analysis.
-
-        Returns:
-            Mapping of TopoDS_Face to its minimum draft angle in degrees.
         """
 
         pull_direction = kwargs.get("pull_direction", gp_Dir(0, 0, 1))

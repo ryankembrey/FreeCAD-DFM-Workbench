@@ -1,0 +1,21 @@
+dfm.utils package
+=================
+
+Submodules
+----------
+
+dfm.utils.geometry module
+-------------------------
+
+.. automodule:: dfm.utils.geometry
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: dfm.utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
