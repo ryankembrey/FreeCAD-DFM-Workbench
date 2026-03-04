@@ -232,19 +232,38 @@ class CSVResultExporter:
             with open(filepath, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 verdict_text, _ = model.get_verdict()
+
+                # Metadata
                 writer.writerow(["Design", target_label])
                 writer.writerow(["Process", model.process.name])
                 writer.writerow(["Material", model.material])
                 writer.writerow(["Verdict", verdict_text])
-                writer.writerow(["Status", "Rule Name", "Faces", "Details"])
+                writer.writerow([])
+
+                # Column Headers
+                writer.writerow(
+                    ["Status", "Rule Name", "Faces", "Value", "Comparison", "Limit", "Unit"]
+                )
 
                 for result in model.results:
                     if result.ignore:
                         continue
+
                     faces = "; ".join([face_namer_func(f) for f in result.failing_geometry])
+
+                    # Write issue rows
                     writer.writerow(
-                        [result.severity.name, result.rule_id.label, faces, result.overview]
+                        [
+                            result.severity.name,
+                            result.rule_id.label,
+                            faces,
+                            result.value if result.value is not None else "N/A",
+                            result.comparison,
+                            result.limit if result.limit is not None else "N/A",
+                            result.unit,
+                        ]
                     )
+
             return True
         except Exception as e:
             FreeCAD.Console.PrintError(f"Export failed: {e}\n")

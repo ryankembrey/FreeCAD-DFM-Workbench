@@ -99,6 +99,10 @@ class DraftAngleCheck(BaseCheck):
                         severity=severity,
                         failing_geometry=[face],
                         ignore=False,
+                        value=round(float(measured_min), 4),
+                        limit=float(min_allowed),
+                        comparison="<",
+                        unit="°",
                     )
                     results.append(result)
             return results

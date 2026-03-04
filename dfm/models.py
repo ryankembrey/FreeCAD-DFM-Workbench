@@ -24,3 +24,7 @@ class CheckResult:
     message: str
     failing_geometry: List[TopoDS_Face]
     ignore: bool
+    value: float
+    limit: float
+    comparison: str = ""
+    unit: str = ""

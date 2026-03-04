@@ -68,6 +68,10 @@ class UndercutCheck(BaseCheck):
                         severity=Severity.ERROR,
                         failing_geometry=[face],
                         ignore=False,
+                        value=float(percentage),
+                        limit=float(0),
+                        comparison=">",
+                        unit="%",
                     )
                 )
 

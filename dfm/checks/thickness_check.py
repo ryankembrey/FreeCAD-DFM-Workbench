@@ -83,6 +83,10 @@ class MinThicknessCheck(BaseCheck):
                     severity=Severity.ERROR,
                     failing_geometry=[face],
                     ignore=False,
+                    value=float(measured_min),
+                    limit=float(min_allowed),
+                    comparison="<",
+                    unit="mm",
                 )
                 results.append(result)
 
