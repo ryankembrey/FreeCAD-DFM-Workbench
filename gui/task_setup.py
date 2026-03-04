@@ -47,6 +47,8 @@ class TaskSetup:
         self.target_object = None
         self.target_shape = None
 
+        self.pull_dir = None
+
         self.populate_categories()
         self.setup_initial_state()
         self.connect_signals()
@@ -159,17 +161,21 @@ class TaskSetup:
     def on_run_analysis(self):
         """Validates inputs and starts the analysis."""
         if not self.target_shape:
-            FreeCAD.Console.PrintError("No model selected to analyze.\n")
+            FreeCAD.Console.PrintError("No model selected to analyze.")
             return
 
         process_name = self.form.cbManProcess.currentData()
         if not process_name:
-            FreeCAD.Console.PrintError("Select a manufacturing process.\n")
+            FreeCAD.Console.PrintError("Select a manufacturing process.")
             return
 
         material_name = self.form.cbMaterial.currentText()
         if "--" in material_name:
-            FreeCAD.Console.PrintError("Select a material.\n")
+            FreeCAD.Console.PrintError("Select a material.")
+            return
+
+        if not self.pull_dir:
+            FreeCAD.Console.PrintError("No pull direction selected.")
             return
 
         Gui.Control.closeDialog()
