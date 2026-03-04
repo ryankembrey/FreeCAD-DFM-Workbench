@@ -25,7 +25,7 @@ jobs:
       - name: Build HTML
         run: |
           touch docs/source/.nojekyll 
-          sphinx-apidoc -o docs/source/ . gui/DFM_rc.py
+          sphinx-apidoc -o docs/source/ . gui/DFM_rc.py Init.py InitGui.py
           cd docs
           make html
 
