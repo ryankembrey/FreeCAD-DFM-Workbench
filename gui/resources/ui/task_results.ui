@@ -16,6 +16,9 @@
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QGridLayout" name="gridLayout" columnstretch="1,1">
+     <property name="verticalSpacing">
+      <number>12</number>
+     </property>
      <item row="1" column="1">
       <widget class="QLineEdit" name="leProcess">
        <property name="toolTip">
@@ -118,7 +121,7 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_3">
       <item>
-       <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1,0,0" columnminimumwidth="1,1,0,0">
+       <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1" columnminimumwidth="1,1">
         <item row="0" column="0">
          <widget class="QPushButton" name="pbSaveResults">
           <property name="toolTip">

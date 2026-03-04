@@ -28,3 +28,15 @@ class CheckResult:
     limit: float
     comparison: str = ""
     unit: str = ""
+
+
+class ProcessRequirement(Enum):
+    PULL_DIRECTION = "PULL_DIRECTION"
+    NONE = "NONE"
+
+    @classmethod
+    def from_str(cls, label: str):
+        try:
+            return cls[label.upper()]
+        except KeyError:
+            return cls.NONE

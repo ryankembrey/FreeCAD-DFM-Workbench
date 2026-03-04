@@ -28,7 +28,7 @@ import Part
 
 from dfm.registries.process_registry import ProcessRegistry
 from app.analysis_runner import AnalysisRunner
-from dfm.models import CheckResult
+from dfm.models import CheckResult, ProcessRequirement
 
 from . import DFM_rc
 from .task_results import TaskResults, DFMReportModel, DFMViewProvider, TaskResultsPresenter
@@ -40,6 +40,8 @@ class TaskSetup:
         if not self.form:
             raise RuntimeError("Failed to load task_setup.ui from resources.")
         self.form.setWindowTitle("DFM Analysis")
+        icon = QtGui.QIcon(":/icons/dfm_analysis.svg")
+        self.form.setWindowIcon(icon)
         self.form.leSelectModel.setReadOnly(True)
 
         self.registry = ProcessRegistry.get_instance()
@@ -66,6 +68,7 @@ class TaskSetup:
         self.form.cbManProcess.setEnabled(False)
         self.form.cbMaterial.addItems(["-- Select a process first --"])
         self.form.cbMaterial.setEnabled(False)
+        self.form.gbOptions.hide()
 
     def connect_signals(self):
         """Connects all widget signals to their handler methods."""
@@ -92,9 +95,11 @@ class TaskSetup:
             for process in processes:
                 self.form.cbManProcess.addItem(process.name, userData=process.name)
             self.form.cbManProcess.setEnabled(True)
+            self.form.gbOptions.hide()
         else:
             self.form.cbManProcess.addItem("-- Select a category first --")
             self.form.cbManProcess.setEnabled(False)
+            self.form.gbOptions.hide()
 
         self.on_process_changed()
 
@@ -118,6 +123,9 @@ class TaskSetup:
         else:
             self.form.cbMaterial.addItem("No materials defined")
             self.form.cbMaterial.setEnabled(False)
+
+        if ProcessRequirement.PULL_DIRECTION in self.process.requires:
+            self.form.gbOptions.setVisible(True)
 
     def on_select_pull_dir(self):
         try:
@@ -233,7 +241,7 @@ class TaskSetup:
 class DfmAnalysisCommand:
     def GetResources(self):
         return {
-            "Pixmap": "",
+            "Pixmap": ":/icons/dfm_analysis.svg",
             "MenuText": "DFM Analysis",
             "ToolTip": "Opens the DFM Analysis task panel.",
         }

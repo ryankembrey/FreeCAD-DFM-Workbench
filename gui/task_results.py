@@ -43,6 +43,8 @@ class TaskResults:
     def __init__(self):
         self.form: Any = Gui.PySideUic.loadUi(":/ui/task_results.ui", None)  # type: ignore
         self.form.setWindowTitle("DFM Analysis")
+        icon = QtGui.QIcon(":/icons/dfm_analysis.svg")
+        self.form.setWindowIcon(icon)
         self.model = QStandardItemModel()
         self.form.tvResults.setModel(self.model)
         self.form.tvResults.setHeaderHidden(True)
@@ -444,6 +446,8 @@ class TaskResultsPresenter:
         self.view.on_toggle_ignore = self.handle_ignore
         self.view.on_export_clicked = self.handle_export
         self.view.on_closed = self.handle_cleanup
+
+        self.view.adjust_details_height()
 
         self.refresh_ui()
         Gui.Control.showDialog(self.view)

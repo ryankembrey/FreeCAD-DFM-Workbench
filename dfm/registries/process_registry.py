@@ -28,8 +28,11 @@ class ProcessRegistry:
                 filepath = os.path.join(process_dir, filename)
                 with open(filepath, "r") as f:
                     data = yaml.safe_load(f)
-                    process = Process(**data)  # type: ignore
-                    self.processes[process.name] = process
+                    if isinstance(data, dict):
+                        process = Process.from_yaml(data)
+                        self.processes[process.name] = process
+                    else:
+                        print(f"Skipping {filename}: Invalid YAML format (expected a dictionary).")
         print(f"Discovered {len(self.processes)} DFM processes.")
 
     def get_categories(self) -> list[str]:
