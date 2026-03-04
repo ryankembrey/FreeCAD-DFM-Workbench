@@ -32,8 +32,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-# Removed unused TopoDS_Face import to clear linter note
-
 from dfm.models import CheckResult, Severity
 from dfm.processes.process import Process
 from dfm.rules import Rulebook
@@ -254,13 +252,20 @@ class CSVResultExporter:
 
 
 class DFMAnnotation:
-    """Specialized component for creating and styling 3D UI callouts."""
+    """Annotation class for DFM issues in FreeCAD."""
+
+    # Default Styles
+    TEXT_COLOR = (0.95, 0.95, 0.95)
+    BG_COLOR = (0.15, 0.15, 0.15)
+    FONT_SIZE = 14
+    DISPLAY_MODE = "Line"
 
     def __init__(self, name="DFM_Issue_Annotation"):
         self.name = name
         self._active_name = None
 
     def remove(self, doc):
+        """Removes the current annotation from the document."""
         if self._active_name:
             try:
                 if obj := doc.getObject(self._active_name):
@@ -269,124 +274,139 @@ class DFMAnnotation:
                 pass
             self._active_name = None
 
-    def create(self, doc, base_pos, text_pos, text, style_cfg):
+    def create(self, doc, base_pos, text_pos, text, style_cfg=None):
+        """Creates a new annotation with leader lines."""
+        style = style_cfg or {}
         self.remove(doc)
+
         label = doc.addObject("App::AnnotationLabel", self.name)
         self._active_name = label.Name
+
         label.LabelText = [text]
         label.BasePosition = base_pos
         label.TextPosition = text_pos
 
-        vo = label.ViewObject
-        if vo:
-            vo.TextColor = style_cfg.get("text_color", (0.95, 0.95, 0.95))
-            vo.BackgroundColor = style_cfg.get("bg_color", (0.15, 0.15, 0.15))
+        if vo := label.ViewObject:
+            vo.TextColor = style.get("text_color", self.TEXT_COLOR)
+            vo.BackgroundColor = style.get("bg_color", self.BG_COLOR)
+
             if "DisplayMode" in vo.PropertiesList:
-                vo.DisplayMode = "Line"
-            font_size = style_cfg.get("font_size", 14)
-            for target in [vo, label]:
-                if hasattr(target, "PropertiesList") and "FontSize" in target.PropertiesList:
-                    target.FontSize = font_size
+                vo.DisplayMode = self.DISPLAY_MODE
+
+            f_size = style.get("font_size", self.FONT_SIZE)
+            if hasattr(vo, "FontSize"):
+                vo.FontSize = f_size
+            if hasattr(label, "FontSize"):
+                label.FontSize = f_size
+
         return label
 
 
 class DFMViewProvider:
-    """The Coordinator: Orchestrates viewport state and visual feedback."""
+    """Manages 3D visual feedback, including face highlighting and annotations."""
+
+    # Visual Constants
+    HIGHLIGHT_COLOR = (1.0, 0.0, 0.0, 0.0)  # Red
+    TRANSPARENCY_ACTIVE = 50
+    ANNOTATION_OFFSET = FreeCAD.Vector(15, 15, 15)
 
     def __init__(self, target_object):
-        self.target_object = target_object  # Fixed naming
-        self.view_object = target_object.ViewObject
-        self.anno_mgr = DFMAnnotation()
+        self.target_object = target_object
+        self.view_obj = target_object.ViewObject
+        self.anno = DFMAnnotation()
 
+        # Store original state for restoration
         self._backup = {
-            "diffuse": list(self.view_object.DiffuseColor),
-            "shape": self.view_object.ShapeColor,
-            "trans": self.view_object.Transparency,
+            "diffuse": list(self.view_obj.DiffuseColor),
+            "shape": self.view_obj.ShapeColor,
+            "trans": self.view_obj.Transparency,
         }
-        self._highlighted_face_names = []
+        self._highlighted_faces = []
 
-    def _get_face_index(self, target_occ_face) -> int:
-        for i, part_face in enumerate(self.target_object.Shape.Faces):
-            if Part.__toPythonOCC__(part_face).IsSame(target_occ_face):
+    def _get_face_index(self, occ_face) -> int:
+        """Finds the index of a face in the object's shape."""
+        for i, f in enumerate(self.target_object.Shape.Faces):
+            if Part.__toPythonOCC__(f).IsSame(occ_face):
                 return i
         return -1
 
-    def get_face_name(self, target_occ_face) -> str:
-        """Helper for Presenter and CSV Export."""
-        idx = self._get_face_index(target_occ_face)
-        return f"Face{idx + 1}" if idx != -1 else "Unknown Face"
+    def get_face_name(self, occ_face) -> str:
+        """Returns the internal Face name (e.g., 'Face1')."""
+        idx = self._get_face_index(occ_face)
+        return f"Face{idx + 1}" if idx != -1 else "Unknown"
 
     def restore(self):
-        self.anno_mgr.remove(FreeCAD.ActiveDocument)
-        if self.view_object:
-            vo = self.view_object
-            vo.Transparency = self._backup["trans"]
-            vo.ShapeColor = self._backup["shape"]
-            vo.DiffuseColor = [(1.0, 1.0, 1.0, 1.0)]
-            vo.DiffuseColor = self._backup["diffuse"]
-            vo.update()
+        """Reverts the 3D object to its original appearance."""
+        self.anno.remove(FreeCAD.ActiveDocument)
+        if self.view_obj:
+            self.view_obj.Transparency = self._backup["trans"]
+            self.view_obj.ShapeColor = self._backup["shape"]
+            self.view_obj.DiffuseColor = self._backup["diffuse"]
+            self.view_obj.update()
 
     def highlight_faces(self, topo_faces: list):
-        self.anno_mgr.remove(FreeCAD.ActiveDocument)
-        if not self.view_object:
+        """Colors specific faces and sets transparency for the rest."""
+        self.anno.remove(FreeCAD.ActiveDocument)
+        if not self.view_obj:
             return
 
         Gui.Selection.clearSelection()
         target_indices = {
             self._get_face_index(f) for f in topo_faces if self._get_face_index(f) != -1
         }
-        self._highlighted_face_names = [f"Face{i + 1}" for i in target_indices]
+        self._highlighted_faces = [f"Face{i + 1}" for i in target_indices]
 
         if not target_indices:
             self.restore()
             return
 
-        num_faces = len(self.target_object.Shape.Faces)
+        faces = self.target_object.Shape.Faces
+        # Fallback to ShapeColor if DiffuseColor is empty
         base = self._backup["diffuse"][0] if self._backup["diffuse"] else self._backup["shape"]
 
         new_colors = []
-        for i in range(num_faces):
+        for i in range(len(faces)):
             if i in target_indices:
-                new_colors.append((1.0, 0.0, 0.0, 0.0))
+                new_colors.append(self.HIGHLIGHT_COLOR)
             else:
                 c = (
                     self._backup["diffuse"][i]
-                    if len(self._backup["diffuse"]) == num_faces
+                    if len(self._backup["diffuse"]) == len(faces)
                     else base
                 )
                 new_colors.append((c[0], c[1], c[2], 0.0))
 
-        self.view_object.DiffuseColor = []
-        self.view_object.DiffuseColor = new_colors
-        self.view_object.Transparency = 50
-        self.view_object.update()
+        self.view_obj.DiffuseColor = new_colors
+        self.view_obj.Transparency = self.TRANSPARENCY_ACTIVE
+        self.view_obj.update()
 
-        if self._highlighted_face_names:
-            # Trick to make FreeCAD update the colors in 3D view
-            Gui.Selection.addSelection(self.target_object, self._highlighted_face_names[0])
+        # Selection toggle forces a viewport refresh
+        if self._highlighted_faces:
+            Gui.Selection.addSelection(self.target_object, self._highlighted_faces[0])
             Gui.Selection.clearSelection()
 
     def annotate_issue(self, topo_faces: list, text: str):
+        """Adds a 3D label pointing to the center of the first face in the list."""
         if not topo_faces:
             return
+
         idx = self._get_face_index(topo_faces[0])
         if idx == -1:
             return
 
         center = self.target_object.Shape.Faces[idx].CenterOfMass
-        offset = FreeCAD.Vector(15, 15, 15)
-        self.anno_mgr.create(
+        self.anno.create(
             doc=FreeCAD.ActiveDocument,
             base_pos=center,
-            text_pos=center.add(offset),
+            text_pos=center.add(self.ANNOTATION_OFFSET),
             text=text,
-            style_cfg={"font_size": 14},
         )
         FreeCAD.ActiveDocument.recompute()  # type: ignore
 
     def zoom_to_selection(self):
-        if self._highlighted_face_names and Gui.activeView():
-            Gui.Selection.addSelection(self.target_object, self._highlighted_face_names)
+        """Focuses the 3D camera on highlighted faces."""
+        if self._highlighted_faces and Gui.activeView():
+            Gui.Selection.addSelection(self.target_object, self._highlighted_faces)
             Gui.SendMsgToActiveView("ViewSelection")
             Gui.SendMsgToActiveView("AlignToSelection")
             Gui.Selection.clearSelection()
