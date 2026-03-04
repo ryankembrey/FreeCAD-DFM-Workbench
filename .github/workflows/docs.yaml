@@ -27,6 +27,7 @@ jobs:
           touch docs/source/.nojekyll 
           sphinx-apidoc -o docs/source/ . gui/DFM_rc.py Init.py InitGui.py
           cd docs
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/..
           make html
 
       - name: Deploy to GitHub Pages

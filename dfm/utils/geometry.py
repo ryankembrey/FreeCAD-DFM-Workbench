@@ -22,7 +22,7 @@
 
 # This file defines geometry functions that are often reused between analyzers
 
-from typing import Generator
+from typing import Generator, Optional
 
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
@@ -41,7 +41,7 @@ def get_face_uv_center(face: TopoDS_Face) -> tuple[(float, float)]:
     return (u_mid, v_mid)
 
 
-def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> gp_Dir | None:
+def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> Optional[gp_Dir]:
     """Returns the normal of a TopoDS_Face at UV"""
 
     surface = BRep_Tool.Surface(face)
