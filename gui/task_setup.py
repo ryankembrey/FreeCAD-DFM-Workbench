@@ -214,6 +214,15 @@ class TaskSetup:
         finally:
             Gui.Selection.clearSelection()
 
+    def getStandardButtons(self):
+        return QtWidgets.QDialogButtonBox.StandardButton.Close
+
+    def reject(self):
+        Gui.Control.closeDialog()
+
+    def accept(self):
+        Gui.Control.closeDialog()
+
 
 class DfmAnalysisCommand:
     def GetResources(self):
