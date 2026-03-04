@@ -484,12 +484,20 @@ class TaskResultsPresenter:
         self.refresh_ui()
 
     def handle_export(self):
-        path, _ = QFileDialog.getSaveFileName(self.view.form, "Export CSV", "", "CSV (*.csv)")
-        if path:
-            if CSVResultExporter.export(
-                path, self.bridge.target_object.Label, self.model, self.bridge.get_face_name
-            ):
-                QMessageBox.information(self.view.form, "Done", "Export Successful")
+        path, _ = QFileDialog.getSaveFileName(
+            self.view.form, "Export CSV", "", "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if not path:
+            return
+
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+
+        if CSVResultExporter.export(
+            path, self.bridge.target_object.Label, self.model, self.bridge.get_face_name
+        ):
+            QMessageBox.information(self.view.form, "Done", "Export Successful")
 
     def handle_cleanup(self):
         self.bridge.restore()
