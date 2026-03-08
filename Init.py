@@ -19,9 +19,3 @@
 #  *   Suite 330, Boston, MA  02111-1307, USA                                *
 #  *                                                                         *
 #  ***************************************************************************
-
-print("\n\n--- DFM Package Initializing: Discovering components... ---\n")
-
-# from runner import run_draft
-
-# run_draft()

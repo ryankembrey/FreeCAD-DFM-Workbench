@@ -18,7 +18,7 @@ def register_check(*rule_ids: Rulebook):
                     f"Invalid type passed to register_check. Expected a Rulebook member, got {type(rule_id)}."
                 )
 
-            print(f"Registering Check: '{cls.__name__}' for rule '{rule_id.name}'")
+            # print(f"Registering Check: '{cls.__name__}' for rule '{rule_id.name}'")
             _check_registry[rule_id] = cls
         return cls
 

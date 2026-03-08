@@ -9,7 +9,7 @@ def register_analyzer(analyzer_id: str):
     """A decorator that registers an Analyzer class in the registry."""
 
     def decorator(cls: Type[BaseAnalyzer]):
-        print(f"Registering Analyzer: '{cls.__name__}' with ID '{analyzer_id}'")
+        # print(f"Registering Analyzer: '{cls.__name__}' with ID '{analyzer_id}'")
         _analyzer_registry[analyzer_id] = cls
         return cls
 
