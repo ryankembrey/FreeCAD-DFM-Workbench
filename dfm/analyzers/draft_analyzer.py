@@ -24,7 +24,7 @@ import math
 from typing import Any
 from enum import Enum, auto
 
-import FreeCAD
+import FreeCAD  # type: ignore
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
