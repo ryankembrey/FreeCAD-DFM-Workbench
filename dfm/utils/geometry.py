@@ -26,9 +26,10 @@ from typing import Generator, Optional
 
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
+from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
 from OCC.Core.GeomLProp import GeomLProp_SLProps
-from OCC.Core.gp import gp_Dir, gp_Pnt
-from OCC.Core.TopAbs import TopAbs_REVERSED
+from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Pnt2d
+from OCC.Core.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
 from OCC.Core.TopoDS import TopoDS_Face
 
 
@@ -75,6 +76,8 @@ def yield_face_uv_grid(
     """
     u_min, u_max, v_min, v_max = breptools.UVBounds(face)
 
+    classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
+
     # Apply margin (Default to none)
     u_len = u_max - u_min
     v_len = v_max - v_min
@@ -98,7 +101,10 @@ def yield_face_uv_grid(
         u = s_u_min + i * u_step
         for j in range(samples):
             v = s_v_min + j * v_step
-            yield u, v
+            state = classifier.Perform(gp_Pnt2d(u, v))
+            # Check if point is on the face
+            if state == TopAbs_IN or state == TopAbs_ON:
+                yield u, v
 
 
 def get_point_from_uv(
