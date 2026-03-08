@@ -72,7 +72,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
 
-        self.core_cavity_mapping = self.classify_moldside(shape, pull_direction)
+        self.core_cavity_mapping = self.classify_moldside(shape)
 
         results: dict[TopoDS_Face, float] = {}
 
@@ -157,9 +157,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
         return angle_deg - 90
 
-    def classify_moldside(
-        self, shape: TopoDS_Shape, pull_direction: gp_Dir
-    ) -> dict[TopoDS_Face, MoldSide]:
+    def classify_moldside(self, shape: TopoDS_Shape) -> dict[TopoDS_Face, MoldSide]:
         """Returns a mapping of TopoDS_Face to MoldSide"""
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
 
@@ -171,43 +169,37 @@ class DraftAnalyzer(BaseAnalyzer):
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
 
-            face_mapping[current_face] = self.moldside_of_face(
-                current_face, intersector, pull_direction
-            )
+            face_mapping[current_face] = self.moldside_of_face(current_face, intersector)
 
             face_explorer.Next()
         return face_mapping
 
     def moldside_of_face(
-        self, face: TopoDS_Face, intersector: IntCurvesFace_ShapeIntersector, pull_direction: gp_Dir
+        self, face: TopoDS_Face, intersector: IntCurvesFace_ShapeIntersector
     ) -> MoldSide:
         """
-        Classifies a face as CORE or CAVITY using ray-casting.
+        Classifies a face as CORE or CAVITY using an outward normal raycast.
 
-        Core faces (inner) require sign-inversion of the draft angle to represent de-molding logic correctly.
+        If a ray cast outward from the face hits another part of the model,
+        it is trapped inside a hollow feature (CORE). If it escapes to infinity,
+        it is on the exterior (CAVITY).
         """
         u, v = get_face_uv_center(face)
         norm = get_face_uv_normal(face, u, v)
         if not norm:
-            # Fallback to cavity
+            # Fallback
             return MoldSide.CAVITY
 
-        epsilon = 1e-3
+        offset = 1e-3
+        point = get_point_from_uv(face, norm, u, v, offset)
 
-        point = get_point_from_uv(face, norm, u, v, epsilon)
+        intersector.Perform(gp_Lin(point, norm), 0.0, float("inf"))
 
-        up_hits = 0
-        down_hits = 0
-
-        intersector.Perform(gp_Lin(point, pull_direction), 0, float("inf"))
         if intersector.IsDone():
-            up_hits = intersector.NbPnt()
+            for i in range(1, intersector.NbPnt() + 1):
+                hit_face = intersector.Face(i)
+                if not hit_face.IsSame(face):
+                    return MoldSide.CORE
 
-        intersector.Perform(gp_Lin(point, pull_direction.Reversed()), 0, float("inf"))
-        if intersector.IsDone():
-            down_hits = intersector.NbPnt()
-
-        if up_hits <= down_hits and down_hits < 4:
-            return MoldSide.CORE
-
+        # No hit
         return MoldSide.CAVITY
