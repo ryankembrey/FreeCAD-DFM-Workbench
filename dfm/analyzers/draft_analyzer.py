@@ -22,7 +22,6 @@
 
 import math
 from typing import Any
-from enum import Enum, auto
 
 import FreeCAD  # type: ignore
 
@@ -36,12 +35,12 @@ from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
-from dfm.utils import get_face_uv_center, get_face_uv_normal, get_point_from_uv, yield_face_uv_grid
-
-
-class MoldSide(Enum):
-    CORE = auto()
-    CAVITY = auto()
+from dfm.utils.geometry import (
+    get_face_uv_center,
+    get_face_uv_normal,
+    yield_face_uv_grid,
+)
+from dfm.utils.mold import MoldSide, moldside_of_face
 
 
 @register_analyzer("DRAFT_ANALYZER")
@@ -171,73 +170,7 @@ class DraftAnalyzer(BaseAnalyzer):
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
 
-            face_mapping[current_face] = self.moldside_of_face(
-                current_face, intersector, pull_direction
-            )
+            face_mapping[current_face] = moldside_of_face(current_face, intersector, pull_direction)
 
             face_explorer.Next()
         return face_mapping
-
-    def moldside_of_face(
-        self, face: TopoDS_Face, intersector: IntCurvesFace_ShapeIntersector, pull_direction: gp_Dir
-    ) -> MoldSide:
-        """
-        Classifies a face as CORE or CAVITY strictly via Topological Visibility.
-        """
-        u, v = get_face_uv_center(face)
-        norm = get_face_uv_normal(face, u, v)
-        if not norm:
-            return MoldSide.CAVITY
-
-        offset = 1e-4
-        point = get_point_from_uv(face, norm, u, v, offset)
-
-        # Up (+ pull dir)
-        intersector.Perform(gp_Lin(point, pull_direction), 0.0, float("inf"))
-        hits_up = False
-        if intersector.IsDone():
-            for i in range(1, intersector.NbPnt() + 1):
-                if not intersector.Face(i).IsSame(face):
-                    hits_up = True
-                    break
-
-        # Down (+ pull dir)
-        intersector.Perform(gp_Lin(point, pull_direction.Reversed()), 0.0, float("inf"))
-        hits_down = False
-        if intersector.IsDone():
-            for i in range(1, intersector.NbPnt() + 1):
-                if not intersector.Face(i).IsSame(face):
-                    hits_down = True
-                    break
-
-        if hits_down and not hits_up:
-            return MoldSide.CORE
-
-        elif hits_up and not hits_down:
-            return MoldSide.CAVITY
-
-        else:  # Zero hits and double hits
-            pull_vec = FreeCAD.Vector(pull_direction.X(), pull_direction.Y(), pull_direction.Z())
-            norm_vec = FreeCAD.Vector(norm.X(), norm.Y(), norm.Z())
-
-            # Get horizontal component of vector
-            horiz_vec = norm_vec - pull_vec * norm_vec.dot(pull_vec)
-
-            # No horizontal component (flat)
-            if horiz_vec.Length < 1e-4:
-                return MoldSide.CORE if norm.Dot(pull_direction) > 0.0 else MoldSide.CAVITY
-
-            horiz_vec.normalize()
-            horiz_dir = gp_Dir(horiz_vec.x, horiz_vec.y, horiz_vec.z)
-
-            # Cast ray horizontally outward
-            intersector.Perform(gp_Lin(point, horiz_dir), 0.0, float("inf"))
-            hits_horiz = False
-
-            if intersector.IsDone():
-                for i in range(1, intersector.NbPnt() + 1):
-                    if not intersector.Face(i).IsSame(face):
-                        hits_horiz = True
-                        break
-
-            return MoldSide.CORE if hits_horiz else MoldSide.CAVITY
