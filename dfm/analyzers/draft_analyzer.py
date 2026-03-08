@@ -30,7 +30,7 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.gp import gp_Dir, gp_Lin
+from OCC.Core.gp import gp_Dir, gp_Lin, gp_Vec
 from OCC.Core.GeomAbs import GeomAbs_Plane
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
@@ -72,7 +72,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
 
-        self.core_cavity_mapping = self.classify_moldside(shape)
+        self.core_cavity_mapping = self.classify_moldside(shape, pull_direction)
 
         results: dict[TopoDS_Face, float] = {}
 
@@ -157,7 +157,9 @@ class DraftAnalyzer(BaseAnalyzer):
 
         return angle_deg - 90
 
-    def classify_moldside(self, shape: TopoDS_Shape) -> dict[TopoDS_Face, MoldSide]:
+    def classify_moldside(
+        self, shape: TopoDS_Shape, pull_direction: gp_Dir
+    ) -> dict[TopoDS_Face, MoldSide]:
         """Returns a mapping of TopoDS_Face to MoldSide"""
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
 
@@ -169,37 +171,73 @@ class DraftAnalyzer(BaseAnalyzer):
         while face_explorer.More():
             current_face = topods.Face(face_explorer.Current())
 
-            face_mapping[current_face] = self.moldside_of_face(current_face, intersector)
+            face_mapping[current_face] = self.moldside_of_face(
+                current_face, intersector, pull_direction
+            )
 
             face_explorer.Next()
         return face_mapping
 
     def moldside_of_face(
-        self, face: TopoDS_Face, intersector: IntCurvesFace_ShapeIntersector
+        self, face: TopoDS_Face, intersector: IntCurvesFace_ShapeIntersector, pull_direction: gp_Dir
     ) -> MoldSide:
         """
-        Classifies a face as CORE or CAVITY using an outward normal raycast.
-
-        If a ray cast outward from the face hits another part of the model,
-        it is trapped inside a hollow feature (CORE). If it escapes to infinity,
-        it is on the exterior (CAVITY).
+        Classifies a face as CORE or CAVITY strictly via Topological Visibility.
         """
         u, v = get_face_uv_center(face)
         norm = get_face_uv_normal(face, u, v)
         if not norm:
-            # Fallback
             return MoldSide.CAVITY
 
-        offset = 1e-3
+        offset = 1e-4
         point = get_point_from_uv(face, norm, u, v, offset)
 
-        intersector.Perform(gp_Lin(point, norm), 0.0, float("inf"))
-
+        # Up (+ pull dir)
+        intersector.Perform(gp_Lin(point, pull_direction), 0.0, float("inf"))
+        hits_up = False
         if intersector.IsDone():
             for i in range(1, intersector.NbPnt() + 1):
-                hit_face = intersector.Face(i)
-                if not hit_face.IsSame(face):
-                    return MoldSide.CORE
+                if not intersector.Face(i).IsSame(face):
+                    hits_up = True
+                    break
 
-        # No hit
-        return MoldSide.CAVITY
+        # Down (+ pull dir)
+        intersector.Perform(gp_Lin(point, pull_direction.Reversed()), 0.0, float("inf"))
+        hits_down = False
+        if intersector.IsDone():
+            for i in range(1, intersector.NbPnt() + 1):
+                if not intersector.Face(i).IsSame(face):
+                    hits_down = True
+                    break
+
+        if hits_down and not hits_up:
+            return MoldSide.CORE
+
+        elif hits_up and not hits_down:
+            return MoldSide.CAVITY
+
+        else:  # Zero hits and double hits
+            pull_vec = FreeCAD.Vector(pull_direction.X(), pull_direction.Y(), pull_direction.Z())
+            norm_vec = FreeCAD.Vector(norm.X(), norm.Y(), norm.Z())
+
+            # Get horizontal component of vector
+            horiz_vec = norm_vec - pull_vec * norm_vec.dot(pull_vec)
+
+            # No horizontal component (flat)
+            if horiz_vec.Length < 1e-4:
+                return MoldSide.CORE if norm.Dot(pull_direction) > 0.0 else MoldSide.CAVITY
+
+            horiz_vec.normalize()
+            horiz_dir = gp_Dir(horiz_vec.x, horiz_vec.y, horiz_vec.z)
+
+            # Cast ray horizontally outward
+            intersector.Perform(gp_Lin(point, horiz_dir), 0.0, float("inf"))
+            hits_horiz = False
+
+            if intersector.IsDone():
+                for i in range(1, intersector.NbPnt() + 1):
+                    if not intersector.Face(i).IsSame(face):
+                        hits_horiz = True
+                        break
+
+            return MoldSide.CORE if hits_horiz else MoldSide.CAVITY
