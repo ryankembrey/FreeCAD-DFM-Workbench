@@ -106,7 +106,7 @@ class UndercutAnalyzer(BaseAnalyzer):
         ray_up = gp_Lin(point, pull_direction)
         intersector.Perform(ray_up, 0, float("inf"))
 
-        blocked_top = intersector.IsDone() and intersector.NbPnt() > 0
+        blocked_top = self._has_blocking_hit(intersector, point)
 
         if not blocked_top:
             return False
@@ -114,6 +114,23 @@ class UndercutAnalyzer(BaseAnalyzer):
         ray_down = gp_Lin(point, pull_direction.Reversed())
         intersector.Perform(ray_down, 0, float("inf"))
 
-        blocked_bottom = intersector.IsDone() and intersector.NbPnt() > 0
-
+        blocked_bottom = self._has_blocking_hit(intersector, point)
         return blocked_top and blocked_bottom
+
+    def _has_blocking_hit(
+        self, intersector: IntCurvesFace_ShapeIntersector, start_point: gp_Pnt
+    ) -> bool:
+        """
+        Check whether the ray has blocked hit.
+        """
+        if not intersector.IsDone():
+            return False
+
+        self_hit_threshold = 0.05  ## mm
+
+        for i in range(1, intersector.NbPnt() + 1):
+            hit_pnt = intersector.Pnt(i)
+            if start_point.Distance(hit_pnt) > self_hit_threshold:
+                return True
+
+        return False
