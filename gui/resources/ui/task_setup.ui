@@ -106,10 +106,17 @@
    <item>
     <widget class="QGroupBox" name="gbOptions">
      <property name="title">
-      <string>Analysis Options</string>
+      <string>Parameters</string>
      </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,1">
-      <item>
+     <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1">
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="lePullDir">
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The pull direction of the design&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
        <widget class="QPushButton" name="pbPullDir">
         <property name="toolTip">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Retrieves the normal as the pull direction for the currently selected face.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
@@ -119,12 +126,15 @@
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="QLineEdit" name="lePullDir">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The pull direction of the design&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <item row="1" column="0">
+       <widget class="QPushButton" name="pbNPlane">
+        <property name="text">
+         <string>Select Neutral Plane</string>
         </property>
        </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="leNPlane"/>
       </item>
      </layout>
     </widget>

@@ -20,18 +20,29 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import FreeCAD
-import FreeCADGui as Gui
-from OCC.Core.gp import gp_Dir
-from PySide6 import QtCore, QtGui, QtWidgets
-import Part
+from PySide6 import QtGui, QtWidgets
 
+import FreeCAD  # type: ignore
+import FreeCADGui as Gui  # type: ignore
+import Part  # type: ignore
+
+from OCC.Core.gp import gp_Dir
+
+from dfm.registries.analyzers_registry import get_analyzer_class
+from dfm.registries.checks_registry import get_check_class
 from dfm.registries.process_registry import ProcessRegistry
 from app.analysis_runner import AnalysisRunner
 from dfm.models import CheckResult, ProcessRequirement
+from dfm.rules import Rulebook
 
+from gui.visuals import DirectionIndicator
 from . import DFM_rc
-from .task_results import TaskResults, DFMReportModel, DFMViewProvider, TaskResultsPresenter
+from .task_results import (
+    TaskResults,
+    DFMReportModel,
+    DFMViewProvider,
+    TaskResultsPresenter,
+)
 
 
 class TaskSetup:
@@ -42,14 +53,19 @@ class TaskSetup:
         self.form.setWindowTitle("DFM Analysis")
         icon = QtGui.QIcon(":/icons/dfm_analysis.svg")
         self.form.setWindowIcon(icon)
-        self.form.leSelectModel.setReadOnly(True)
 
         self.registry = ProcessRegistry.get_instance()
+
+        self.requirement_widgets = {
+            ProcessRequirement.PULL_DIRECTION: [self.form.pbPullDir, self.form.lePullDir],
+            ProcessRequirement.NEUTRAL_PLANE: [self.form.pbNPlane, self.form.leNPlane],
+        }
 
         self.target_object = None
         self.target_shape = None
 
         self.pull_dir = None
+        self.indicator = DirectionIndicator()
 
         self.populate_categories()
         self.setup_initial_state()
@@ -69,6 +85,7 @@ class TaskSetup:
         self.form.cbMaterial.addItems(["-- Select a process first --"])
         self.form.cbMaterial.setEnabled(False)
         self.form.gbOptions.hide()
+        self.form.leSelectModel.setReadOnly(True)
 
     def connect_signals(self):
         """Connects all widget signals to their handler methods."""
@@ -77,6 +94,7 @@ class TaskSetup:
         self.form.cbManCategory.currentIndexChanged.connect(self.on_category_changed)
         self.form.cbManProcess.currentIndexChanged.connect(self.on_process_changed)
         self.form.pbPullDir.clicked.connect(self.on_select_pull_dir)
+        self.form.pbNPlane.clicked.connect(self.on_select_neutral_plane)
 
     def auto_select_model(self):
         """Automatically selects the active object if one exists."""
@@ -104,13 +122,14 @@ class TaskSetup:
         self.on_process_changed()
 
     def on_process_changed(self):
-        """Handles changes in the Process dropdown to update the Material dropdown."""
+        """Manages the material and parameter selection based on the selected process."""
         self.form.cbMaterial.clear()
 
         process_id = self.form.cbManProcess.currentData()
         if not process_id:
             self.form.cbMaterial.addItem("-- Select a process first --")
             self.form.cbMaterial.setEnabled(False)
+            self.form.gbOptions.hide()
             return
 
         self.process = self.registry.get_process_by_id(process_id)
@@ -124,47 +143,96 @@ class TaskSetup:
             self.form.cbMaterial.addItem("No materials defined")
             self.form.cbMaterial.setEnabled(False)
 
-        if ProcessRequirement.PULL_DIRECTION in self.process.requires:
-            self.form.gbOptions.setVisible(True)
+        requirements = self.get_active_requirements()
+
+        has_any_reqs = any(req in self.requirement_widgets for req in requirements)
+        self.form.gbOptions.setVisible(has_any_reqs)
+
+        for req, widgets in self.requirement_widgets.items():
+            is_needed = req in requirements
+            for widget in widgets:
+                widget.setVisible(is_needed)
 
     def on_select_pull_dir(self):
         try:
             sel = Gui.Selection.getSelectionEx()
-
-            if not sel:
-                FreeCAD.Console.PrintError("Select a face in the 3D view.\n")
+            if not sel or not sel[0].SubObjects:
+                FreeCAD.Console.PrintError("Please select a face in the 3D view.\n")
                 return
 
-            sub = sel[0].SubObjects
-            if not sub:
-                FreeCAD.Console.PrintError("Select a face, not an object.\n")
-                return
-
-            face = sub[0]
-
+            face = sel[0].SubObjects[0]
             if not isinstance(face, Part.Face):
-                FreeCAD.Console.PrintError("Selected sub-element is not a face.\n")
                 return
 
             u0, u1, v0, v1 = face.ParameterRange
-            u = (u0 + u1) * 0.5
-            v = (v0 + v1) * 0.5
+            u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
+            pnt = face.valueAt(u, v)
+            normal = face.normalAt(u, v).normalize()
 
-            pull_dir = face.normalAt(u, v).normalize()
-            x = pull_dir.x
-            y = pull_dir.y
-            z = pull_dir.z
+            self.pull_dir = gp_Dir(normal.x, normal.y, normal.z)
+            self.form.lePullDir.setText(f"[{normal.x:.2f}] [{normal.y:.2f}] [{normal.z:.2f}]")
 
-            self.pull_dir = gp_Dir(x, y, z)
-            self.form.lePullDir.setText(f"[{x:.2f}] [{y:.2f}] [{z:.2f}]")
-            self.form.lePullDir.setReadOnly(True)
-
-            FreeCAD.Console.PrintMessage(
-                f"Pull direction set to: ({pull_dir.x:.2f}, {pull_dir.y:.2f}, {pull_dir.z:.2f})\n"
-            )
+            self.indicator.show(pnt, normal)
 
         except Exception as e:
-            FreeCAD.Console.PrintError(f"Failed to compute pull direction: {e}\n")
+            FreeCAD.Console.PrintError(f"Visualizing pull direction failed: {e}\n")
+
+    def on_select_neutral_plane(self):
+        """
+        Selects and stores the neutral plane.
+        """
+        try:
+            sel = Gui.Selection.getSelectionEx()
+            if not sel:
+                FreeCAD.Console.PrintError("Nothing selected. Please select a face on the model.\n")
+                return
+
+            if not sel[0].SubElementNames:
+                FreeCAD.Console.PrintError("Please select a specific face, not the whole object.\n")
+                return
+
+            face_name = sel[0].SubElementNames[0]
+            face_obj = sel[0].SubObjects[0]
+
+            if not isinstance(face_obj, Part.Face):
+                FreeCAD.Console.PrintError(f"Selected element '{face_name}' is not a face.\n")
+                return
+
+            self.neutral_plane_face = Part.__toPythonOCC__(face_obj)
+            self.form.leNPlane.setText(face_name)
+            self.form.leNPlane.setReadOnly(True)
+
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"Selection error: {e}\n")
+
+    def get_active_requirements(self) -> set[ProcessRequirement]:
+        """
+        Returns the set of active process requirements.
+        """
+        requirements = set()
+
+        if not hasattr(self, "process") or not self.process:
+            return requirements
+
+        for rule_str in self.process.rules:
+            try:
+                rule_id = Rulebook[rule_str]
+
+                check_cls = get_check_class(rule_id)
+                if not check_cls:
+                    continue
+
+                analyzer_id = check_cls().required_analyzer_id
+
+                analyzer_cls = get_analyzer_class(analyzer_id)
+                if analyzer_cls:
+                    requirements.update(analyzer_cls().requirements)
+
+            except KeyError:
+                FreeCAD.Console.PrintWarning(f"Rule '{rule_str}' not found in Rulebook.\n")
+                continue
+
+        return requirements
 
     def on_run_analysis(self):
         """Validates inputs and starts the analysis."""
@@ -182,11 +250,24 @@ class TaskSetup:
             FreeCAD.Console.PrintError("Select a material.")
             return
 
-        if not self.pull_dir:
-            FreeCAD.Console.PrintError("No pull direction selected.")
-            return
+        active_reqs = self.get_active_requirements()
+
+        kwargs = {}
+
+        if ProcessRequirement.PULL_DIRECTION in active_reqs:
+            if not self.pull_dir:
+                FreeCAD.Console.PrintError("Pull direction is required.\n")
+                return
+            kwargs[ProcessRequirement.PULL_DIRECTION.name] = self.pull_dir
+
+        if ProcessRequirement.NEUTRAL_PLANE in active_reqs:
+            if not hasattr(self, "neutral_plane_face"):
+                FreeCAD.Console.PrintError("Neutral plane face is required.\n")
+                return
+            kwargs[ProcessRequirement.NEUTRAL_PLANE.name] = self.neutral_plane_face
 
         Gui.Control.closeDialog()
+        self.indicator.remove()
 
         try:
             runner = AnalysisRunner()
@@ -194,7 +275,7 @@ class TaskSetup:
                 process_name=process_name,
                 material_name=material_name,
                 shape=self.target_shape,
-                pull_direction=self.pull_dir,
+                **kwargs,
             )
 
             report_model = DFMReportModel(
@@ -232,9 +313,11 @@ class TaskSetup:
         return QtWidgets.QDialogButtonBox.StandardButton.Close
 
     def reject(self):
+        self.indicator.remove()
         Gui.Control.closeDialog()
 
     def accept(self):
+        self.indicator.remove()
         Gui.Control.closeDialog()
 
 
