@@ -46,7 +46,7 @@ class UndercutCheck(BaseCheck):
         results: list[CheckResult] = []
 
         for face, undercut_ratio in analysis_data_map.items():
-            if undercut_ratio > 0.05:  # Allow 5% noise tolerance
+            if undercut_ratio > 0.00:
                 percentage = undercut_ratio * 100
                 overview = f"{percentage:.1f}% occlusion"
                 message = (
