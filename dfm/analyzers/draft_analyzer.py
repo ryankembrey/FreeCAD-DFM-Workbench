@@ -34,6 +34,7 @@ from OCC.Core.GeomAbs import GeomAbs_Plane
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core.base_analyzer import BaseAnalyzer
+from dfm.models import ProcessRequirement
 from dfm.registries import register_analyzer
 from dfm.utils.geometry import (
     get_face_uv_center,
@@ -53,6 +54,10 @@ class DraftAnalyzer(BaseAnalyzer):
     @property
     def analysis_type(self) -> str:
         return "DRAFT_ANALYZER"
+
+    @property
+    def requirements(self) -> set[ProcessRequirement]:
+        return {ProcessRequirement.PULL_DIRECTION}
 
     @property
     def name(self) -> str:

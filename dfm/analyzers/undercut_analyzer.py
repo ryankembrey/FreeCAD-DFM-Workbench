@@ -30,6 +30,7 @@ from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Dir
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core import BaseAnalyzer
+from dfm.models import ProcessRequirement
 from dfm.utils import yield_face_uv_grid, get_face_uv_normal, get_point_from_uv
 from dfm.registries import register_analyzer
 
@@ -41,11 +42,15 @@ class UndercutAnalyzer(BaseAnalyzer):
         return "UNDERCUT_ANALYZER"
 
     @property
+    def requirements(self) -> set[ProcessRequirement]:
+        return {ProcessRequirement.PULL_DIRECTION}
+
+    @property
     def name(self) -> str:
         return "Undercut Analyzer"
 
     def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, Any]:
-        pull_direction = kwargs.get("pull_direction", gp_Dir(0, 0, 1))
+        pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         samples = kwargs.get("samples", 50)
 
         intersector = IntCurvesFace_ShapeIntersector()
