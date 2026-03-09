@@ -20,10 +20,8 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
-
-from dfm.models import ProcessRequirement
 
 
 @dataclass
@@ -33,16 +31,14 @@ class Process:
     name: str
     category: str
     description: str = ""
-    requires: list[ProcessRequirement] = field(default_factory=list)
     rules: list[str] = field(default_factory=list)
     materials: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_yaml(cls, data: dict):
         """Standardizes raw YAML data into a Process object."""
-        raw_reqs = data.get("requires", [])
-        if isinstance(raw_reqs, str):
-            raw_reqs = [raw_reqs]
+        valid_field_names = {f.name for f in fields(cls)}
 
-        data["requires"] = [ProcessRequirement.from_str(r) for r in raw_reqs]
-        return cls(**data)
+        clean_data = {k: v for k, v in data.items() if k in valid_field_names}
+
+        return cls(**clean_data)

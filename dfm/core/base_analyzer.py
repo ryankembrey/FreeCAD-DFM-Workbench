@@ -23,6 +23,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
+from dfm.models import ProcessRequirement
 
 
 class BaseAnalyzer(ABC):
@@ -34,6 +35,11 @@ class BaseAnalyzer(ABC):
         This is the primary way to identify and retrieve this analyzer.
         """
         pass
+
+    @property
+    def requirements(self) -> set[ProcessRequirement]:
+        "Returns a list of process requirements."
+        return set()
 
     @property
     @abstractmethod

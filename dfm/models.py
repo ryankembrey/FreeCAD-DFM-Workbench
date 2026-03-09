@@ -31,8 +31,9 @@ class CheckResult:
 
 
 class ProcessRequirement(Enum):
-    PULL_DIRECTION = "PULL_DIRECTION"
     NONE = "NONE"
+    PULL_DIRECTION = "PULL_DIRECTION"
+    NEUTRAL_PLANE = "NEUTRAL_PLANE"
 
     @classmethod
     def from_str(cls, label: str):
