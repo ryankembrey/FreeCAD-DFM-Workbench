@@ -76,7 +76,7 @@ class UndercutAnalyzer(BaseAnalyzer):
 
         surface = BRepAdaptor_Surface(face, True)
 
-        for u, v in yield_face_uv_grid(face, samples, 0.05):
+        for u, v in yield_face_uv_grid(face, samples, 0.01):
             total_points += 1
 
             if self._is_point_trapped(face, u, v, intersector, pull_direction):
