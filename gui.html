@@ -1,0 +1,1198 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="dfm.utils package" href="dfm.utils.html">
+
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>gui package - FreeCAD DFM Workbench 0.1-dev documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">FreeCAD DFM Workbench 0.1-dev documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">FreeCAD DFM Workbench 0.1-dev documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="modules.html">FreeCAD-DFM-Workbench</a><input aria-label="Toggle navigation of FreeCAD-DFM-Workbench" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="app.html">app package</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="dfm.html">dfm package</a><input aria-label="Toggle navigation of dfm package" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="dfm.analyzers.html">dfm.analyzers package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dfm.checks.html">dfm.checks package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dfm.core.html">dfm.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dfm.registries.html">dfm.registries package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dfm.utils.html">dfm.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">gui package</a></li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="_sources/gui.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="gui-package">
+<h1>gui package<a class="headerlink" href="#gui-package" title="Link to this heading">¶</a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading">¶</a></h2>
+</section>
+<section id="module-gui.process_manager">
+<span id="gui-process-manager-module"></span><h2>gui.process_manager module<a class="headerlink" href="#module-gui.process_manager" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.AddMaterialDialog">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">AddMaterialDialog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#AddMaterialDialog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.AddMaterialDialog" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QDialog</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.AddMaterialDialog.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#AddMaterialDialog.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.AddMaterialDialog.get_data" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.AddProcessDialog">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">AddProcessDialog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#AddProcessDialog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.AddProcessDialog" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QDialog</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.AddProcessDialog.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#AddProcessDialog.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.AddProcessDialog.get_data" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.EditFeedbackDialog">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">EditFeedbackDialog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#EditFeedbackDialog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.EditFeedbackDialog" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QDialog</span></code></p>
+<p>Dialog to input custom Warning and Error messages with internal titles.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.EditFeedbackDialog.accept">
+<span class="sig-name descname"><span class="pre">accept</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#EditFeedbackDialog.accept"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.EditFeedbackDialog.accept" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.EditFeedbackDialog.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#EditFeedbackDialog.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.EditFeedbackDialog.get_data" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialEditView">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">MaterialEditView</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialEditView"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialEditView" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QObject</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialEditView.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialEditView.clear"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialEditView.clear" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialEditView.limit_changed">
+<span class="sig-name descname"><span class="pre">limit_changed</span></span><a class="headerlink" href="#gui.process_manager.MaterialEditView.limit_changed" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialEditView.populate">
+<span class="sig-name descname"><span class="pre">populate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">material</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Material</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default_material</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Material</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_rules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialEditView.populate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialEditView.populate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialEditView.selection_changed">
+<span class="sig-name descname"><span class="pre">selection_changed</span></span><a class="headerlink" href="#gui.process_manager.MaterialEditView.selection_changed" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialTableView">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">MaterialTableView</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialTableView"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialTableView" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QObject</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialTableView.category_changed">
+<span class="sig-name descname"><span class="pre">category_changed</span></span><a class="headerlink" href="#gui.process_manager.MaterialTableView.category_changed" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialTableView.get_selected_material">
+<span class="sig-name descname"><span class="pre">get_selected_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialTableView.get_selected_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialTableView.get_selected_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialTableView.populate">
+<span class="sig-name descname"><span class="pre">populate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materials</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialTableView.populate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialTableView.populate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialTableView.select_material">
+<span class="sig-name descname"><span class="pre">select_material</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#MaterialTableView.select_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.MaterialTableView.select_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.MaterialTableView.selection_changed">
+<span class="sig-name descname"><span class="pre">selection_changed</span></span><a class="headerlink" href="#gui.process_manager.MaterialTableView.selection_changed" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.NumericValidationDelegate">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">NumericValidationDelegate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#NumericValidationDelegate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.NumericValidationDelegate" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QStyledItemDelegate</span></code></p>
+<p>Validates that input is numeric or N/A, and manages UI unit stripping.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.NumericValidationDelegate.createEditor">
+<span class="sig-name descname"><span class="pre">createEditor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parent</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#NumericValidationDelegate.createEditor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.NumericValidationDelegate.createEditor" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.NumericValidationDelegate.setEditorData">
+<span class="sig-name descname"><span class="pre">setEditorData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">editor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#NumericValidationDelegate.setEditorData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.NumericValidationDelegate.setEditorData" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.NumericValidationDelegate.setModelData">
+<span class="sig-name descname"><span class="pre">setModelData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">editor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#NumericValidationDelegate.setModelData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.NumericValidationDelegate.setModelData" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.ParameterEdit">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">ParameterEdit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ParameterEdit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ParameterEdit" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QPlainTextEdit</span></code></p>
+<p>A text editor that suggests {placeholders} when ‘{’ is typed.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ParameterEdit.insert_completion">
+<span class="sig-name descname"><span class="pre">insert_completion</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">completion</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ParameterEdit.insert_completion"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ParameterEdit.insert_completion" title="Link to this definition">¶</a></dt>
+<dd><p>Inserts the selected parameter and closes the brace.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ParameterEdit.keyPressEvent">
+<span class="sig-name descname"><span class="pre">keyPressEvent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ParameterEdit.keyPressEvent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ParameterEdit.keyPressEvent" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">ProcessManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManager" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QDialog</span></code></p>
+<p>The main QDialog bridging FreeCAD into the MVC architecture.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManager.reject">
+<span class="sig-name descname"><span class="pre">reject</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManager.reject"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManager.reject" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManager.set_dirty_title">
+<span class="sig-name descname"><span class="pre">set_dirty_title</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">is_dirty</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManager.set_dirty_title"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManager.set_dirty_title" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManager.set_material_edit_title">
+<span class="sig-name descname"><span class="pre">set_material_edit_title</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManager.set_material_edit_title"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManager.set_material_edit_title" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManager.set_process_label">
+<span class="sig-name descname"><span class="pre">set_process_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManager.set_process_label"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManager.set_process_label" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManager.super_reject">
+<span class="sig-name descname"><span class="pre">super_reject</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManager.super_reject"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManager.super_reject" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerCommand">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">ProcessManagerCommand</span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerCommand"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerCommand" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerCommand.Activated">
+<span class="sig-name descname"><span class="pre">Activated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerCommand.Activated"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerCommand.Activated" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerCommand.GetResources">
+<span class="sig-name descname"><span class="pre">GetResources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerCommand.GetResources"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerCommand.GetResources" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerCommand.IsActive">
+<span class="sig-name descname"><span class="pre">IsActive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerCommand.IsActive"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerCommand.IsActive" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">ProcessManagerController</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QObject</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_add_material">
+<span class="sig-name descname"><span class="pre">on_add_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_add_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_add_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_add_process">
+<span class="sig-name descname"><span class="pre">on_add_process</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_add_process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_add_process" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_delete_material">
+<span class="sig-name descname"><span class="pre">on_delete_material</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_delete_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_delete_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_edit_feedback">
+<span class="sig-name descname"><span class="pre">on_edit_feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rule_enum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dfm.html#dfm.rules.Rulebook" title="dfm.rules.Rulebook"><span class="pre">Rulebook</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_edit_feedback"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_edit_feedback" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_limit_changed">
+<span class="sig-name descname"><span class="pre">on_limit_changed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rule</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_limit_changed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_limit_changed" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_material_category_changed">
+<span class="sig-name descname"><span class="pre">on_material_category_changed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mat_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_material_category_changed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_material_category_changed" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_material_selected">
+<span class="sig-name descname"><span class="pre">on_material_selected</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_material_selected"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_material_selected" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_process_selected">
+<span class="sig-name descname"><span class="pre">on_process_selected</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_process_selected"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_process_selected" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_reject">
+<span class="sig-name descname"><span class="pre">on_reject</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_reject"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_reject" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_rules_changed">
+<span class="sig-name descname"><span class="pre">on_rules_changed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">active_rules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_rules_changed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_rules_changed" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerController.on_save">
+<span class="sig-name descname"><span class="pre">on_save</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerController.on_save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerController.on_save" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">ProcessManagerModel</span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages the application state, data persistence, and active selections.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.add_material">
+<span class="sig-name descname"><span class="pre">add_material</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.add_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.add_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.add_process">
+<span class="sig-name descname"><span class="pre">add_process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.add_process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.add_process" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.delete_material">
+<span class="sig-name descname"><span class="pre">delete_material</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.delete_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.delete_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.get_categorized_processes">
+<span class="sig-name descname"><span class="pre">get_categorized_processes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.get_categorized_processes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.get_categorized_processes" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.mark_dirty">
+<span class="sig-name descname"><span class="pre">mark_dirty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.mark_dirty"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.mark_dirty" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.save" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.set_active_material">
+<span class="sig-name descname"><span class="pre">set_active_material</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Material</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.set_active_material"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.set_active_material" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.set_active_process">
+<span class="sig-name descname"><span class="pre">set_active_process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Process</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.set_active_process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.set_active_process" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.update_active_rules">
+<span class="sig-name descname"><span class="pre">update_active_rules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.update_active_rules"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.update_active_rules" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.update_material_category">
+<span class="sig-name descname"><span class="pre">update_material_category</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mat_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.update_material_category"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.update_material_category" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.update_rule_feedback">
+<span class="sig-name descname"><span class="pre">update_rule_feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rule</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dfm.html#dfm.rules.Rulebook" title="dfm.rules.Rulebook"><span class="pre">Rulebook</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">warning_msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.update_rule_feedback"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.update_rule_feedback" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessManagerModel.update_rule_limit">
+<span class="sig-name descname"><span class="pre">update_rule_limit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rule</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessManagerModel.update_rule_limit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessManagerModel.update_rule_limit" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessTreeView">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">ProcessTreeView</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessTreeView"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessTreeView" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QObject</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessTreeView.populate">
+<span class="sig-name descname"><span class="pre">populate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">categories_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessTreeView.populate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessTreeView.populate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessTreeView.select_process">
+<span class="sig-name descname"><span class="pre">select_process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#ProcessTreeView.select_process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.ProcessTreeView.select_process" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.ProcessTreeView.selection_changed">
+<span class="sig-name descname"><span class="pre">selection_changed</span></span><a class="headerlink" href="#gui.process_manager.ProcessTreeView.selection_changed" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.RuleItemWidget">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">RuleItemWidget</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#RuleItemWidget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.RuleItemWidget" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QWidget</span></code></p>
+<p>Updated with spacing/padding fix.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.RuleListView">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">RuleListView</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#RuleListView"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.RuleListView" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QObject</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.RuleListView.edit_requested">
+<span class="sig-name descname"><span class="pre">edit_requested</span></span><a class="headerlink" href="#gui.process_manager.RuleListView.edit_requested" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.RuleListView.filter_rules">
+<span class="sig-name descname"><span class="pre">filter_rules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#RuleListView.filter_rules"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.RuleListView.filter_rules" title="Link to this definition">¶</a></dt>
+<dd><p>Hides items that don’t match the search string.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.RuleListView.populate">
+<span class="sig-name descname"><span class="pre">populate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">active_rules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#RuleListView.populate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.RuleListView.populate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.process_manager.RuleListView.rules_changed">
+<span class="sig-name descname"><span class="pre">rules_changed</span></span><a class="headerlink" href="#gui.process_manager.RuleListView.rules_changed" title="Link to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.process_manager.VisualizerView">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.process_manager.</span></span><span class="sig-name descname"><span class="pre">VisualizerView</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#VisualizerView"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.VisualizerView" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">QObject</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.VisualizerView.hide">
+<span class="sig-name descname"><span class="pre">hide</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#VisualizerView.hide"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.VisualizerView.hide" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.process_manager.VisualizerView.update_display">
+<span class="sig-name descname"><span class="pre">update_display</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rule</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/process_manager.html#VisualizerView.update_display"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.process_manager.VisualizerView.update_display" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-gui.task_results">
+<span id="gui-task-results-module"></span><h2>gui.task_results module<a class="headerlink" href="#module-gui.task_results" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_results.CSVResultExporter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_results.</span></span><span class="sig-name descname"><span class="pre">CSVResultExporter</span></span><a class="reference internal" href="_modules/gui/task_results.html#CSVResultExporter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.CSVResultExporter" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.CSVResultExporter.export">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filepath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#gui.task_results.DFMReportModel" title="gui.task_results.DFMReportModel"><span class="pre">DFMReportModel</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_namer_func</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#CSVResultExporter.export"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.CSVResultExporter.export" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_results.</span></span><span class="sig-name descname"><span class="pre">DFMAnnotation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'DFM_Issue_Annotation'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMAnnotation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMAnnotation" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Annotation class for DFM issues in FreeCAD.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation.BG_COLOR">
+<span class="sig-name descname"><span class="pre">BG_COLOR</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(0.15,</span> <span class="pre">0.15,</span> <span class="pre">0.15)</span></span><a class="headerlink" href="#gui.task_results.DFMAnnotation.BG_COLOR" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation.DISPLAY_MODE">
+<span class="sig-name descname"><span class="pre">DISPLAY_MODE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Line'</span></span><a class="headerlink" href="#gui.task_results.DFMAnnotation.DISPLAY_MODE" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation.FONT_SIZE">
+<span class="sig-name descname"><span class="pre">FONT_SIZE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">14</span></span><a class="headerlink" href="#gui.task_results.DFMAnnotation.FONT_SIZE" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation.TEXT_COLOR">
+<span class="sig-name descname"><span class="pre">TEXT_COLOR</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(0.95,</span> <span class="pre">0.95,</span> <span class="pre">0.95)</span></span><a class="headerlink" href="#gui.task_results.DFMAnnotation.TEXT_COLOR" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation.create">
+<span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">doc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_pos</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text_pos</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style_cfg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMAnnotation.create"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMAnnotation.create" title="Link to this definition">¶</a></dt>
+<dd><p>Creates a new annotation with leader lines.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMAnnotation.remove">
+<span class="sig-name descname"><span class="pre">remove</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">doc</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMAnnotation.remove"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMAnnotation.remove" title="Link to this definition">¶</a></dt>
+<dd><p>Removes the current annotation from the document.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_results.DFMReportModel">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_results.</span></span><span class="sig-name descname"><span class="pre">DFMReportModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">process</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Process</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">material</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMReportModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMReportModel" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Holds the data of a DFM report and handles grouping and verdicts.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMReportModel.STATUS_THEMES">
+<span class="sig-name descname"><span class="pre">STATUS_THEMES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'FAILED':</span> <span class="pre">{'color':</span> <span class="pre">'#D32F2F',</span> <span class="pre">'text':</span> <span class="pre">'Failed'},</span> <span class="pre">'SUCCESSFUL':</span> <span class="pre">{'color':</span> <span class="pre">'#2E7D32',</span> <span class="pre">'text':</span> <span class="pre">'Successful'},</span> <span class="pre">'WARNING':</span> <span class="pre">{'color':</span> <span class="pre">'#E65100',</span> <span class="pre">'text':</span> <span class="pre">'Warning'}}</span></span><a class="headerlink" href="#gui.task_results.DFMReportModel.STATUS_THEMES" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="gui.task_results.DFMReportModel.active_results">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">active_results</span></span><a class="headerlink" href="#gui.task_results.DFMReportModel.active_results" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMReportModel.get_grouped_results">
+<span class="sig-name descname"><span class="pre">get_grouped_results</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="reference internal" href="_modules/gui/task_results.html#DFMReportModel.get_grouped_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMReportModel.get_grouped_results" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMReportModel.get_verdict">
+<span class="sig-name descname"><span class="pre">get_verdict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/gui/task_results.html#DFMReportModel.get_verdict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMReportModel.get_verdict" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMReportModel.toggle_ignore_state">
+<span class="sig-name descname"><span class="pre">toggle_ignore_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">finding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMReportModel.toggle_ignore_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMReportModel.toggle_ignore_state" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_results.</span></span><span class="sig-name descname"><span class="pre">DFMViewProvider</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_object</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMViewProvider"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMViewProvider" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages 3D visual feedback, including face highlighting and annotations.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.ANNOTATION_OFFSET">
+<span class="sig-name descname"><span class="pre">ANNOTATION_OFFSET</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">15</span></span><a class="headerlink" href="#gui.task_results.DFMViewProvider.ANNOTATION_OFFSET" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.HIGHLIGHT_COLOR">
+<span class="sig-name descname"><span class="pre">HIGHLIGHT_COLOR</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(1.0,</span> <span class="pre">0.0,</span> <span class="pre">0.0,</span> <span class="pre">0.0)</span></span><a class="headerlink" href="#gui.task_results.DFMViewProvider.HIGHLIGHT_COLOR" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.TRANSPARENCY_ACTIVE">
+<span class="sig-name descname"><span class="pre">TRANSPARENCY_ACTIVE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">50</span></span><a class="headerlink" href="#gui.task_results.DFMViewProvider.TRANSPARENCY_ACTIVE" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.annotate_issue">
+<span class="sig-name descname"><span class="pre">annotate_issue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo_faces</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMViewProvider.annotate_issue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMViewProvider.annotate_issue" title="Link to this definition">¶</a></dt>
+<dd><p>Adds a 3D label pointing to the center of the first face in the list.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.get_face_name">
+<span class="sig-name descname"><span class="pre">get_face_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">occ_face</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/gui/task_results.html#DFMViewProvider.get_face_name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMViewProvider.get_face_name" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the internal Face name (e.g., ‘Face1’).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.highlight_faces">
+<span class="sig-name descname"><span class="pre">highlight_faces</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topo_faces</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMViewProvider.highlight_faces"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMViewProvider.highlight_faces" title="Link to this definition">¶</a></dt>
+<dd><p>Colors specific faces and sets transparency for the rest.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.restore">
+<span class="sig-name descname"><span class="pre">restore</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMViewProvider.restore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMViewProvider.restore" title="Link to this definition">¶</a></dt>
+<dd><p>Reverts the 3D object to its original appearance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.DFMViewProvider.zoom_to_selection">
+<span class="sig-name descname"><span class="pre">zoom_to_selection</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#DFMViewProvider.zoom_to_selection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.DFMViewProvider.zoom_to_selection" title="Link to this definition">¶</a></dt>
+<dd><p>Focuses the 3D camera on highlighted faces.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_results.</span></span><span class="sig-name descname"><span class="pre">TaskResults</span></span><a class="reference internal" href="_modules/gui/task_results.html#TaskResults"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResults" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Passive View: Only handles Widgets and Signals.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.accept">
+<span class="sig-name descname"><span class="pre">accept</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResults.accept"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResults.accept" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.adjust_details_height">
+<span class="sig-name descname"><span class="pre">adjust_details_height</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResults.adjust_details_height"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResults.adjust_details_height" title="Link to this definition">¶</a></dt>
+<dd><p>Dynamic resizing of the description box based on content.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.form">
+<span class="sig-name descname"><span class="pre">form</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#gui.task_results.TaskResults.form" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.getStandardButtons">
+<span class="sig-name descname"><span class="pre">getStandardButtons</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResults.getStandardButtons"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResults.getStandardButtons" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.on_closed">
+<span class="sig-name descname"><span class="pre">on_closed</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#gui.task_results.TaskResults.on_closed" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.on_export_clicked">
+<span class="sig-name descname"><span class="pre">on_export_clicked</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#gui.task_results.TaskResults.on_export_clicked" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.on_row_double_clicked">
+<span class="sig-name descname"><span class="pre">on_row_double_clicked</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#gui.task_results.TaskResults.on_row_double_clicked" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.on_row_selected">
+<span class="sig-name descname"><span class="pre">on_row_selected</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#gui.task_results.TaskResults.on_row_selected" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.on_toggle_ignore">
+<span class="sig-name descname"><span class="pre">on_toggle_ignore</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#gui.task_results.TaskResults.on_toggle_ignore" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.reject">
+<span class="sig-name descname"><span class="pre">reject</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResults.reject"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResults.reject" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResults.render_tree">
+<span class="sig-name descname"><span class="pre">render_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grouped_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">face_namer_func</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_process_rules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResults.render_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResults.render_tree" title="Link to this definition">¶</a></dt>
+<dd><p>Renders the DFM results tree</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_results.</span></span><span class="sig-name descname"><span class="pre">TaskResultsPresenter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">view</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#gui.task_results.TaskResults" title="gui.task_results.TaskResults"><span class="pre">TaskResults</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#gui.task_results.DFMReportModel" title="gui.task_results.DFMReportModel"><span class="pre">DFMReportModel</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bridge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#gui.task_results.DFMViewProvider" title="gui.task_results.DFMViewProvider"><span class="pre">DFMViewProvider</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Presenter for the TaskResults view. Handles UI updates and event handling.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter.handle_cleanup">
+<span class="sig-name descname"><span class="pre">handle_cleanup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter.handle_cleanup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter.handle_cleanup" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter.handle_export">
+<span class="sig-name descname"><span class="pre">handle_export</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter.handle_export"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter.handle_export" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter.handle_ignore">
+<span class="sig-name descname"><span class="pre">handle_ignore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter.handle_ignore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter.handle_ignore" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter.handle_selection">
+<span class="sig-name descname"><span class="pre">handle_selection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter.handle_selection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter.handle_selection" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter.handle_zoom">
+<span class="sig-name descname"><span class="pre">handle_zoom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dfm.html#dfm.models.CheckResult" title="dfm.models.CheckResult"><span class="pre">CheckResult</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter.handle_zoom"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter.handle_zoom" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_results.TaskResultsPresenter.refresh_ui">
+<span class="sig-name descname"><span class="pre">refresh_ui</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_results.html#TaskResultsPresenter.refresh_ui"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_results.TaskResultsPresenter.refresh_ui" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="gui-task-setup-module">
+<h2>gui.task_setup module<a class="headerlink" href="#gui-task-setup-module" title="Link to this heading">¶</a></h2>
+</section>
+<section id="module-gui.task_show_normals">
+<span id="gui-task-show-normals-module"></span><h2>gui.task_show_normals module<a class="headerlink" href="#module-gui.task_show_normals" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_show_normals.DfmAnalysisCommand">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_show_normals.</span></span><span class="sig-name descname"><span class="pre">DfmAnalysisCommand</span></span><a class="reference internal" href="_modules/gui/task_show_normals.html#DfmAnalysisCommand"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_show_normals.DfmAnalysisCommand" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_show_normals.DfmAnalysisCommand.Activated">
+<span class="sig-name descname"><span class="pre">Activated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_show_normals.html#DfmAnalysisCommand.Activated"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_show_normals.DfmAnalysisCommand.Activated" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_show_normals.DfmAnalysisCommand.GetResources">
+<span class="sig-name descname"><span class="pre">GetResources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_show_normals.html#DfmAnalysisCommand.GetResources"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_show_normals.DfmAnalysisCommand.GetResources" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_show_normals.DfmAnalysisCommand.IsActive">
+<span class="sig-name descname"><span class="pre">IsActive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_show_normals.html#DfmAnalysisCommand.IsActive"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_show_normals.DfmAnalysisCommand.IsActive" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="gui.task_show_normals.TaskShowNormals">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">gui.task_show_normals.</span></span><span class="sig-name descname"><span class="pre">TaskShowNormals</span></span><a class="reference internal" href="_modules/gui/task_show_normals.html#TaskShowNormals"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_show_normals.TaskShowNormals" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui.task_show_normals.TaskShowNormals.debug_show_normals">
+<span class="sig-name descname"><span class="pre">debug_show_normals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">doc_object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui/task_show_normals.html#TaskShowNormals.debug_show_normals"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.task_show_normals.TaskShowNormals.debug_show_normals" title="Link to this definition">¶</a></dt>
+<dd><p>Creates an object in the tree showing the
+calculated normal for every face on the target object.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-gui.utils">
+<span id="gui-utils-module"></span><h2>gui.utils module<a class="headerlink" href="#module-gui.utils" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="gui.utils.get_face_index">
+<span class="sig-prename descclassname"><span class="pre">gui.utils.</span></span><span class="sig-name descname"><span class="pre">get_face_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_obj</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">occ_face</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/gui/utils.html#get_face_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.utils.get_face_index" title="Link to this definition">¶</a></dt>
+<dd><p>Finds the index of an OCC face in the target object’s shape.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gui.utils.get_face_name">
+<span class="sig-prename descclassname"><span class="pre">gui.utils.</span></span><span class="sig-name descname"><span class="pre">get_face_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_obj</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">occ_face</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/gui/utils.html#get_face_name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gui.utils.get_face_name" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the internal FreeCAD Face name (e.g., ‘Face1’).</p>
+</dd></dl>
+
+</section>
+<section id="gui-visuals-module">
+<h2>gui.visuals module<a class="headerlink" href="#gui-visuals-module" title="Link to this heading">¶</a></h2>
+</section>
+<section id="module-gui">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-gui" title="Link to this heading">¶</a></h2>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          <a class="prev-page" href="dfm.utils.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">dfm.utils package</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Ryan Kembrey
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">gui package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-gui.process_manager">gui.process_manager module</a><ul>
+<li><a class="reference internal" href="#gui.process_manager.AddMaterialDialog"><code class="docutils literal notranslate"><span class="pre">AddMaterialDialog</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.AddMaterialDialog.get_data"><code class="docutils literal notranslate"><span class="pre">AddMaterialDialog.get_data()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.AddProcessDialog"><code class="docutils literal notranslate"><span class="pre">AddProcessDialog</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.AddProcessDialog.get_data"><code class="docutils literal notranslate"><span class="pre">AddProcessDialog.get_data()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.EditFeedbackDialog"><code class="docutils literal notranslate"><span class="pre">EditFeedbackDialog</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.EditFeedbackDialog.accept"><code class="docutils literal notranslate"><span class="pre">EditFeedbackDialog.accept()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.EditFeedbackDialog.get_data"><code class="docutils literal notranslate"><span class="pre">EditFeedbackDialog.get_data()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialEditView"><code class="docutils literal notranslate"><span class="pre">MaterialEditView</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.MaterialEditView.clear"><code class="docutils literal notranslate"><span class="pre">MaterialEditView.clear()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialEditView.limit_changed"><code class="docutils literal notranslate"><span class="pre">MaterialEditView.limit_changed</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialEditView.populate"><code class="docutils literal notranslate"><span class="pre">MaterialEditView.populate()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialEditView.selection_changed"><code class="docutils literal notranslate"><span class="pre">MaterialEditView.selection_changed</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialTableView"><code class="docutils literal notranslate"><span class="pre">MaterialTableView</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.MaterialTableView.category_changed"><code class="docutils literal notranslate"><span class="pre">MaterialTableView.category_changed</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialTableView.get_selected_material"><code class="docutils literal notranslate"><span class="pre">MaterialTableView.get_selected_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialTableView.populate"><code class="docutils literal notranslate"><span class="pre">MaterialTableView.populate()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialTableView.select_material"><code class="docutils literal notranslate"><span class="pre">MaterialTableView.select_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.MaterialTableView.selection_changed"><code class="docutils literal notranslate"><span class="pre">MaterialTableView.selection_changed</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.NumericValidationDelegate"><code class="docutils literal notranslate"><span class="pre">NumericValidationDelegate</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.NumericValidationDelegate.createEditor"><code class="docutils literal notranslate"><span class="pre">NumericValidationDelegate.createEditor()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.NumericValidationDelegate.setEditorData"><code class="docutils literal notranslate"><span class="pre">NumericValidationDelegate.setEditorData()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.NumericValidationDelegate.setModelData"><code class="docutils literal notranslate"><span class="pre">NumericValidationDelegate.setModelData()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.ParameterEdit"><code class="docutils literal notranslate"><span class="pre">ParameterEdit</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.ParameterEdit.insert_completion"><code class="docutils literal notranslate"><span class="pre">ParameterEdit.insert_completion()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ParameterEdit.keyPressEvent"><code class="docutils literal notranslate"><span class="pre">ParameterEdit.keyPressEvent()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManager"><code class="docutils literal notranslate"><span class="pre">ProcessManager</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManager.reject"><code class="docutils literal notranslate"><span class="pre">ProcessManager.reject()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManager.set_dirty_title"><code class="docutils literal notranslate"><span class="pre">ProcessManager.set_dirty_title()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManager.set_material_edit_title"><code class="docutils literal notranslate"><span class="pre">ProcessManager.set_material_edit_title()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManager.set_process_label"><code class="docutils literal notranslate"><span class="pre">ProcessManager.set_process_label()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManager.super_reject"><code class="docutils literal notranslate"><span class="pre">ProcessManager.super_reject()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerCommand"><code class="docutils literal notranslate"><span class="pre">ProcessManagerCommand</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerCommand.Activated"><code class="docutils literal notranslate"><span class="pre">ProcessManagerCommand.Activated()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerCommand.GetResources"><code class="docutils literal notranslate"><span class="pre">ProcessManagerCommand.GetResources()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerCommand.IsActive"><code class="docutils literal notranslate"><span class="pre">ProcessManagerCommand.IsActive()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_add_material"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_add_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_add_process"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_add_process()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_delete_material"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_delete_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_edit_feedback"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_edit_feedback()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_limit_changed"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_limit_changed()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_material_category_changed"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_material_category_changed()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_material_selected"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_material_selected()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_process_selected"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_process_selected()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_reject"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_reject()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_rules_changed"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_rules_changed()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerController.on_save"><code class="docutils literal notranslate"><span class="pre">ProcessManagerController.on_save()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.add_material"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.add_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.add_process"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.add_process()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.delete_material"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.delete_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.get_categorized_processes"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.get_categorized_processes()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.mark_dirty"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.mark_dirty()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.save"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.save()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.set_active_material"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.set_active_material()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.set_active_process"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.set_active_process()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.update_active_rules"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.update_active_rules()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.update_material_category"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.update_material_category()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.update_rule_feedback"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.update_rule_feedback()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessManagerModel.update_rule_limit"><code class="docutils literal notranslate"><span class="pre">ProcessManagerModel.update_rule_limit()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessTreeView"><code class="docutils literal notranslate"><span class="pre">ProcessTreeView</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.ProcessTreeView.populate"><code class="docutils literal notranslate"><span class="pre">ProcessTreeView.populate()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessTreeView.select_process"><code class="docutils literal notranslate"><span class="pre">ProcessTreeView.select_process()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.ProcessTreeView.selection_changed"><code class="docutils literal notranslate"><span class="pre">ProcessTreeView.selection_changed</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.RuleItemWidget"><code class="docutils literal notranslate"><span class="pre">RuleItemWidget</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.RuleListView"><code class="docutils literal notranslate"><span class="pre">RuleListView</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.RuleListView.edit_requested"><code class="docutils literal notranslate"><span class="pre">RuleListView.edit_requested</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.RuleListView.filter_rules"><code class="docutils literal notranslate"><span class="pre">RuleListView.filter_rules()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.RuleListView.populate"><code class="docutils literal notranslate"><span class="pre">RuleListView.populate()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.RuleListView.rules_changed"><code class="docutils literal notranslate"><span class="pre">RuleListView.rules_changed</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.process_manager.VisualizerView"><code class="docutils literal notranslate"><span class="pre">VisualizerView</span></code></a><ul>
+<li><a class="reference internal" href="#gui.process_manager.VisualizerView.hide"><code class="docutils literal notranslate"><span class="pre">VisualizerView.hide()</span></code></a></li>
+<li><a class="reference internal" href="#gui.process_manager.VisualizerView.update_display"><code class="docutils literal notranslate"><span class="pre">VisualizerView.update_display()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-gui.task_results">gui.task_results module</a><ul>
+<li><a class="reference internal" href="#gui.task_results.CSVResultExporter"><code class="docutils literal notranslate"><span class="pre">CSVResultExporter</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_results.CSVResultExporter.export"><code class="docutils literal notranslate"><span class="pre">CSVResultExporter.export()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation.BG_COLOR"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation.BG_COLOR</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation.DISPLAY_MODE"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation.DISPLAY_MODE</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation.FONT_SIZE"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation.FONT_SIZE</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation.TEXT_COLOR"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation.TEXT_COLOR</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation.create"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation.create()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMAnnotation.remove"><code class="docutils literal notranslate"><span class="pre">DFMAnnotation.remove()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.task_results.DFMReportModel"><code class="docutils literal notranslate"><span class="pre">DFMReportModel</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_results.DFMReportModel.STATUS_THEMES"><code class="docutils literal notranslate"><span class="pre">DFMReportModel.STATUS_THEMES</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMReportModel.active_results"><code class="docutils literal notranslate"><span class="pre">DFMReportModel.active_results</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMReportModel.get_grouped_results"><code class="docutils literal notranslate"><span class="pre">DFMReportModel.get_grouped_results()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMReportModel.get_verdict"><code class="docutils literal notranslate"><span class="pre">DFMReportModel.get_verdict()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMReportModel.toggle_ignore_state"><code class="docutils literal notranslate"><span class="pre">DFMReportModel.toggle_ignore_state()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.ANNOTATION_OFFSET"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.ANNOTATION_OFFSET</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.HIGHLIGHT_COLOR"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.HIGHLIGHT_COLOR</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.TRANSPARENCY_ACTIVE"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.TRANSPARENCY_ACTIVE</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.annotate_issue"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.annotate_issue()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.get_face_name"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.get_face_name()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.highlight_faces"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.highlight_faces()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.restore"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.restore()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.DFMViewProvider.zoom_to_selection"><code class="docutils literal notranslate"><span class="pre">DFMViewProvider.zoom_to_selection()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults"><code class="docutils literal notranslate"><span class="pre">TaskResults</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.accept"><code class="docutils literal notranslate"><span class="pre">TaskResults.accept()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.adjust_details_height"><code class="docutils literal notranslate"><span class="pre">TaskResults.adjust_details_height()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.form"><code class="docutils literal notranslate"><span class="pre">TaskResults.form</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.getStandardButtons"><code class="docutils literal notranslate"><span class="pre">TaskResults.getStandardButtons()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.on_closed"><code class="docutils literal notranslate"><span class="pre">TaskResults.on_closed</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.on_export_clicked"><code class="docutils literal notranslate"><span class="pre">TaskResults.on_export_clicked</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.on_row_double_clicked"><code class="docutils literal notranslate"><span class="pre">TaskResults.on_row_double_clicked</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.on_row_selected"><code class="docutils literal notranslate"><span class="pre">TaskResults.on_row_selected</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.on_toggle_ignore"><code class="docutils literal notranslate"><span class="pre">TaskResults.on_toggle_ignore</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.reject"><code class="docutils literal notranslate"><span class="pre">TaskResults.reject()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResults.render_tree"><code class="docutils literal notranslate"><span class="pre">TaskResults.render_tree()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter.handle_cleanup"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter.handle_cleanup()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter.handle_export"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter.handle_export()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter.handle_ignore"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter.handle_ignore()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter.handle_selection"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter.handle_selection()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter.handle_zoom"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter.handle_zoom()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_results.TaskResultsPresenter.refresh_ui"><code class="docutils literal notranslate"><span class="pre">TaskResultsPresenter.refresh_ui()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui-task-setup-module">gui.task_setup module</a></li>
+<li><a class="reference internal" href="#module-gui.task_show_normals">gui.task_show_normals module</a><ul>
+<li><a class="reference internal" href="#gui.task_show_normals.DfmAnalysisCommand"><code class="docutils literal notranslate"><span class="pre">DfmAnalysisCommand</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_show_normals.DfmAnalysisCommand.Activated"><code class="docutils literal notranslate"><span class="pre">DfmAnalysisCommand.Activated()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_show_normals.DfmAnalysisCommand.GetResources"><code class="docutils literal notranslate"><span class="pre">DfmAnalysisCommand.GetResources()</span></code></a></li>
+<li><a class="reference internal" href="#gui.task_show_normals.DfmAnalysisCommand.IsActive"><code class="docutils literal notranslate"><span class="pre">DfmAnalysisCommand.IsActive()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui.task_show_normals.TaskShowNormals"><code class="docutils literal notranslate"><span class="pre">TaskShowNormals</span></code></a><ul>
+<li><a class="reference internal" href="#gui.task_show_normals.TaskShowNormals.debug_show_normals"><code class="docutils literal notranslate"><span class="pre">TaskShowNormals.debug_show_normals()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-gui.utils">gui.utils module</a><ul>
+<li><a class="reference internal" href="#gui.utils.get_face_index"><code class="docutils literal notranslate"><span class="pre">get_face_index()</span></code></a></li>
+<li><a class="reference internal" href="#gui.utils.get_face_name"><code class="docutils literal notranslate"><span class="pre">get_face_name()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gui-visuals-module">gui.visuals module</a></li>
+<li><a class="reference internal" href="#module-gui">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=4f578d93"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>
