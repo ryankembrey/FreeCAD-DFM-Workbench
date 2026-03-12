@@ -69,18 +69,20 @@ materials:
             NO_UNDERCUTS:
                 target: N/A
                 limit: N/A
-    PLA:
-        category: Bio-Plastic
+
+    "PLA (Polylactic Acid)":
+        category: Bio-Thermoplastic
         is_active: true
         rule_limits:
             MAX_WALL_THICKNESS:
                 target: '3.5'
                 limit: '4.5'
             MIN_DRAFT_ANGLE:
-                target: '2'
-                limit: '1'
-    ABS:
-        category: Amorphous
+                target: '2.0'
+                limit: '1.0'
+
+    "ABS (Acrylonitrile Butadiene Styrene)":
+        category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
             MIN_WALL_THICKNESS:
@@ -89,16 +91,155 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.56'
                 limit: '4.5'
-    Nylon:
-        category: Semi-Crystalline
+
+    "Acetal / POM (Polyoxymethylene)":
+        category: Semi-Crystalline Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '0.76'
+                limit: '0.5'
+            MAX_WALL_THICKNESS:
+                target: '3.05'
+                limit: '4.0'
+
+    "PMMA (Acrylic)":
+        category: Amorphous Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '0.64'
+                limit: '0.4'
+            MAX_WALL_THICKNESS:
+                target: '12.70'
+                limit: '14.0'
+
+    "LCP (Liquid Crystal Polymer)":
+        category: Semi-Crystalline Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '0.76'
+                limit: '0.5'
+            MAX_WALL_THICKNESS:
+                target: '3.05'
+                limit: '4.0'
+
+    "Long-Fiber Reinforced Plastics":
+        category: Composite Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '1.91'
+                limit: '1.5'
+            MAX_WALL_THICKNESS:
+                target: '27.94'
+                limit: '30.0'
+
+    "PA (Nylon)":
+        category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
             MIN_DRAFT_ANGLE:
-                target: '0.0'
-                limit: N/A
+                target: '1.0'
+                limit: '0.0'
             MIN_WALL_THICKNESS:
                 target: '0.76'
                 limit: '0.5'
             MAX_WALL_THICKNESS:
                 target: '2.92'
                 limit: '3.5'
+
+    "PC (Polycarbonate)":
+        category: Amorphous Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_DRAFT_ANGLE:
+                target: '2.0'
+                limit: '1.5'
+            MIN_WALL_THICKNESS:
+                target: '1.02'
+                limit: '0.7'
+            MAX_WALL_THICKNESS:
+                target: '3.81'
+                limit: '4.5'
+
+    "PET / PBT (Polyester)":
+        category: Semi-Crystalline Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '0.64'
+                limit: '0.4'
+            MAX_WALL_THICKNESS:
+                target: '3.18'
+                limit: '4.0'
+
+    "PE (Polyethylene)":
+        category: Semi-Crystalline Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_DRAFT_ANGLE:
+                target: '1.5'
+                limit: '0.5'
+            MIN_WALL_THICKNESS:
+                target: '0.76'
+                limit: '0.5'
+            MAX_WALL_THICKNESS:
+                target: '5.08'
+                limit: '6.0'
+
+    "PSU (Polyphenylene Sulfide)":
+        category: Semi-Crystalline Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '0.51'
+                limit: '0.3'
+            MAX_WALL_THICKNESS:
+                target: '4.57'
+                limit: '5.5'
+
+    "PP (Polypropylene)":
+        category: Semi-Crystalline Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_DRAFT_ANGLE:
+                target: '2.0'
+                limit: '1.0'
+            MIN_WALL_THICKNESS:
+                target: '0.89'
+                limit: '0.6'
+            MAX_WALL_THICKNESS:
+                target: '3.81'
+                limit: '4.5'
+
+    "PS (Polystyrene)":
+        category: Amorphous Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '0.89'
+                limit: '0.6'
+            MAX_WALL_THICKNESS:
+                target: '3.81'
+                limit: '4.5'
+
+    "PUR (Polyurethane)":
+        category: Elastomer
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '2.03'
+                limit: '1.5'
+            MAX_WALL_THICKNESS:
+                target: '19.05'
+                limit: '21.0'
+
+    "PVC (Polyvinyl Chloride)":
+        category: Amorphous Thermoplastic
+        is_active: true
+        rule_limits:
+            MIN_DRAFT_ANGLE:
+                target: '1.5'
+                limit: '0.5'
