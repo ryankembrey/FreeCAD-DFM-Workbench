@@ -34,6 +34,7 @@ autodoc_mock_imports = [
     "numpy",
     "pandas",
     "yaml",
+    "picy",
 ]
 
 html_theme = "furo"
