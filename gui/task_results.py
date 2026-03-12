@@ -112,10 +112,9 @@ class TaskResults:
             if rule_id.label in expanded_rules:
                 self.form.tvResults.setExpanded(rule_item.index(), True)
 
-        for rule_key in all_process_rules:
-            rule_enum = Rulebook[rule_key]
-            if rule_enum not in grouped_data:
-                pass_item = QStandardItem(f"{rule_enum.label} [Passed]")
+        for rule in all_process_rules:
+            if rule not in grouped_data:
+                pass_item = QStandardItem(f"{rule.label} [Passed]")
                 pass_item.setEditable(False)
                 pass_item.setIcon(
                     QtWidgets.QApplication.style().standardIcon(
@@ -462,7 +461,9 @@ class TaskResultsPresenter:
         self.view.form.leVerdict.setStyleSheet(f"color: {color}; font-weight: bold;")
 
         self.view.render_tree(
-            self.model.get_grouped_results(), self.bridge.get_face_name, self.model.process.rules
+            self.model.get_grouped_results(),
+            self.bridge.get_face_name,
+            self.model.process.active_rules,
         )
 
     def handle_selection(self, data: CheckResult | list[CheckResult]):

@@ -214,11 +214,9 @@ class TaskSetup:
         if not hasattr(self, "process") or not self.process:
             return requirements
 
-        for rule_str in self.process.rules:
+        for rule in self.process.active_rules:
             try:
-                rule_id = Rulebook[rule_str]
-
-                check_cls = get_check_class(rule_id)
+                check_cls = get_check_class(rule)
                 if not check_cls:
                     continue
 
@@ -229,7 +227,7 @@ class TaskSetup:
                     requirements.update(analyzer_cls().requirements)
 
             except KeyError:
-                FreeCAD.Console.PrintWarning(f"Rule '{rule_str}' not found in Rulebook.\n")
+                FreeCAD.Console.PrintWarning(f"Rule '{rule.name}' not found in Rulebook.\n")
                 continue
 
         return requirements
