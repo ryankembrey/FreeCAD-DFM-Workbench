@@ -1,41 +1,104 @@
 name: Plastic Injection Molding
 category: Injection Molding
-description: >
-  A high-volume manufacturing process that produces parts by injecting molten
-  plastic material into a precision-machined mold. Ideal for creating complex
-  and durable parts with high repeatability.
+description: 'A high-volume manufacturing process that produces parts by injecting
+    molten plastic material into a precision-machined mold. Ideal for creating complex
+    and durable parts with high repeatability.
 
-rules:
-  - MIN_DRAFT_ANGLE
-  - MIN_WALL_THICKNESS
-  - MAX_WALL_THICKNESS
-  - NO_UNDERCUTS
+    '
+active_rules:
+- MIN_DRAFT_ANGLE
+- MIN_WALL_THICKNESS
+- MAX_WALL_THICKNESS
+- NO_UNDERCUTS
+rule_feedback:
+    MIN_DRAFT_ANGLE:
+        warning_msg: 'Insufficient Draft ({measured}): This angle is below the recommended
+            {target}.  While tilted correctly, it is too shallow to guarantee a clean
+            release.  Increasing the angle reduces the risk of part deformation or
+            drag marks.'
+        error_msg: 'Critical Draft Violation ({measured}): A vertical or reverse taper
+            will cause  the part to grip the mold as it shrinks. Attempting to eject
+            will likely  scratch the surface or physically trap the part in the cavity.'
+    MIN_WALL_THICKNESS:
+        warning_msg: 'Thin Wall Section ({measured}): This area is below the recommended
+            {target}.  Thin walls increase flow resistance and may lead to "short
+            shots" or  unintended cooling before the cavity is fully packed.
 
+            '
+        error_msg: 'Critical Thinning ({measured}): Wall thickness is below the {limit}
+            threshold.  The high injection pressure required to fill this area may
+            cause structural  weakness or "hesitation" marks in the final part.
+
+            '
+    MAX_WALL_THICKNESS:
+        warning_msg: 'Thick Section ({measured}): This exceeds the recommended {target}.
+            Thick  regions cool significantly slower than surrounding geometry, often  resulting
+            in "sink marks" or internal voids as the plastic shrinks.
+
+            '
+        error_msg: 'Excessive Wall Thickness ({value}): This region will cause severe
+            non-uniform  cooling. Expect high internal stresses, potential warping,
+            and significantly  increased cycle times to ensure the core is solidified.
+
+            '
+    NO_UNDERCUTS:
+        warning_msg: 'N/A
+
+            '
+        error_msg: 'Undercut Detected: The current geometry is physically trapped  relative
+            to the mold opening direction. This will require complex side-actions
+            or lifters, significantly increasing mold cost and maintenance. Redesign
+            the part to eliminate this feature or ensure it can be serviced by a sliding
+            core.
+
+            '
 materials:
-  Generic:
-    name: Generic
-    parameters: &generic_params
-      min_draft_angle: 1.0
-      min_wall_thickness: 1.0
-      max_wall_thickness: 4.0
-
-  PLA:
-    name: Polylactic Acid (PLA)
-    parameters:
-      <<: *generic_params
-      max_wall_thickness: 3.5
-
-  ABS:
-    name: Acrylonitrile Butadiene Styrene (ABS)
-    parameters:
-      <<: *generic_params
-      min_wall_thickness: 1.14
-      max_wall_thickness: 3.56
-  
-  Nylon:
-    name: Nylon
-    parameters:
-      min_draft_angle: 0.0
-      min_wall_thickness: 0.76
-      max_wall_thickness: 2.92
-
+    Default:
+        category: Default
+        is_active: true
+        rule_limits:
+            MIN_DRAFT_ANGLE:
+                target: '1.0'
+                limit: '0.5'
+            MIN_WALL_THICKNESS:
+                target: '1.0'
+                limit: '0.5'
+            MAX_WALL_THICKNESS:
+                target: '4.0'
+                limit: '5.0'
+            NO_UNDERCUTS:
+                target: N/A
+                limit: N/A
+    PLA:
+        category: Bio-Plastic
+        is_active: true
+        rule_limits:
+            MAX_WALL_THICKNESS:
+                target: '3.5'
+                limit: '4.5'
+            MIN_DRAFT_ANGLE:
+                target: '2'
+                limit: '1'
+    ABS:
+        category: Amorphous
+        is_active: true
+        rule_limits:
+            MIN_WALL_THICKNESS:
+                target: '1.14'
+                limit: '0.8'
+            MAX_WALL_THICKNESS:
+                target: '3.56'
+                limit: '4.5'
+    Nylon:
+        category: Semi-Crystalline
+        is_active: true
+        rule_limits:
+            MIN_DRAFT_ANGLE:
+                target: '0.0'
+                limit: N/A
+            MIN_WALL_THICKNESS:
+                target: '0.76'
+                limit: '0.5'
+            MAX_WALL_THICKNESS:
+                target: '2.92'
+                limit: '3.5'
