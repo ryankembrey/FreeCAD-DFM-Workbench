@@ -27,342 +27,168 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from dfm.processes.process import Material, Process
+from dfm.processes.process import Material, Process, RuleLimit, RuleFeedback
 from dfm.registries.process_registry import ProcessRegistry
 from dfm.rules import Rulebook
 
 from . import DFM_rc
 
 
-class ProcessManager(QtWidgets.QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent or Gui.getMainWindow())
-        self.form = Gui.PySideUic.loadUi(":/ui/process_manager.ui")  # type: ignore
-        self.setWindowTitle("DFM Process Manager")
+# =============================================================================
 
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(self.form)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.resize(1000, 800)
-        self.form.hSplitter.setStretchFactor(1, 3)
 
+class ProcessManagerModel:
+    """Manages the application state, data persistence, and active selections."""
+
+    def __init__(self):
         self.registry = ProcessRegistry.get_instance()
         self.registry.discover_processes()
-
         self.is_dirty = False
 
-        self.form.lProcess.setText("Select a Process")
-
-        # Controllers no longer need the registry reference
-        self.tree_ctrl = ProcessTreeController(self.form.twProcess, self.registry)
-        self.rules_ctrl = RuleListController(self.form.lwRules)
-        self.mat_ctrl = MaterialController(self.form.twMaterials)
-        self.edit_ctrl = MaterialEditController(self.form.twMaterialEdit)
-
-        self.form.twProcess.itemSelectionChanged.connect(self.on_process_selected)
-        self.form.lwRules.itemChanged.connect(self.on_rule_toggled)
-        self.form.twMaterials.itemSelectionChanged.connect(self.on_material_selected)
-        self.form.pbMaterialAdd.clicked.connect(self.on_material_add)
-        self.form.pbMaterialDelete.clicked.connect(self.on_material_delete)
-        self.form.pbNewProcess.clicked.connect(self.on_process_add)
-        self.form.twMaterialEdit.cellChanged.connect(self.mark_dirty)
-        self.form.twMaterials.itemChanged.connect(self.mark_dirty)
-        self.form.twMaterials.itemChanged.connect(self.on_material_category_changed)
-        self.form.buttonBox.accepted.connect(self.on_save)
-        self.form.buttonBox.rejected.connect(self.reject)
+        self.active_process: Optional[Process] = None
+        self.active_material: Optional[Material] = None
 
     def mark_dirty(self):
-        if not self.is_dirty:
-            self.is_dirty = True
-            if not self.windowTitle().endswith(" *"):
-                self.setWindowTitle(self.windowTitle() + " *")
+        self.is_dirty = True
 
-    def on_save(self):
-        """Finalize changes and write to disk via the registry."""
-        try:
-            self.registry.save_all_processes()
+    def save(self):
+        self.registry.save_all_processes()
+        self.is_dirty = False
 
-            # --- Reset Dirty State ---
-            self.is_dirty = False
-            # Remove the asterisk from the title
-            title = self.windowTitle()
-            if title.endswith(" *"):
-                self.setWindowTitle(title[:-2])
+    def get_categorized_processes(self) -> dict:
+        data = {}
+        for cat in self.registry.get_categories():
+            data[cat] = self.registry.get_processes_for_category(cat)
+        return data
 
-            self.accept()
+    def set_active_process(self, name: str) -> Optional[Process]:
+        self.active_process = self.registry.get_process_by_name(name)
+        self.active_material = None
+        return self.active_process
 
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(
-                self, "Save Error", f"Failed to save process data: {str(e)}"
-            )
+    def set_active_material(self, name: str) -> Optional[Material]:
+        if self.active_process and name in self.active_process.materials:
+            self.active_material = self.active_process.materials[name]
+        else:
+            self.active_material = None
+        return self.active_material
 
-    def reject(self):
-        """Overrides the default close behavior to check for unsaved changes."""
-        if self.is_dirty:
-            confirm = QtWidgets.QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                "You have unsaved changes. Are you sure you want to discard them?",
-                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                QtWidgets.QMessageBox.StandardButton.No,  # Default to No for safety
-            )
-
-            if confirm == QtWidgets.QMessageBox.StandardButton.No:
-                return
-
-        super().reject()
-
-    def on_process_selected(self):
-        process_name = self.tree_ctrl.get_selected_name()
-        if not process_name:
-            return
-
-        self.form.lProcess.setText(process_name)
-
-        process = self.registry.get_process_by_name(process_name)
-        if process:
-            # Revert: Populate rules globally for the process
-            self.rules_ctrl.populate(process)
-            self.mat_ctrl.populate(process)
-
-            if hasattr(self.form, "lblDescription"):
-                self.form.lblDescription.setText(process.description)
-
-    def on_process_add(self):
-        """Creates a new process and adds it to the registry."""
-        categories = self.registry.get_categories()
-        dlg = AddProcessDialog(categories, self)
-
-        if dlg.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            name, category = dlg.get_data()
-
-            if not name or not category:
-                QtWidgets.QMessageBox.warning(
-                    self, "Invalid Input", "Both name and category are required."
-                )
-                return
-
-            # Check for existing process to avoid overwriting
-            if self.registry.get_process_by_name(name):
-                QtWidgets.QMessageBox.warning(
-                    self, "Duplicate", f"Process '{name}' already exists."
-                )
-                return
-
-            # Create the new process object
-            # Note: You'll need to ensure 'Process' is imported or defined
-            new_process = Process(
-                name=name,
-                category=category,
-                description="New manufacturing process.",
-                active_rules=[],
-                materials={
-                    "Default": Material(
-                        name="Default", category="Default", is_active=True, rule_limits={}
-                    )
-                },
-            )
-
-            # Add to registry and refresh the tree
+    def update_rule_feedback(self, rule: Rulebook, warning_msg: str, error_msg: str):
+        if self.active_process:
+            self.active_process.rule_feedback[rule] = RuleFeedback(warning_msg, error_msg)
             self.mark_dirty()
-            self.registry.add_process(new_process)
-            self.tree_ctrl.populate()
 
-            # Optionally select the new process in the tree
-            items = self.form.twProcess.findItems(name, QtCore.Qt.MatchFlag.MatchRecursive)
-            if items:
-                self.form.twProcess.setCurrentItem(items[0])
+    def add_process(self, name: str, category: str) -> bool:
+        if self.registry.get_process_by_name(name):
+            return False
 
-    def on_rule_toggled(self, item: QtWidgets.QListWidgetItem):
+        new_process = Process(
+            name=name,
+            category=category,
+            description="New manufacturing process.",
+            active_rules=[],
+            materials={
+                "Default": Material(
+                    name="Default", category="Default", is_active=True, rule_limits={}
+                )
+            },
+        )
+        self.registry.add_process(new_process)
         self.mark_dirty()
-        process_name = self.tree_ctrl.get_selected_name()
-        if not process_name:
-            return
-        process = self.registry.get_process_by_name(process_name)
+        return True
 
-        if process:
-            # Sync back to Process dataclass
-            process.active_rules = self.rules_ctrl.get_active_rules()
-            # Refresh the edit table for the currently selected material
-            self.on_material_selected()
+    def add_material(self, name: str, category: str) -> bool:
+        if not self.active_process or name in self.active_process.materials:
+            return False
 
-    def on_material_selected(self):
-        items = self.form.twMaterials.selectedItems()
-        if not items:
-            self.form.twMaterialEdit.setRowCount(0)
-            return
+        self.active_process.materials[name] = Material(
+            name=name, category=category, is_active=True, rule_limits={}
+        )
+        self.mark_dirty()
+        return True
 
-        row = items[0].row()
-        mat_name = self.form.twMaterials.item(row, 0).text()
-        self.form.gbMaterialEdit.setTitle(f"Editing {mat_name}")
+    def delete_material(self, name: str) -> bool:
+        if (
+            not self.active_process
+            or name not in self.active_process.materials
+            or name == "Default"
+        ):
+            return False
 
-        process_name = self.tree_ctrl.get_selected_name()
-        if not process_name:
-            return
+        del self.active_process.materials[name]
+        if self.active_material and self.active_material.name == name:
+            self.active_material = None
 
-        process = self.registry.get_process_by_name(process_name)
-        # Check if process exists before accessing .materials
-        if process and mat_name in process.materials:
-            material = process.materials[mat_name]
+        self.mark_dirty()
+        return True
 
-            # Use a safe fallback for default_material to avoid errors on empty dicts
-            mats = list(process.materials.values())
-            default_material = mats[0] if mats else material
-
-            self.edit_ctrl.populate(material, default_material, process.active_rules)
-
-    def on_material_category_changed(self, item):
-        """Handles manual edits to the material category column."""
-        process_name = self.tree_ctrl.get_selected_name()
-        if not process_name:
-            return
-
-        process = self.registry.get_process_by_name(process_name)
-        if process:
-            # Sync the text back to the dataclass
-            self.mat_ctrl.sync_material_category(item, process)
-            # Mark the window as dirty so we can save
+    def update_material_category(self, mat_name: str, new_category: str):
+        if self.active_process and mat_name in self.active_process.materials:
+            self.active_process.materials[mat_name].category = new_category
             self.mark_dirty()
 
-    def on_material_add(self):
-        process_name = self.tree_ctrl.get_selected_name()
-        if not process_name:
-            QtWidgets.QMessageBox.warning(self, "No Process", "Please select a process first.")
+    def update_rule_limit(self, rule, attr: str, value: str):
+        if not self.active_material:
             return
 
-        process = self.registry.get_process_by_name(process_name)
-        if not process:
-            return
+        if rule not in self.active_material.rule_limits:
+            self.active_material.rule_limits[rule] = RuleLimit()
 
-        # Get unique existing categories for the dropdown
-        existing_cats = [m.category for m in process.materials.values()]
+        setattr(self.active_material.rule_limits[rule], attr, value)
+        self.mark_dirty()
 
-        dlg = AddMaterialDialog(existing_cats, self)
-        if dlg.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            name, category = dlg.get_data()
-
-            if not name or not category:
-                QtWidgets.QMessageBox.warning(
-                    self, "Invalid Input", "Name and Category are required."
-                )
-                return
-
-            if name in process.materials:
-                QtWidgets.QMessageBox.warning(
-                    self, "Duplicate", f"Material '{name}' already exists."
-                )
-                return
-
-            # Create the material with the user's data
-            new_mat = Material(
-                name=name,
-                category=category,
-                is_active=True,
-                rule_limits={},
-            )
-
-            process.materials[name] = new_mat
-            self.mat_ctrl.populate(process)
+    def update_active_rules(self, rules: list):
+        if self.active_process:
+            self.active_process.active_rules = rules
             self.mark_dirty()
 
-            # Select the newly added material in the table
-            items = self.form.twMaterials.findItems(name, QtCore.Qt.MatchFlag.MatchExactly)
-            if items:
-                self.form.twMaterials.setCurrentItem(items[0])
 
-    def on_material_delete(self):
-        items = self.form.twMaterials.selectedItems()
-        if not items:
-            return
-
-        row = items[0].row()
-        mat_name = self.form.twMaterials.item(row, 0).text()
-
-        if mat_name == "Default":
-            QtWidgets.QMessageBox.critical(
-                self, "Error", "The 'Default' material cannot be deleted."
-            )
-            return
-
-        confirm = QtWidgets.QMessageBox.question(
-            self,
-            "Delete Material",
-            f"Are you sure you want to delete '{mat_name}'?",
-            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-        )
-
-        if confirm == QtWidgets.QMessageBox.StandardButton.Yes:
-            process_name = self.tree_ctrl.get_selected_name()
-            if process_name:  # Guard against Optional[str]
-                process = self.registry.get_process_by_name(process_name)
-                if process and mat_name in process.materials:
-                    del process.materials[mat_name]
-                    self.mark_dirty()
-                    self.mat_ctrl.populate(process)
-                    self.form.twMaterialEdit.setRowCount(0)
+# =============================================================================
 
 
-class AddProcessDialog(QtWidgets.QDialog):
-    def __init__(self, categories: list[str], parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Add New Process")
-        self.setMinimumWidth(350)
+class NumericValidationDelegate(QtWidgets.QStyledItemDelegate):
+    """Validates that input is numeric or N/A, and manages UI unit stripping."""
 
-        layout = QtWidgets.QFormLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(16)
-        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+    def createEditor(self, parent, option, index):
+        if index.column() not in [1, 2]:
+            return super().createEditor(parent, option, index)
 
-        # Height for better visibility
-        widget_height = 32
+        editor = QtWidgets.QLineEdit(parent)
+        regex = QtCore.QRegularExpression(r"^-?\d*\.?\d+$|^(?i)N/A$")
+        editor.setValidator(QtGui.QRegularExpressionValidator(regex, editor))
+        return editor
 
-        self.name_edit = QtWidgets.QLineEdit()
-        self.name_edit.setMinimumHeight(widget_height)
+    def setEditorData(self, editor, index):
+        text = index.model().data(index, QtCore.Qt.ItemDataRole.EditRole)
+        rule = index.model().index(index.row(), 0).data(QtCore.Qt.ItemDataRole.UserRole)
 
-        # Editable ComboBox replaces the 'Custom' logic
-        self.cat_combo = QtWidgets.QComboBox()
-        self.cat_combo.setEditable(True)
-        self.cat_combo.setMinimumHeight(widget_height)
-        self.cat_combo.setPlaceholderText("Select or type a category...")
+        if rule and getattr(rule, "unit", "") and text:
+            text = str(text).replace(rule.unit, "").strip()
 
-        # Populate with existing categories
-        self.cat_combo.addItems(sorted(list(set(categories))))
+        editor.setText(text)
 
-        layout.addRow("Process Name:", self.name_edit)
-        layout.addRow("Category:", self.cat_combo)
-
-        self.buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.StandardButton.Ok
-            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
-        )
-
-        # Match button height to inputs
-        for button in self.buttons.buttons():
-            button.setMinimumHeight(widget_height)
-
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
-        layout.addRow(self.buttons)
-
-    def get_data(self) -> tuple[str, str]:
-        """Returns the trimmed name and category text."""
-        name = self.name_edit.text().strip()
-        category = self.cat_combo.currentText().strip()
-        return name, category
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.text(), QtCore.Qt.ItemDataRole.EditRole)
 
 
-class ProcessTreeController:
-    def __init__(self, tree: QtWidgets.QTreeWidget, registry: ProcessRegistry):
+# =============================================================================
+
+
+class ProcessTreeView(QtCore.QObject):
+    selection_changed = QtCore.Signal(str)
+
+    def __init__(self, tree: QtWidgets.QTreeWidget):
+        super().__init__()
         self.tree = tree
-        self.registry = registry
         self.tree.setHeaderLabels(["Manufacturing Processes"])
         self.tree.setIndentation(20)
-        self.populate()
+        self.tree.itemSelectionChanged.connect(self._on_selection)
 
-    def populate(self):
+    def populate(self, categories_dict: dict):
+        self.tree.blockSignals(True)
         self.tree.clear()
-        categories = self.registry.get_categories()
-        for cat_name in categories:
+
+        for cat_name, processes in categories_dict.items():
             cat_node = QtWidgets.QTreeWidgetItem(self.tree)
             cat_node.setText(0, cat_name)
             cat_node.setFlags(cat_node.flags() & ~QtCore.Qt.ItemFlag.ItemIsSelectable)
@@ -371,187 +197,469 @@ class ProcessTreeController:
             font.setBold(True)
             cat_node.setFont(0, font)
 
-            processes = self.registry.get_processes_for_category(cat_name)
             for process in processes:
                 process_node = QtWidgets.QTreeWidgetItem(cat_node)
                 process_node.setText(0, process.name)
                 process_node.setData(0, QtCore.Qt.ItemDataRole.UserRole, process.name)
+
         self.tree.expandAll()
+        self.tree.blockSignals(False)
 
-    def get_selected_name(self) -> Optional[str]:
+    def select_process(self, name: str):
+        items = self.tree.findItems(name, QtCore.Qt.MatchFlag.MatchRecursive)
+        if items:
+            self.tree.setCurrentItem(items[0])
+
+    def _on_selection(self):
         selected = self.tree.selectedItems()
-        return selected[0].data(0, QtCore.Qt.ItemDataRole.UserRole) if selected else None
+        if selected:
+            val = selected[0].data(0, QtCore.Qt.ItemDataRole.UserRole)
+            if val:
+                self.selection_changed.emit(val)
 
 
-class RuleListController:
-    def __init__(self, rlist: QtWidgets.QListWidget):
-        self.rlist = rlist
+# =============================================================================
 
-    def populate(self, process: Process):
-        # Blocking signals prevents on_rule_toggled from firing while we populate
-        self.rlist.blockSignals(True)
+
+class RuleListView(QtCore.QObject):
+    rules_changed = QtCore.Signal(list)
+    edit_requested = QtCore.Signal(object)
+
+    def __init__(self, list_widget: QtWidgets.QListWidget, search_field: QtWidgets.QLineEdit):
+        super().__init__()
+        self.rlist = list_widget
+        self.search_field = search_field
+        self._is_populating = False
+
+        self.search_field.setClearButtonEnabled(True)
+        self.search_field.setPlaceholderText("Search rules...")
+        self.search_field.textChanged.connect(self.filter_rules)
+
+    def populate(self, active_rules: list):
+        self._is_populating = True
         self.rlist.clear()
+
         for rule in Rulebook:
             item = QtWidgets.QListWidgetItem(self.rlist)
-            item.setText(rule.label)
+            item.setSizeHint(QtCore.QSize(0, 36))
             item.setData(QtCore.Qt.ItemDataRole.UserRole, rule)
 
-            state = (
-                QtCore.Qt.CheckState.Checked
-                if rule in process.active_rules
-                else QtCore.Qt.CheckState.Unchecked
-            )
-            item.setCheckState(state)
-        self.rlist.blockSignals(False)
+            widget = RuleItemWidget(rule, rule in active_rules)
 
-    def get_active_rules(self) -> list[Rulebook]:
+            widget.checkbox.toggled.connect(self._on_check_toggled)
+            widget.edit_btn.clicked.connect(
+                lambda checked=False, r=rule: self.edit_requested.emit(r)
+            )
+
+            self.rlist.setItemWidget(item, widget)
+
+        self._is_populating = False
+        self.filter_rules(self.search_field.text())
+
+    def filter_rules(self, text: str):
+        """Hides items that don't match the search string."""
+        search_term = text.lower()
+
+        for i in range(self.rlist.count()):
+            item = self.rlist.item(i)
+            rule = item.data(QtCore.Qt.ItemDataRole.UserRole)
+
+            match = search_term in rule.label.lower()
+            item.setHidden(not match)
+
+    def _on_check_toggled(self):
+        if self._is_populating:
+            return
         active = []
         for i in range(self.rlist.count()):
             item = self.rlist.item(i)
-            if item.checkState() == QtCore.Qt.CheckState.Checked:
+            widget = self.rlist.itemWidget(item)
+            if widget and widget.checkbox.isChecked():  # type: ignore
                 active.append(item.data(QtCore.Qt.ItemDataRole.UserRole))
-        return active
-
-    def populate_for_material(self, material):
-        self.rlist.blockSignals(True)
-        self.rlist.clear()
-
-        # Always loop through the FULL Rulebook
-        for rule in Rulebook:
-            item = QtWidgets.QListWidgetItem(self.rlist)
-            item.setText(rule.label)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, rule)
-
-            # Set the checkbox state based on this material's active rules
-            # Make sure it is explicitly UserCheckable
-            item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
-
-            is_active = rule in material.active_rules
-            state = QtCore.Qt.CheckState.Checked if is_active else QtCore.Qt.CheckState.Unchecked
-            item.setCheckState(state)
-
-        self.rlist.blockSignals(False)
+        self.rules_changed.emit(active)
 
 
-class MaterialController:
+# =============================================================================
+
+
+class RuleItemWidget(QtWidgets.QWidget):
+    """Updated with spacing/padding fix."""
+
+    def __init__(self, rule, is_active: bool, parent=None):
+        super().__init__(parent)
+        layout = QtWidgets.QHBoxLayout(self)
+
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 2, 10, 2)
+
+        self.checkbox = QtWidgets.QCheckBox()
+        self.checkbox.setChecked(is_active)
+
+        self.label = QtWidgets.QLabel(rule.label)
+        self.label.setStyleSheet("color: #eeeeee;")
+
+        self.edit_btn = QtWidgets.QPushButton("Edit")
+        self.edit_btn.setFixedWidth(65)
+        self.edit_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+
+        layout.addWidget(self.checkbox)
+        layout.addWidget(self.label)
+        layout.addStretch()
+        layout.addWidget(self.edit_btn)
+
+
+# =============================================================================
+
+
+class ParameterEdit(QtWidgets.QPlainTextEdit):
+    """A text editor that suggests {placeholders} when '{' is typed."""
+
+    def __init__(self, placeholders, parent=None):
+        super().__init__(parent)
+        self.completer = QtWidgets.QCompleter(placeholders, self)
+        self.completer.setWidget(self)
+        self.completer.setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
+        self.completer.activated.connect(self.insert_completion)
+
+    def insert_completion(self, completion):
+        """Inserts the selected parameter and closes the brace."""
+        tc = self.textCursor()
+        tc.insertText(completion + "}")
+        self.setTextCursor(tc)
+
+    def keyPressEvent(self, event):
+        if self.completer.popup().isVisible():
+            if event.key() in (
+                QtCore.Qt.Key.Key_Enter,
+                QtCore.Qt.Key.Key_Return,
+                QtCore.Qt.Key.Key_Escape,
+                QtCore.Qt.Key.Key_Tab,
+            ):
+                event.ignore()
+                return
+
+        super().keyPressEvent(event)
+
+        if event.text() == "{":
+            cr = self.cursorRect()
+            cr.setWidth(
+                self.completer.popup().sizeHintForColumn(0)
+                + self.completer.popup().verticalScrollBar().sizeHint().width()
+            )
+            self.completer.complete(cr)
+
+
+# =============================================================================
+
+
+class EditFeedbackDialog(QtWidgets.QDialog):
+    """Dialog to input custom Warning and Error messages with internal titles."""
+
+    def __init__(self, process_name: str, rule_name: str, feedback: RuleFeedback, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Edit Feedback: {rule_name}")
+        self.setMinimumWidth(480)
+        self.setMinimumHeight(450)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        style = self.style()
+
+        header_container = QtWidgets.QWidget()
+        header_layout = QtWidgets.QVBoxLayout(header_container)
+        header_layout.setContentsMargins(0, 0, 0, 10)
+
+        context_text = f"{rule_name} ({process_name})"
+        process_lbl = QtWidgets.QLabel(context_text)
+        process_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;")
+
+        header_layout.addWidget(process_lbl)
+
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        line.setStyleSheet("background-color: #3d3d3d;")
+
+        layout.addWidget(header_container)
+        layout.addWidget(line)
+        layout.addSpacing(10)
+
+        warn_header_layout = QtWidgets.QHBoxLayout()
+        warn_icon = QtWidgets.QLabel()
+        warn_icon.setPixmap(
+            style.standardPixmap(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning).scaled(
+                16,
+                16,
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+        warn_label = QtWidgets.QLabel("Warning Message")
+        warn_label.setStyleSheet("font-weight: bold;")
+        warn_header_layout.addWidget(warn_icon)
+        warn_header_layout.addWidget(warn_label)
+        warn_header_layout.addStretch()
+        layout.addLayout(warn_header_layout)
+
+        params = ["measured", "limit", "target"]
+
+        self.warn_edit = ParameterEdit(params, self)
+        self.warn_edit.setPlainText(feedback.warning_msg)
+        self.warn_edit.setPlaceholderText(
+            "e.g., Feature is too small ({measured}), minimum required is {limit}"
+        )
+        layout.addWidget(self.warn_edit)
+
+        layout.addSpacing(10)
+
+        err_header_layout = QtWidgets.QHBoxLayout()
+        err_icon = QtWidgets.QLabel()
+        err_icon.setPixmap(
+            style.standardPixmap(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical).scaled(
+                16,
+                16,
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+        err_label = QtWidgets.QLabel("Error Message")
+        err_label.setStyleSheet("font-weight: bold;")
+        err_header_layout.addWidget(err_icon)
+        err_header_layout.addWidget(err_label)
+        err_header_layout.addStretch()
+        layout.addLayout(err_header_layout)
+
+        self.err_edit = ParameterEdit(params, self)
+        self.err_edit.setPlainText(feedback.error_msg)
+        self.err_edit.setPlaceholderText(
+            "e.g., Critical failure: {measured} is far below the {limit} limit."
+        )
+        layout.addWidget(self.err_edit)
+
+        help_container = QtWidgets.QWidget()
+        help_container.setObjectName("HelpContainer")
+        help_container.setStyleSheet("""
+            #HelpContainer {
+                background-color: #2b2b2b; 
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+            }
+            QLabel { color: #aaaaaa; }
+        """)
+
+        help_layout = QtWidgets.QGridLayout(help_container)
+        help_layout.setContentsMargins(10, 10, 10, 10)
+        help_layout.setSpacing(6)
+
+        help_title = QtWidgets.QLabel("Available Parameters")
+        help_title.setStyleSheet("font-weight: bold; color: #ffffff; margin-bottom: 2px;")
+        help_layout.addWidget(help_title, 0, 0, 1, 2)
+
+        placeholders = [
+            ("<b>{measured}</b>", "Current measured value"),
+            ("<b>{limit}</b>", "The threshold value"),
+            ("<b>{target}</b>", "The ideal target value"),
+        ]
+
+        for i, (code, desc) in enumerate(placeholders):
+            row = i + 1
+            help_layout.addWidget(QtWidgets.QLabel(code), row, 0)
+            help_layout.addWidget(QtWidgets.QLabel(desc), row, 1)
+
+        help_layout.setColumnStretch(1, 1)
+        layout.addSpacing(10)
+        layout.addWidget(help_container)
+
+        self.buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+    def get_data(self) -> tuple[str, str]:
+        return self.warn_edit.toPlainText().strip(), self.err_edit.toPlainText().strip()
+
+    def accept(self):
+        warn, err = self.get_data()
+        allowed = {"measured", "limit", "target"}
+        import re
+
+        found_tags = re.findall(r"\{(.*?)\}", warn + err)
+
+        for tag in found_tags:
+            if tag not in allowed:
+                QtWidgets.QMessageBox.warning(
+                    self, "Invalid Tag", f"The tag {{{tag}}} is not recognized."
+                )
+                return
+        super().accept()
+
+
+# =============================================================================
+
+
+class MaterialTableView(QtCore.QObject):
+    selection_changed = QtCore.Signal(str)
+    category_changed = QtCore.Signal(str, str)
+
     def __init__(self, table: QtWidgets.QTableWidget):
+        super().__init__()
         self.table = table
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(["Material", "Category"])
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
 
-    def populate(self, process: Process):
-        self.table.blockSignals(True)  # Prevent feedback loops
+        self.table.itemSelectionChanged.connect(self._on_selection)
+        self.table.itemChanged.connect(self._on_item_changed)
+        self._is_populating = False
+
+    def populate(self, materials: dict):
+        self._is_populating = True
+        self.table.blockSignals(True)
         self.table.setRowCount(0)
-        for name, mat in process.materials.items():
+
+        for name, mat in materials.items():
             row = self.table.rowCount()
             self.table.insertRow(row)
 
-            # Name Item (Non-editable for now to maintain dict keys)
             name_item = QtWidgets.QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-
-            # Category Item (Editable)
             cat_item = QtWidgets.QTableWidgetItem(mat.category)
 
             self.table.setItem(row, 0, name_item)
             self.table.setItem(row, 1, cat_item)
+
         self.table.blockSignals(False)
+        self._is_populating = False
 
-    def sync_material_category(self, item: QtWidgets.QTableWidgetItem, process: Process):
-        """Updates the material's category in the process object when the table is edited."""
-        if item.column() != 1:  # Only column 1 is the Category
+    def select_material(self, name: str):
+        items = self.table.findItems(name, QtCore.Qt.MatchFlag.MatchExactly)
+        if items:
+            self.table.setCurrentItem(items[0])
+
+    def get_selected_material(self) -> Optional[str]:
+        items = self.table.selectedItems()
+        return self.table.item(items[0].row(), 0).text() if items else None  # type: ignore
+
+    def _on_selection(self):
+        if self._is_populating:
+            return
+        mat_name = self.get_selected_material()
+        self.selection_changed.emit(mat_name if mat_name else "")
+
+    def _on_item_changed(self, item):
+        if self._is_populating or item.column() != 1:
+            return
+        name_item = self.table.item(item.row(), 0)
+        if name_item:
+            self.category_changed.emit(name_item.text(), item.text().strip())
+
+
+# =============================================================================
+
+
+class VisualizerView(QtCore.QObject):
+    def __init__(self, container: QtWidgets.QWidget):
+        super().__init__()
+        self.container = container
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = self.container.layout()
+        if layout is None:
+            layout = QtWidgets.QHBoxLayout(self.container)
+            layout.setContentsMargins(10, 0, 10, 0)
+            layout.setSpacing(8)
+
+        box_layout: QtWidgets.QHBoxLayout = layout  # type: ignore
+
+        self.container.setFixedHeight(32)
+        self.container.setStyleSheet("border-radius: 6px; background-color: #222;")
+
+        style_status = "QLabel { color: #000; font-weight: bold; background: rgba(220, 220, 220, 0.7); font-size: 10px; border-radius: 8px; margin: 6px 0; padding: 0 12px; }"
+        style_bound = "QLabel { color: #ccc; font-weight: bold; background: rgba(0, 0, 0, 0.6); border-radius: 8px; margin: 6px 0; padding: 0 8px; font-size: 10px; }"
+
+        self.zone_1 = QtWidgets.QLabel("ERROR")
+        self.boundary_left = QtWidgets.QLabel("0")
+        self.zone_2 = QtWidgets.QLabel("WARNING")
+        self.boundary_right = QtWidgets.QLabel("0")
+        self.zone_3 = QtWidgets.QLabel("SUCCESS")
+
+        for lbl in [self.zone_1, self.zone_2, self.zone_3]:
+            lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(style_status)
+            lbl.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred
+            )
+
+        for lbl in [self.boundary_left, self.boundary_right]:
+            lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(style_bound)
+
+        for widget in [
+            self.zone_1,
+            self.boundary_left,
+            self.zone_2,
+            self.boundary_right,
+            self.zone_3,
+        ]:
+            box_layout.addStretch(1)
+            box_layout.addWidget(widget)
+        box_layout.addStretch(1)
+
+    def update_display(self, rule, target: Optional[float], limit: Optional[float]):
+        if not rule or getattr(rule, "is_binary", False) or target is None or limit is None:
+            self.container.hide()
             return
 
-        row = item.row()
-        name_item = self.table.item(row, 0)
-        if not name_item:
-            return
+        self.container.show()
+        unit = getattr(rule, "unit", "")
+        is_min_rule = rule.comparison == "min"
 
-        mat_name = name_item.text()
-        new_category = item.text().strip()
+        if is_min_rule:
+            self.zone_1.setText("ERROR")
+            self.zone_3.setText("SUCCESS")
+            stops = "stop:0 #8a2b2b, stop:0.4 #94571a, stop:0.6 #94571a, stop:1 #3e7a4a"
+            self.boundary_left.setText(f"{limit}{unit}")
+            self.boundary_right.setText(f"{target}{unit}")
+        else:
+            self.zone_1.setText("SUCCESS")
+            self.zone_3.setText("ERROR")
+            stops = "stop:0 #3e7a4a, stop:0.4 #94571a, stop:0.6 #94571a, stop:1 #8a2b2b"
+            self.boundary_left.setText(f"{target}{unit}")
+            self.boundary_right.setText(f"{limit}{unit}")
 
-        if mat_name in process.materials:
-            process.materials[mat_name].category = new_category
+        self.container.setStyleSheet(
+            f"QFrame {{ border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {stops}); border: 1px solid rgba(255,255,255,0.05); }}"
+        )
+
+    def hide(self):
+        self.container.hide()
 
 
-class MaterialEditController:
+# =============================================================================
+
+
+class MaterialEditView(QtCore.QObject):
+    limit_changed = QtCore.Signal(object, str, str)
+    selection_changed = QtCore.Signal(object, object, object)
+
     def __init__(self, table: QtWidgets.QTableWidget):
+        super().__init__()
         self.table = table
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Rule", "Target", "Warning", "Error"])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Rule", "Target", "Limit"])
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
-        self.table.cellChanged.connect(self.on_cell_changed)
 
-        self.active_material: Optional[Material] = None
-        self.default_material: Optional[Material] = None
+        self.table.cellChanged.connect(self._on_cell_changed)
+        self.table.itemSelectionChanged.connect(self._on_selection_changed)
 
-    def on_cell_changed(self, row, column):
-        # Only listen to Target, Warning, Error columns
-        if column not in [1, 2, 3] or not self.active_material or not self.default_material:
-            return
+        self.delegate = NumericValidationDelegate(self.table)
+        self.table.setItemDelegate(self.delegate)
 
-        item = self.table.item(row, column)
-        rule_item = self.table.item(row, 0)
-        if not item or not rule_item:
-            return
-
-        rule = rule_item.data(QtCore.Qt.ItemDataRole.UserRole)
-        input_text = item.text().strip()
-
-        # 1. Map column to attribute
-        attr_map = {1: "target", 2: "warning", 3: "error"}
-        attr_name = attr_map[column]
-
-        # 2. Get/Create RuleLimit for the active material
-        from dfm.processes.process import RuleLimit
-
-        if rule not in self.active_material.rule_limits:
-            self.active_material.rule_limits[rule] = RuleLimit()
-
-        limit_obj = self.active_material.rule_limits[rule]
-
-        # 3. Handle Empty / Inheritance Reversion
-        if not input_text or input_text.upper() in ["N/A", "NONE", "-"]:
-            setattr(limit_obj, attr_name, "")
-            # If this is a specific material, it will now inherit from Default again
-        else:
-            # Add unit if missing for numeric rules
-            if rule.unit and not any(input_text.endswith(u) for u in ["mm", "°", "%"]):
-                input_text = f"{input_text}{rule.unit}"
-
-            # Write to memory
-            setattr(limit_obj, attr_name, input_text)
-
-        # 4. Refresh View Logic
-        self.table.blockSignals(True)
-
-        # Determine inheritance status for coloring
-        is_default_mat = self.active_material.name == "Default"
-
-        # If we updated the 'Default' material, we should ideally refresh everything
-        # so other materials see the change. For now, we update the current cell.
-        default_limit = self.default_material.rule_limits.get(rule)
-        default_val = getattr(default_limit, attr_name) if default_limit else ""
-
-        # Update text in case we added units
-        item.setText(input_text if input_text else default_val)
-
-        # Coloring Logic
-        if is_default_mat:
-            item.setForeground(QtGui.QColor("#ffffff"))  # Always white
-        elif input_text and input_text != default_val:
-            item.setForeground(QtGui.QColor("#ffaa00"))  # Custom: Orange
-        else:
-            item.setForeground(QtGui.QColor("#ffffff"))  # Inherited: White
-
-        self.table.blockSignals(False)
-
-    def populate(self, material, default_material, active_rules: list[Rulebook]):
-        self.active_material = material
-        self.default_material = default_material
-
+    def populate(self, material: Material, default_material: Material, active_rules: list):
         self.table.blockSignals(True)
         self.table.setRowCount(0)
 
@@ -564,81 +672,462 @@ class MaterialEditController:
             rule_item.setFlags(rule_item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 0, rule_item)
 
-            limit = material.rule_limits.get(rule)
+            limit_data = material.rule_limits.get(rule)
             def_limit = default_material.rule_limits.get(rule) if default_material else None
 
-            for col, attr in enumerate(["target", "warning", "error"], start=1):
-                # --- Binary Rule Handling ---
-                if rule.is_binary:
+            for col, attr in enumerate(["target", "limit"], start=1):
+                if getattr(rule, "is_binary", False):
                     table_item = QtWidgets.QTableWidgetItem("N/A")
-                    # Make it non-selectable and non-editable
                     table_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled)
-                    table_item.setForeground(QtGui.QColor("#666666"))  # Dimmed color
+                    table_item.setForeground(QtGui.QColor("#666666"))
                 else:
-                    val = getattr(limit, attr) if limit else ""
+                    val = getattr(limit_data, attr) if limit_data else ""
                     def_val = getattr(def_limit, attr) if def_limit else ""
 
-                    # Inheritance Logic
-                    is_default_mat = material.name == "Default"
+                    is_custom = bool(val and val != def_val and material.name != "Default")
+                    display_text = val if val or material.name == "Default" else def_val
 
-                    if is_default_mat:
-                        display_text = val
-                        is_custom = False
-                    else:
-                        display_text = val if val else def_val
-                        is_custom = bool(val and val != def_val)
+                    if (
+                        display_text
+                        and str(display_text).upper() not in ["N/A", ""]
+                        and getattr(rule, "unit", "")
+                    ):
+                        display_text = f"{display_text}{rule.unit}"
 
-                    table_item = QtWidgets.QTableWidgetItem(display_text)
-
-                    # Visuals for numeric rules
-                    if is_custom:
-                        table_item.setForeground(QtGui.QColor("#ffaa00"))
-                    else:
-                        table_item.setForeground(QtGui.QColor("#ffffff"))
+                    table_item = QtWidgets.QTableWidgetItem(str(display_text))
+                    table_item.setForeground(QtGui.QColor("#ffaa00" if is_custom else "#ffffff"))
 
                 self.table.setItem(row, col, table_item)
 
+            if not getattr(rule, "is_binary", False):
+                self._validate_row_values(row, rule)
+
+        self.table.blockSignals(False)
+        self._on_selection_changed()
+
+    def clear(self):
+        self.table.setRowCount(0)
+
+    def _on_cell_changed(self, row, col):
+        if col not in [1, 2]:
+            return
+
+        item = self.table.item(row, col)
+        rule_item = self.table.item(row, 0)
+        if not item or not rule_item:
+            return
+
+        rule = rule_item.data(QtCore.Qt.ItemDataRole.UserRole)
+        cleaned_val = item.text().replace(getattr(rule, "unit", ""), "").strip()
+
+        attr = "target" if col == 1 else "limit"
+        self.limit_changed.emit(rule, attr, cleaned_val)
+
+        self.table.blockSignals(True)
+        if cleaned_val and cleaned_val.upper() != "N/A" and getattr(rule, "unit", ""):
+            item.setText(f"{cleaned_val}{rule.unit}")
+        item.setForeground(QtGui.QColor("#ffaa00"))
         self.table.blockSignals(False)
 
+        self._validate_row_values(row, rule)
+        self._on_selection_changed()
 
-class AddMaterialDialog(QtWidgets.QDialog):
-    def __init__(self, existing_categories: list[str], parent=None):
+    def _get_numeric_val(self, row, col, rule) -> Optional[float]:
+        item = self.table.item(row, col)
+        if not item or not item.text():
+            return None
+        try:
+            return float(item.text().replace(getattr(rule, "unit", ""), "").strip())
+        except ValueError:
+            return None
+
+    def _validate_row_values(self, row, rule):
+        t = self._get_numeric_val(row, 1, rule)
+        l = self._get_numeric_val(row, 2, rule)
+
+        is_invalid = False
+        if t is not None and l is not None:
+            is_min_rule = rule.comparison == "min"
+            if is_min_rule and l > t:
+                is_invalid = True
+            elif not is_min_rule and l < t:
+                is_invalid = True
+
+        color = QtGui.QColor("#442222") if is_invalid else QtGui.QColor(0, 0, 0, 0)
+        for col_idx in range(self.table.columnCount()):
+            item = self.table.item(row, col_idx)
+            if item:
+                item.setBackground(color)
+
+    def _on_selection_changed(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            self.selection_changed.emit(None, None, None)
+            return
+
+        row = selected[0].row()
+        rule_item = self.table.item(row, 0)
+        if not rule_item:
+            self.selection_changed.emit(None, None, None)
+            return
+
+        rule = rule_item.data(QtCore.Qt.ItemDataRole.UserRole)
+        t = self._get_numeric_val(row, 1, rule)
+        l = self._get_numeric_val(row, 2, rule)
+        self.selection_changed.emit(rule, t, l)
+
+
+# =============================================================================
+
+
+class AddProcessDialog(QtWidgets.QDialog):
+    def __init__(self, categories: list[str], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Add New Material")
+        self.setWindowTitle("Add New Process")
+        self.setMinimumWidth(350)
 
         layout = QtWidgets.QFormLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
 
         self.name_edit = QtWidgets.QLineEdit()
-        # The key: an editable QComboBox
+        self.name_edit.setMinimumHeight(32)
+
         self.cat_combo = QtWidgets.QComboBox()
         self.cat_combo.setEditable(True)
-        self.cat_combo.addItems(sorted(list(set(existing_categories))))
+        self.cat_combo.setMinimumHeight(32)
         self.cat_combo.setPlaceholderText("Select or type a category...")
+        self.cat_combo.addItems(sorted(list(set(categories))))
 
-        layout.addRow("Material Name:", self.name_edit)
+        layout.addRow("Process Name:", self.name_edit)
         layout.addRow("Category:", self.cat_combo)
 
-        buttons = QtWidgets.QDialogButtonBox(
+        self.buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok
             | QtWidgets.QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        for button in self.buttons.buttons():
+            button.setMinimumHeight(32)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addRow(self.buttons)
 
     def get_data(self) -> tuple[str, str]:
         return self.name_edit.text().strip(), self.cat_combo.currentText().strip()
 
 
-#
-#
-#
-#
-#
-#
-# -------------------------- Gui Command --------------------------------- #
+# =============================================================================
+
+
+class AddMaterialDialog(QtWidgets.QDialog):
+    def __init__(self, existing_categories: list[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add New Material")
+        self.setMinimumWidth(350)
+
+        layout = QtWidgets.QFormLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
+
+        self.name_edit = QtWidgets.QLineEdit()
+        self.name_edit.setMinimumHeight(32)
+        self.name_edit.setPlaceholderText("e.g., Aluminum 6061")
+
+        self.cat_combo = QtWidgets.QComboBox()
+        self.cat_combo.setEditable(True)
+        self.cat_combo.setMinimumHeight(32)
+
+        unique_cats = sorted(list(set(existing_categories)))
+        self.cat_combo.addItems(unique_cats)
+        if not unique_cats:
+            self.cat_combo.setPlaceholderText("Type a category...")
+
+        layout.addRow("Material Name:", self.name_edit)
+        layout.addRow("Category:", self.cat_combo)
+
+        self.buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        for button in self.buttons.buttons():
+            button.setMinimumHeight(32)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addRow(self.buttons)
+
+    def get_data(self) -> tuple[str, str]:
+        return self.name_edit.text().strip(), self.cat_combo.currentText().strip()
+
+
+# =============================================================================
+
+
+class ProcessManagerController(QtCore.QObject):
+    def __init__(self, view: "ProcessManager", model: ProcessManagerModel):
+        super().__init__()
+        self.view = view
+        self.model = model
+        self._connect_signals()
+        self._refresh_process_tree()
+
+    def _connect_signals(self):
+        self.view.save_requested.connect(self.on_save)
+        self.view.reject_requested.connect(self.on_reject)
+        self.view.add_process_requested.connect(self.on_add_process)
+        self.view.add_material_requested.connect(self.on_add_material)
+        self.view.delete_material_requested.connect(self.on_delete_material)
+
+        self.view.tree_view.selection_changed.connect(self.on_process_selected)
+        self.view.rule_view.rules_changed.connect(self.on_rules_changed)
+        self.view.material_view.selection_changed.connect(self.on_material_selected)
+        self.view.material_view.category_changed.connect(self.on_material_category_changed)
+        self.view.material_edit_view.limit_changed.connect(self.on_limit_changed)
+        self.view.material_edit_view.selection_changed.connect(
+            self.view.visualizer_view.update_display
+        )
+        self.view.rule_view.edit_requested.connect(self.on_edit_feedback)
+
+    def _update_dirty_state(self):
+        self.view.set_dirty_title(self.model.is_dirty)
+
+    def _refresh_process_tree(self):
+        self.view.tree_view.populate(self.model.get_categorized_processes())
+
+    def on_process_selected(self, name: str):
+        process = self.model.set_active_process(name)
+        if not process:
+            return
+
+        self.view.set_process_label(process.name, process.description)
+        self.view.rule_view.populate(process.active_rules)
+        self.view.material_view.populate(process.materials)
+        self.view.material_edit_view.clear()
+        self.view.set_material_edit_title("Select a Material")
+
+    def on_material_selected(self, name: str):
+        if not name:
+            self.view.material_edit_view.clear()
+            self.view.set_material_edit_title("Select a Material")
+            return
+
+        material = self.model.set_active_material(name)
+        if not material or not self.model.active_process:
+            return
+
+        self.view.set_material_edit_title(f"Editing {material.name}")
+        mats = list(self.model.active_process.materials.values())
+        default_material = mats[0] if mats else material
+
+        self.view.material_edit_view.populate(
+            material, default_material, self.model.active_process.active_rules
+        )
+
+    def on_rules_changed(self, active_rules: list):
+        self.model.update_active_rules(active_rules)
+        self._update_dirty_state()
+        if self.model.active_material:
+            self.on_material_selected(self.model.active_material.name)
+        else:
+            self.view.material_edit_view.clear()
+
+    def on_edit_feedback(self, rule_enum: Rulebook):
+        process = self.model.active_process
+        if not process:
+            return
+
+        current_feedback = process.rule_feedback.get(rule_enum)
+
+        if not current_feedback:
+            current_feedback = RuleFeedback()
+            process.rule_feedback[rule_enum] = current_feedback
+
+        dlg = EditFeedbackDialog(
+            process.name,
+            rule_enum.label,
+            current_feedback,
+            self.view,
+        )
+
+        if dlg.exec():
+            warn, err = dlg.get_data()
+
+            current_feedback.warning_msg = warn
+            current_feedback.error_msg = err
+
+            self._update_dirty_state()
+
+    def on_material_category_changed(self, mat_name: str, new_category: str):
+        self.model.update_material_category(mat_name, new_category)
+        self._update_dirty_state()
+
+    def on_limit_changed(self, rule, attr: str, value: str):
+        self.model.update_rule_limit(rule, attr, value)
+        self._update_dirty_state()
+
+    def on_add_process(self):
+        categories = self.model.registry.get_categories()
+        dlg = AddProcessDialog(categories, self.view)
+        if dlg.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            name, category = dlg.get_data()
+            if not name or not category:
+                QtWidgets.QMessageBox.warning(
+                    self.view, "Invalid Input", "Both name and category are required."
+                )
+                return
+
+            if self.model.add_process(name, category):
+                self._update_dirty_state()
+                self._refresh_process_tree()
+                self.view.tree_view.select_process(name)
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self.view, "Duplicate", f"Process '{name}' already exists."
+                )
+
+    def on_add_material(self):
+        process = self.model.active_process
+        if not process:
+            QtWidgets.QMessageBox.warning(self.view, "No Process", "Please select a process first.")
+            return
+
+        existing_cats = [m.category for m in process.materials.values()]
+        dlg = AddMaterialDialog(existing_cats, self.view)
+        if dlg.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            name, category = dlg.get_data()
+            if not name or not category:
+                QtWidgets.QMessageBox.warning(
+                    self.view, "Invalid Input", "Name and Category are required."
+                )
+                return
+
+            if self.model.add_material(name, category):
+                self._update_dirty_state()
+                self.view.material_view.populate(process.materials)
+                self.view.material_view.select_material(name)
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self.view, "Duplicate", f"Material '{name}' already exists."
+                )
+
+    def on_delete_material(self):
+        mat_name = self.view.material_view.get_selected_material()
+        if not mat_name:
+            return
+
+        if mat_name == "Default":
+            QtWidgets.QMessageBox.critical(
+                self.view, "Error", "The 'Default' material cannot be deleted."
+            )
+            return
+
+        confirm = QtWidgets.QMessageBox.question(
+            self.view,
+            "Delete Material",
+            f"Are you sure you want to delete '{mat_name}'?",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+        )
+
+        if confirm == QtWidgets.QMessageBox.StandardButton.Yes:
+            if self.model.delete_material(mat_name):
+                self._update_dirty_state()
+                self.view.material_view.populate(self.model.active_process.materials)
+                self.view.material_edit_view.clear()
+                self.view.set_material_edit_title("Select a Material")
+
+    def on_save(self):
+        try:
+            self.model.save()
+            self._update_dirty_state()
+            self.view.accept()
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(
+                self.view, "Save Error", f"Failed to save process data: {str(e)}"
+            )
+
+    def on_reject(self):
+        if self.model.is_dirty:
+            confirm = QtWidgets.QMessageBox.question(
+                self.view,
+                "Unsaved Changes",
+                "You have unsaved changes. Are you sure you want to discard them?",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if confirm == QtWidgets.QMessageBox.StandardButton.No:
+                return
+        self.view.super_reject()
+
+
+# =============================================================================
+
+
+class ProcessManager(QtWidgets.QDialog):
+    """The main QDialog bridging FreeCAD into the MVC architecture."""
+
+    save_requested = QtCore.Signal()
+    reject_requested = QtCore.Signal()
+    add_process_requested = QtCore.Signal()
+    add_material_requested = QtCore.Signal()
+    delete_material_requested = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent or Gui.getMainWindow())
+        self.form = Gui.PySideUic.loadUi(":/ui/process_manager.ui")  # type: ignore
+        self.setWindowTitle("DFM Process Manager")
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(self.form)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.resize(1100, 800)
+
+        self.form.hSplitter.setStretchFactor(0, 1)
+        self.form.hSplitter.setStretchFactor(1, 2)
+
+        self.form.visualizer_container.setMinimumHeight(40)
+        self.form.visualizer_container.setStyleSheet(
+            "background-color: #1a1a1a; border-radius: 4px;"
+        )
+        self.form.lProcess.setText("Select a Process")
+
+        self.tree_view = ProcessTreeView(self.form.twProcess)
+        self.rule_view = RuleListView(self.form.lwRules, self.form.leSearchRules)
+        self.material_view = MaterialTableView(self.form.twMaterials)
+        self.material_edit_view = MaterialEditView(self.form.twMaterialEdit)
+        self.visualizer_view = VisualizerView(self.form.visualizer_container)
+
+        self.visualizer_view.hide()
+
+        self.form.pbNewProcess.clicked.connect(self.add_process_requested.emit)
+        self.form.pbMaterialAdd.clicked.connect(self.add_material_requested.emit)
+        self.form.pbMaterialDelete.clicked.connect(self.delete_material_requested.emit)
+        self.form.buttonBox.accepted.connect(self.save_requested.emit)
+        self.form.buttonBox.rejected.connect(self.reject_requested.emit)
+
+        self.model = ProcessManagerModel()
+        self.controller = ProcessManagerController(self, self.model)
+
+    def set_dirty_title(self, is_dirty: bool):
+        title = self.windowTitle().replace(" *", "")
+        if is_dirty:
+            title += " *"
+        self.setWindowTitle(title)
+
+    def set_process_label(self, name: str, description: str):
+        self.form.lProcess.setText(name if name else "Select a Process")
+        if hasattr(self.form, "lblDescription"):
+            self.form.lblDescription.setText(description)
+
+    def set_material_edit_title(self, text: str):
+        self.form.gbMaterialEdit.setTitle(text)
+
+    def reject(self):
+        self.reject_requested.emit()
+
+    def super_reject(self):
+        super().reject()
+
+
+# =============================================================================
 
 
 class ProcessManagerCommand:
@@ -658,4 +1147,4 @@ class ProcessManagerCommand:
 
 
 if App.GuiUp:
-    Gui.addCommand("DFM_ProccessManager", ProcessManagerCommand())
+    Gui.addCommand("DFM_ProcessManager", ProcessManagerCommand())

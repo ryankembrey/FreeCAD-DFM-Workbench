@@ -19,7 +19,7 @@
   <property name="windowTitle">
    <string>Dialog</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0">
+  <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0,0">
    <property name="sizeConstraint">
     <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
    </property>
@@ -62,19 +62,51 @@
        </item>
        <item>
         <layout class="QGridLayout" name="glProccessButtons">
-         <item row="0" column="0">
+         <item row="0" column="1">
           <widget class="QPushButton" name="pbNewProcess">
+           <property name="toolTip">
+            <string>Adds a new process to the tree</string>
+           </property>
            <property name="text">
             <string>New</string>
            </property>
           </widget>
          </item>
-         <item row="0" column="1">
+         <item row="0" column="2">
           <widget class="QPushButton" name="pbImportProcess">
+           <property name="toolTip">
+            <string>Imports a process from a .yaml file</string>
+           </property>
            <property name="text">
             <string>Import</string>
            </property>
           </widget>
+         </item>
+         <item row="0" column="3">
+          <spacer name="horizontalSpacer_4">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item row="0" column="0">
+          <spacer name="horizontalSpacer_3">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
         </layout>
        </item>
@@ -90,6 +122,9 @@
           <font>
            <pointsize>12</pointsize>
           </font>
+         </property>
+         <property name="toolTip">
+          <string>The currently selected process in the tree</string>
          </property>
          <property name="layoutDirection">
           <enum>Qt::LayoutDirection::LeftToRight</enum>
@@ -130,6 +165,9 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_2">
           <item>
+           <widget class="QLineEdit" name="leSearchRules"/>
+          </item>
+          <item>
            <widget class="QListWidget" name="lwRules">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
@@ -142,6 +180,9 @@
               <width>16777215</width>
               <height>16777215</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables manufacturing rules for the active process.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
             <property name="modelColumn">
              <number>0</number>
@@ -172,7 +213,7 @@
       <property name="lineWidth">
        <number>0</number>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_4" stretch="0,0,0">
+      <layout class="QVBoxLayout" name="verticalLayout_4" stretch="0,0">
        <property name="sizeConstraint">
         <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
        </property>
@@ -189,23 +230,59 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_6">
           <item>
-           <widget class="QTableWidget" name="twMaterials"/>
+           <widget class="QTableWidget" name="twMaterials">
+            <property name="toolTip">
+             <string/>
+            </property>
+           </widget>
           </item>
           <item>
            <layout class="QGridLayout" name="gridLayout">
-            <item row="0" column="0">
+            <item row="0" column="2">
+             <widget class="QPushButton" name="pbMaterialDelete">
+              <property name="toolTip">
+               <string>Removes the selected material from the active process</string>
+              </property>
+              <property name="text">
+               <string>Delete</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="3">
+             <spacer name="horizontalSpacer_2">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="0" column="1">
              <widget class="QPushButton" name="pbMaterialAdd">
+              <property name="toolTip">
+               <string>Adds a new material to the active process</string>
+              </property>
               <property name="text">
                <string>Add</string>
               </property>
              </widget>
             </item>
-            <item row="0" column="1">
-             <widget class="QPushButton" name="pbMaterialDelete">
-              <property name="text">
-               <string>Delete</string>
+            <item row="0" column="0">
+             <spacer name="horizontalSpacer">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
               </property>
-             </widget>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
             </item>
            </layout>
           </item>
@@ -221,33 +298,53 @@
           <item>
            <widget class="QTableWidget" name="twMaterialEdit"/>
           </item>
+          <item>
+           <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0">
+            <item row="0" column="1">
+             <widget class="QDialogButtonBox" name="buttonBox">
+              <property name="acceptDrops">
+               <bool>false</bool>
+              </property>
+              <property name="layoutDirection">
+               <enum>Qt::LayoutDirection::LeftToRight</enum>
+              </property>
+              <property name="autoFillBackground">
+               <bool>false</bool>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="standardButtons">
+               <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Save</set>
+              </property>
+              <property name="centerButtons">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
          </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QDialogButtonBox" name="buttonBox">
-         <property name="acceptDrops">
-          <bool>false</bool>
-         </property>
-         <property name="layoutDirection">
-          <enum>Qt::LayoutDirection::LeftToRight</enum>
-         </property>
-         <property name="autoFillBackground">
-          <bool>false</bool>
-         </property>
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
-         </property>
-         <property name="standardButtons">
-          <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Save</set>
-         </property>
-         <property name="centerButtons">
-          <bool>false</bool>
-         </property>
         </widget>
        </item>
       </layout>
      </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="visualizer_container">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::Shape::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Shadow::Raised</enum>
+     </property>
     </widget>
    </item>
   </layout>

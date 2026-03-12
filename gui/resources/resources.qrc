@@ -2,6 +2,8 @@
 <qresource prefix="/">
     <file>ui/task_setup.ui</file>
     <file>ui/task_results.ui</file>
+    <file>ui/process_manager.ui</file>
     <file>icons/dfm_analysis.svg</file>
+    <file>icons/process_manager.svg</file>
 </qresource>
 </RCC>
