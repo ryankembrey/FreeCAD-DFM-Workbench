@@ -20,9 +20,9 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import FreeCADGui as Gui
+import FreeCADGui as Gui  # type: ignore
 
-from gui import task_setup, task_show_normals
+from gui import task_setup, task_show_normals, process_manager
 
 
 class DFMWorkbench(Gui.Workbench):
@@ -37,11 +37,10 @@ class DFMWorkbench(Gui.Workbench):
 
         self.list = [
             "DFM_SetupAnalysis",
-        ]  # a list of command names created in the line above
-        self.appendToolbar(
-            "DFM_SetupAnalysis", self.list
-        )  # creates a new toolbar with your commands
-        # self.appendMenu("My New Menu", self.list)  # creates a new menu
+            "DFM_ProcessManager",
+        ]
+        self.appendToolbar("DFM Tools", self.list)
+        self.appendMenu("DFM", self.list)  # creates a new menu
         # self.appendMenu(
         #     ["An existing Menu", "My submenu"], self.list
         # )  # appends a submenu to an existing menu
