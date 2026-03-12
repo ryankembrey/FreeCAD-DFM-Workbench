@@ -21,21 +21,40 @@
 #  ***************************************************************************
 
 from enum import Enum
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class RuleType:
+    label: str
+    unit: Optional[str] = "mm"
+    is_binary: bool = False  # If True, Target/Warning/Error columns are irrelevant
+    comparison: str = "min"  # "min" or "max"
 
 
 class Rulebook(Enum):
-    """
-    A list of all DFM rule types supported by the workbench.
+    MIN_DRAFT_ANGLE = RuleType("Minimum Draft Angle", unit="°", comparison="min")
+    MIN_WALL_THICKNESS = RuleType("Minimum Wall Thickness", unit="mm", comparison="min")
+    MAX_WALL_THICKNESS = RuleType("Maximum Wall Thickness", unit="mm", comparison="max")
+    NO_UNDERCUTS = RuleType("Undercut", unit=None, is_binary=True)
 
-    Definition Format:
-        MEMBER_NAME = ("YAML_ID", "User Friendly Label")
-    """
+    @property
+    def id(self) -> str:
+        return self.name
 
-    MIN_DRAFT_ANGLE = ("MIN_DRAFT_ANGLE", "Minimum Draft Angle")
-    MIN_WALL_THICKNESS = ("MIN_WALL_THICKNESS", "Minimum Wall Thickness")
-    MAX_WALL_THICKNESS = ("MAX_WALL_THICKNESS", "Maximum Wall Thickness")
-    NO_UNDERCUTS = ("NO_UNDERCUTS", "Undercut")
+    @property
+    def label(self) -> str:
+        return self.value.label
 
-    def __init__(self, id_str, label):
-        self._value_ = id_str
-        self.label = label
+    @property
+    def unit(self) -> str:
+        return self.value.unit or ""
+
+    @property
+    def is_binary(self) -> bool:
+        return self.value.is_binary
+
+    @property
+    def comparison(self) -> str:
+        return self.value.comparison

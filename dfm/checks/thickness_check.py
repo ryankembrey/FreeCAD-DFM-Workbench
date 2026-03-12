@@ -20,23 +20,18 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import Any
-import FreeCAD
+from typing import Any, Optional
 
-from OCC.Core.TopoDS import TopoDS_Face
 from dfm.models import CheckResult, Severity
 from dfm.rules import Rulebook
 
 from dfm.core.base_check import BaseCheck
+from dfm.processes.process import RuleLimit, RuleFeedback
 from dfm.registries import register_check
 
 
 @register_check(Rulebook.MIN_WALL_THICKNESS)
 class MinThicknessCheck(BaseCheck):
-    """
-    Checks for walls that are too thin using Ray Casting.
-    """
-
     @property
     def name(self) -> str:
         return "Min Thickness Check"
@@ -47,58 +42,61 @@ class MinThicknessCheck(BaseCheck):
 
     def run_check(
         self,
-        analysis_data_map: dict[TopoDS_Face, list[float]],
-        parameters: dict[str, Any],
-        check_type,
+        analysis_data_map: dict[Any, list[float]],
+        rule_config: RuleLimit,
+        rule: Rulebook,
+        feedback: Optional[RuleFeedback] = None,
     ) -> list[CheckResult]:
         results: list[CheckResult] = []
+        fb = feedback or RuleFeedback()
 
-        min_allowed = parameters.get("min_wall_thickness")
-        if min_allowed is None:
+        target = self.safe_float(rule_config.target)
+        limit = self.safe_float(rule_config.limit)
+        unit = rule.unit
+
+        if target is None and limit is None:
             return []
 
         for face, thicknesses in analysis_data_map.items():
-            if not thicknesses:
-                continue
-
-            # Filter out rays that hit nothing
             valid_thicknesses = [t for t in thicknesses if t != float("inf")]
-
             if not valid_thicknesses:
                 continue
 
-            measured_min = min(valid_thicknesses)
+            measured = min(valid_thicknesses)
+            severity: Optional[Severity] = None
 
-            if measured_min < (min_allowed):
-                overview = f"{measured_min:.2f}mm < {min_allowed:.2f}mm"
-                message = (
-                    f"Minimum thickness violation. Measured: {measured_min:.2f}mm "
-                    f"(Limit: {min_allowed:.2f}mm)"
-                )
+            if limit is not None and measured < limit:
+                severity = Severity.ERROR
+            elif target is not None and measured < target:
+                severity = Severity.WARNING
 
-                result = CheckResult(
-                    rule_id=Rulebook.MIN_WALL_THICKNESS,
-                    overview=overview,
-                    message=message,
-                    severity=Severity.ERROR,
-                    failing_geometry=[face],
-                    ignore=False,
-                    value=float(measured_min),
-                    limit=float(min_allowed),
-                    comparison="<",
-                    unit="mm",
+            if severity:
+                template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
+
+                limit = limit if limit is not None else 0.0
+                target = target if target is not None else 0.0
+
+                formatted_msg = self.format_feedback(template, measured, target, limit, unit)
+                results.append(
+                    CheckResult(
+                        rule_id=rule,
+                        overview=f"{measured:.2f}mm < {limit:.2f}mm",
+                        message=formatted_msg,
+                        severity=severity,
+                        failing_geometry=[face],
+                        ignore=False,
+                        value=float(measured),
+                        limit=float(limit),
+                        comparison="<",
+                        unit="mm",
+                    )
                 )
-                results.append(result)
 
         return results
 
 
 @register_check(Rulebook.MAX_WALL_THICKNESS)
 class MaxThicknessCheck(BaseCheck):
-    """
-    Checks for walls that are too thick using Rolling Ball / Sphere method.
-    """
-
     @property
     def name(self) -> str:
         return "Max Thickness Check"
@@ -108,35 +106,56 @@ class MaxThicknessCheck(BaseCheck):
         return "SPHERE_THICKNESS_ANALYZER"
 
     def run_check(
-        self, analysis_data_map, parameters: dict[str, Any], check_type
+        self,
+        analysis_data_map: dict[Any, list[float]],
+        rule_config: RuleLimit,
+        rule: Rulebook,
+        feedback: Optional[RuleFeedback] = None,
     ) -> list[CheckResult]:
         results: list[CheckResult] = []
+        fb = feedback or RuleFeedback()
 
-        max_allowed = parameters.get("max_wall_thickness")
-        if max_allowed is None:
+        target = self.safe_float(rule_config.target)
+        limit = self.safe_float(rule_config.limit)
+        unit = rule.unit
+
+        if target is None and limit is None:
             return []
 
         for face, diameters in analysis_data_map.items():
             if not diameters:
                 continue
 
-            measured_max = max(diameters)
+            measured = max(diameters)
+            severity: Optional[Severity] = None
 
-            if measured_max > (max_allowed):
-                overview = f"{measured_max:.2f}mm > {max_allowed:.2f}mm\n"
-                message = (
-                    f"Maximum thickness violation. Measured: {measured_max:.2f}mm "
-                    f"(Limit: {max_allowed:.2f}mm). Risk of sink marks."
-                )
+            if limit is not None and measured > limit:
+                severity = Severity.ERROR
+            elif target is not None and measured > target:
+                severity = Severity.WARNING
 
-                result = CheckResult(
-                    rule_id=Rulebook.MAX_WALL_THICKNESS,
-                    overview=overview,
-                    message=message,
-                    severity=Severity.WARNING,
-                    failing_geometry=[face],
-                    ignore=False,
+            if severity:
+                template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
+                display_limit = limit if severity == Severity.ERROR else target
+
+                limit = display_limit if display_limit is not None else 0.0
+                target = target if target is not None else 0.0
+
+                formatted_msg = self.format_feedback(template, measured, target, limit, unit)
+
+                results.append(
+                    CheckResult(
+                        rule_id=rule,
+                        overview=f"{measured:.2f}{unit} > {limit:.2f}{unit}",
+                        message=formatted_msg,
+                        severity=severity,
+                        failing_geometry=[face],
+                        ignore=False,
+                        value=float(measured),
+                        limit=float(limit),
+                        comparison=">",
+                        unit="mm",
+                    )
                 )
-                results.append(result)
 
         return results

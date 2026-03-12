@@ -21,10 +21,11 @@
 #  ***************************************************************************
 
 from abc import ABC, abstractmethod
-from typing import Generator, Any
+from typing import Optional
 
-from OCC.Core.TopoDS import TopoDS_Face
 from dfm.models import CheckResult
+from dfm.processes.process import RuleFeedback, RuleLimit
+from dfm.rules import Rulebook
 
 
 class BaseCheck(ABC):
@@ -32,7 +33,6 @@ class BaseCheck(ABC):
     The base class for all checks. This class defines how all checks should behave.
     """
 
-    # Returns a human readable string for UI uses
     @property
     @abstractmethod
     def name(self) -> str:
@@ -50,7 +50,35 @@ class BaseCheck(ABC):
     def run_check(
         self,
         analysis_data_map,
-        parameters: dict[str, Any],
-        check_type,
+        rule_config: RuleLimit,
+        rule: Rulebook,
+        feedback: RuleFeedback,
     ) -> list[CheckResult]:
         pass
+
+    def safe_float(self, value: str) -> Optional[float]:
+        """Helper to convert YAML 'N/A' or numeric strings to floats safely."""
+        if value == "N/A" or not value:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
+
+    def format_feedback(
+        self, template: str, measured: float, target: float, limit: float, unit: str = ""
+    ) -> str:
+        """
+        Replaces placeholders in the feedback template with formatted values.
+        """
+        replacements = {
+            "{value}": f"{measured:.2f}{unit}",
+            "{limit}": f"{limit:.2f}{unit}",
+            "{target}": f"{target:.2f}{unit}",
+        }
+
+        formatted_msg = template
+        for placeholder, value in replacements.items():
+            formatted_msg = formatted_msg.replace(placeholder, value)
+
+        return formatted_msg

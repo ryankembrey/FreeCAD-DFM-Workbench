@@ -20,13 +20,13 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import Any
-
+from typing import Optional
 from OCC.Core.TopoDS import TopoDS_Face
 
 from dfm.models import CheckResult, Severity
 from dfm.rules import Rulebook
 from dfm.core.base_check import BaseCheck
+from dfm.processes.process import RuleLimit, RuleFeedback
 from dfm.registries import register_check
 
 
@@ -41,35 +41,35 @@ class UndercutCheck(BaseCheck):
         return "UNDERCUT_ANALYZER"
 
     def run_check(
-        self, analysis_data_map: dict[TopoDS_Face, float], parameters: dict[str, Any], check_type
+        self,
+        analysis_data_map: dict[TopoDS_Face, float],
+        rule_config: RuleLimit,
+        rule: Rulebook,
+        feedback: Optional[RuleFeedback] = None,
     ) -> list[CheckResult]:
         results: list[CheckResult] = []
+
+        fb = feedback or RuleFeedback()
 
         for face, undercut_ratio in analysis_data_map.items():
             if undercut_ratio > 0.00:
                 percentage = undercut_ratio * 100
-                overview = f"{percentage:.1f}% occlusion"
-                message = (
-                    f"Undercut detected. {percentage:.1f}% of this face is "
-                    "trapped (occluded from both Top and Bottom)."
-                    f"<div style='margin-top: 8px; font-style: italic;'>"
-                    f"<b>Suggestions:</b><br>"
-                    f"1) Remove the overhang or align the feature with the pull direction.<br>"
-                    f"2) Create a hole beneath/above the feature to allow the core/cavity to form the underside.<br>"
-                    f"3) If this feature is critical, note that it will require expensive sliding mechanisms in the mold."
-                    f"</div>"
-                )
+
+                severity = Severity.ERROR
+                template = fb.error_msg
+
+                msg = template
 
                 results.append(
                     CheckResult(
-                        rule_id=Rulebook.NO_UNDERCUTS,
-                        overview=overview,
-                        message=message,
-                        severity=Severity.ERROR,
+                        rule_id=rule,
+                        overview=f"{percentage:.1f}% occlusion",
+                        message=msg,
+                        severity=severity,
                         failing_geometry=[face],
                         ignore=False,
                         value=float(percentage),
-                        limit=float(0),
+                        limit=0.0,
                         comparison=">",
                         unit="%",
                     )
