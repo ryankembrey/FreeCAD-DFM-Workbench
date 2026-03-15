@@ -51,7 +51,7 @@ class UndercutAnalyzer(BaseAnalyzer):
 
     def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, Any]:
         pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
-        samples = kwargs.get("samples", 50)
+        samples = kwargs.get("samples", 10)
 
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
