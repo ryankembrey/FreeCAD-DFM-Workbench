@@ -76,8 +76,6 @@ def yield_face_uv_grid(
     """
     u_min, u_max, v_min, v_max = breptools.UVBounds(face)
 
-    classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
-
     # Apply margin (Default to none)
     u_len = u_max - u_min
     v_len = v_max - v_min
@@ -101,9 +99,7 @@ def yield_face_uv_grid(
         u = s_u_min + i * u_step
         for j in range(samples):
             v = s_v_min + j * v_step
-            state = classifier.Perform(gp_Pnt2d(u, v))
-            # Check if point is on the face
-            if state == TopAbs_IN or state == TopAbs_ON:
+            if is_point_on_face(u, v, face):
                 yield u, v
 
 
@@ -126,3 +122,46 @@ def get_point_from_uv(
     )
 
     return point
+
+
+from OCC.Core.BRepTools import breptools
+from OCC.Core.BRepBndLib import brepbndlib
+from OCC.Core.Bnd import Bnd_Box
+
+
+def get_face_uv_ratios(face: TopoDS_Face):
+    """
+    Calculates the ratio of parametric UV space to physical 3D space.
+    Returns (u_ratio, v_ratio) where ratio * target_mm = uv_step.
+    """
+    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+    u_range = abs(u_max - u_min)
+    v_range = abs(v_max - v_min)
+
+    bbox = Bnd_Box()
+    brepbndlib.Add(face, bbox)
+    x_min, y_min, z_min, x_max, y_max, z_max = bbox.Get()
+
+    phys_width = abs(x_max - x_min)
+    phys_height = abs(y_max - y_min)
+    phys_depth = abs(z_max - z_min)
+
+    dims = sorted([phys_width, phys_height, phys_depth], reverse=True)
+    phys_u_estimate = dims[0] if dims[0] > 1e-6 else 1.0
+    phys_v_estimate = dims[1] if dims[1] > 1e-6 else 1.0
+
+    u_ratio = u_range / phys_u_estimate
+    v_ratio = v_range / phys_v_estimate
+
+    return u_ratio, v_ratio
+
+
+def is_point_on_face(u: float, v: float, face: TopoDS_Face) -> bool:
+    """Checks if a point by UV is on a face."""
+    classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
+    state = classifier.Perform(gp_Pnt2d(u, v))
+
+    if state == TopAbs_IN or state == TopAbs_ON:
+        return True
+
+    return False
