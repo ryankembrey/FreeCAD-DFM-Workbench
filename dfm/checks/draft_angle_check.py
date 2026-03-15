@@ -63,6 +63,11 @@ class DraftAngleCheck(BaseCheck):
             if math.isclose(abs(measured), 90.0, abs_tol=tolerance):
                 continue
 
+            if limit is not None and math.isclose(measured, limit, abs_tol=tolerance):
+                continue
+            if target is not None and math.isclose(measured, target, abs_tol=tolerance):
+                continue
+
             severity: Optional[Severity] = None
             if limit is not None and measured < (limit - tolerance):
                 severity = Severity.ERROR
