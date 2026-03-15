@@ -1,7 +1,7 @@
 # FreeCAD DFM Workbench
 
 > [!CAUTION]
-> NOTE THIS WORKBENCH IS IN PRE-ALPHA AND IS NOT READY FOR USE
+> **NOTE:** This workbench is currently in active development (Alpha) for a University Capstone Project. It is functional, but subject to rapid changes. 
 
 ---
 ![DFM Workbench](.github/images/showcase.png)
