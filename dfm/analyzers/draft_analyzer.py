@@ -108,7 +108,7 @@ class DraftAnalyzer(BaseAnalyzer):
         Estimates the minimum draft angle (degrees) by sampling the surface normal across a UV grid.
         Returns the most critical (smallest) value found.
         """
-        min_draft_angle = 180
+        min_draft_angle = float("inf")
 
         for u, v in yield_face_uv_grid(face, samples, margin=0.01):
             normal_dir = get_face_uv_normal(face, u, v)
