@@ -72,7 +72,6 @@ def yield_face_uv_grid(
         face: The face to sample.
         samples: Number of points along each axis.
         margin: Percentage (0.0 to 0.5) to crop from edges to avoid corner noise.
-                Default 0.05 (5%) ensures rays don't graze adjacent faces.
     """
     u_min, u_max, v_min, v_max = breptools.UVBounds(face)
 
