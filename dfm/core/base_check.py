@@ -72,7 +72,7 @@ class BaseCheck(ABC):
         Replaces placeholders in the feedback template with formatted values.
         """
         replacements = {
-            "{value}": f"{measured:.2f}{unit}",
+            "{measured}": f"{measured:.2f}{unit}",
             "{limit}": f"{limit:.2f}{unit}",
             "{target}": f"{target:.2f}{unit}",
         }
