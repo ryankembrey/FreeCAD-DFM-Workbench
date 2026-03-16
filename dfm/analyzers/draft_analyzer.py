@@ -110,7 +110,7 @@ class DraftAnalyzer(BaseAnalyzer):
         """
         min_draft_angle = 180
 
-        for u, v in yield_face_uv_grid(face, samples, margin=0.05):
+        for u, v in yield_face_uv_grid(face, samples, margin=0.01):
             normal_dir = get_face_uv_normal(face, u, v)
             if not normal_dir:
                 FreeCAD.Console.PrintError(f"Normal returned None for face {face.__hash__()}")
