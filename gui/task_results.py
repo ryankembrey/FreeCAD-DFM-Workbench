@@ -276,7 +276,7 @@ class DFMAnnotation:
 
     # Default Styles
     TEXT_COLOR = (0.95, 0.95, 0.95)
-    BG_COLOR = (0.15, 0.15, 0.15)
+    BG_COLOR = (0.6, 0.0, 0.0)
     FONT_SIZE = 14
     DISPLAY_MODE = "Line"
 
@@ -310,6 +310,9 @@ class DFMAnnotation:
             vo.TextColor = style.get("text_color", self.TEXT_COLOR)
             vo.BackgroundColor = style.get("bg_color", self.BG_COLOR)
 
+            if hasattr(vo, "ShowInTree"):
+                vo.ShowInTree = False
+
             if "DisplayMode" in vo.PropertiesList:
                 vo.DisplayMode = self.DISPLAY_MODE
 
@@ -325,88 +328,49 @@ class DFMAnnotation:
 class DFMViewProvider:
     """Manages 3D visual feedback, including face highlighting and annotations."""
 
-    # Visual Constants
-    HIGHLIGHT_COLOR = (1.0, 0.0, 0.0, 0.0)  # Red
-    TRANSPARENCY_ACTIVE = 50
+    OVERLAY_HIGHLIGHT_COLOR = (1.0, 0.0, 0.0, 0.0)
+    OVERLAY_INACTIVE_COLOR = (0.1, 0.1, 0.1, 0.6)
+    OVERLAY_TRANSPARENCY = 0
+    OVERLAY_NAME = "DFM_Highlight_Overlay"
     ANNOTATION_OFFSET = FreeCAD.Vector(15, 15, 15)
 
     def __init__(self, target_object):
         self.target_object = target_object
-        self.view_obj = target_object.ViewObject
         self.anno = DFMAnnotation()
-
-        # Store original state for restoration
-        self._backup = {
-            "diffuse": list(self.view_obj.DiffuseColor),
-            "shape": self.view_obj.ShapeColor,
-            "trans": self.view_obj.Transparency,
-        }
-        self._highlighted_faces = []
-
-    def _get_face_index(self, occ_face) -> int:
-        """Finds the index of a face in the object's shape."""
-        for i, f in enumerate(self.target_object.Shape.Faces):
-            if Part.__toPythonOCC__(f).IsSame(occ_face):
-                return i
-        return -1
+        self._overlay_name: str | None = None
+        self._highlighted_faces: list[str] = []
+        self._original_transparency: int = target_object.ViewObject.Transparency
 
     def get_face_name(self, occ_face) -> str:
-        """Returns the internal Face name (e.g., 'Face1')."""
+        """Returns the internal face name (e.g. 'Face1') for a given OCC face."""
         idx = self._get_face_index(occ_face)
         return f"Face{idx + 1}" if idx != -1 else "Unknown"
 
-    def restore(self):
-        """Reverts the 3D object to its original appearance."""
-        self.anno.remove(FreeCAD.ActiveDocument)
-        if self.view_obj:
-            self.view_obj.Transparency = self._backup["trans"]
-            self.view_obj.ShapeColor = self._backup["shape"]
-            self.view_obj.DiffuseColor = self._backup["diffuse"]
-            self.view_obj.update()
-
     def highlight_faces(self, topo_faces: list):
-        """Colors specific faces and sets transparency for the rest."""
+        """Shows colored face overlays for the given faces without touching the original object's colors."""
         self.anno.remove(FreeCAD.ActiveDocument)
-        if not self.view_obj:
-            return
-
         Gui.Selection.clearSelection()
-        target_indices = {
-            self._get_face_index(f) for f in topo_faces if self._get_face_index(f) != -1
-        }
+
+        target_indices = {idx for f in topo_faces if (idx := self._get_face_index(f)) != -1}
         self._highlighted_faces = [f"Face{i + 1}" for i in target_indices]
 
         if not target_indices:
-            self.restore()
+            self._remove_overlay()
+            self.target_object.ViewObject.Transparency = self._original_transparency
             return
 
-        faces = self.target_object.Shape.Faces
-        # Fallback to ShapeColor if DiffuseColor is empty
-        base = self._backup["diffuse"][0] if self._backup["diffuse"] else self._backup["shape"]
+        self.target_object.ViewObject.Visibility = False
 
-        new_colors = []
-        for i in range(len(faces)):
-            if i in target_indices:
-                new_colors.append(self.HIGHLIGHT_COLOR)
-            else:
-                c = (
-                    self._backup["diffuse"][i]
-                    if len(self._backup["diffuse"]) == len(faces)
-                    else base
-                )
-                new_colors.append((c[0], c[1], c[2], 0.0))
+        self._update_overlay(target_indices)
 
-        self.view_obj.DiffuseColor = new_colors
-        self.view_obj.Transparency = self.TRANSPARENCY_ACTIVE
-        self.view_obj.update()
-
-        # Selection toggle forces a viewport refresh
         if self._highlighted_faces:
-            Gui.Selection.addSelection(self.target_object, self._highlighted_faces[0])
-            Gui.Selection.clearSelection()
+            overlay = self._get_overlay()
+            if overlay:
+                Gui.Selection.addSelection(overlay, self._highlighted_faces[0])
+                Gui.Selection.clearSelection()
 
     def annotate_issue(self, topo_faces: list, text: str):
-        """Adds a 3D label pointing to the center of the first face in the list."""
+        """Adds a 3D label pointing to a point guaranteed to lie on the face surface."""
         if not topo_faces:
             return
 
@@ -414,22 +378,116 @@ class DFMViewProvider:
         if idx == -1:
             return
 
-        center = self.target_object.Shape.Faces[idx].CenterOfMass
+        face = self.target_object.Shape.Faces[idx]
+        base_pos = self._find_on_surface_point(face)
+
         self.anno.create(
             doc=FreeCAD.ActiveDocument,
-            base_pos=center,
-            text_pos=center.add(self.ANNOTATION_OFFSET),
+            base_pos=base_pos,
+            text_pos=base_pos.add(self.ANNOTATION_OFFSET),
             text=text,
         )
         FreeCAD.ActiveDocument.recompute()  # type: ignore
 
+    def _find_on_surface_point(self, face) -> FreeCAD.Vector:
+        """Returns a point guaranteed to lie on the face surface.
+
+        Tries the UV midpoint first. If that falls in a hole or outside the face
+        boundary (common on annular and trimmed faces), samples a grid until a
+        valid point is found. Falls back to CenterOfMass if nothing works.
+        """
+        u0, u1, v0, v1 = face.ParameterRange
+
+        candidates = [(0.5, 0.5)]
+        steps = 5
+        for i in range(steps):
+            for j in range(steps):
+                candidates.append((i / (steps - 1), j / (steps - 1)))
+
+        for u_norm, v_norm in candidates:
+            u = u0 + u_norm * (u1 - u0)
+            v = v0 + v_norm * (v1 - v0)
+            try:
+                pt = face.valueAt(u, v)
+                if face.isInside(pt, 1e-3, True):
+                    return pt
+            except Exception:
+                continue
+
+        return face.CenterOfMass  # fallback
+
     def zoom_to_selection(self):
-        """Focuses the 3D camera on highlighted faces."""
-        if self._highlighted_faces and Gui.activeView():
-            Gui.Selection.addSelection(self.target_object, self._highlighted_faces)
+        """Focuses the 3D camera on the currently highlighted faces."""
+        overlay = self._get_overlay()
+        if self._highlighted_faces and overlay and Gui.activeView():
+            Gui.Selection.addSelection(overlay, self._highlighted_faces)
             Gui.SendMsgToActiveView("ViewSelection")
             Gui.SendMsgToActiveView("AlignToSelection")
             Gui.Selection.clearSelection()
+
+    def restore(self):
+        """Removes the overlay and annotation, returning the viewport to its original state."""
+        self.anno.remove(FreeCAD.ActiveDocument)
+        self._remove_overlay()
+        self.target_object.ViewObject.Visibility = True
+
+    def _update_overlay(self, target_indices: set[int]):
+        """Creates or updates the overlay object with per-face colors."""
+        doc = FreeCAD.ActiveDocument
+        overlay = self._get_overlay()
+
+        if overlay is None:
+            overlay = doc.addObject("Part::Feature", _OVERLAY_NAME)  # type: ignore
+            self._overlay_name = overlay.Name
+
+        overlay.Shape = self.target_object.Shape
+
+        vo = overlay.ViewObject
+        if vo is None:
+            return
+
+        if hasattr(vo, "ShowInTree"):
+            vo.ShowInTree = False
+
+        vo.Transparency = self.OVERLAY_TRANSPARENCY
+        vo.LineWidth = 0
+        vo.PointSize = 0
+
+        num_faces = len(self.target_object.Shape.Faces)
+        colors = []
+        for i in range(num_faces):
+            colors.append(
+                self.OVERLAY_HIGHLIGHT_COLOR if i in target_indices else self.OVERLAY_INACTIVE_COLOR
+            )
+
+        vo.DiffuseColor = colors
+        doc.recompute()  # type: ignore
+
+    def _remove_overlay(self):
+        """Removes the overlay object from the document if it exists."""
+        doc = FreeCAD.ActiveDocument
+        if self._overlay_name:
+            try:
+                obj = doc.getObject(self._overlay_name)  # type: ignore
+                if obj:
+                    doc.removeObject(self._overlay_name)  # type: ignore
+            except Exception as e:
+                FreeCAD.Console.PrintWarning(f"Failed to remove DFM overlay: {e}\n")
+            self._overlay_name = None
+        self._highlighted_faces = []
+
+    def _get_overlay(self):
+        """Returns the live overlay document object, or None if it doesn't exist."""
+        if self._overlay_name:
+            return FreeCAD.ActiveDocument.getObject(self._overlay_name)  # type: ignore
+        return None
+
+    def _get_face_index(self, occ_face) -> int:
+        """Finds the index of an OCC face within the target object's shape."""
+        for i, f in enumerate(self.target_object.Shape.Faces):
+            if Part.__toPythonOCC__(f).IsSame(occ_face):
+                return i
+        return -1
 
 
 class TaskResultsPresenter:
