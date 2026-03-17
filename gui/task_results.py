@@ -59,6 +59,8 @@ class TaskResults:
             "Select a result in the tree to view details of the DFM issues."
         )
 
+        self._save_clicked = False
+
         self.on_closed: Callable[[], None] | None = None
         self.on_row_selected: Callable[[CheckResult | list[CheckResult]], None] | None = None
         self.on_row_double_clicked: Callable[[CheckResult], None] | None = None
@@ -162,8 +164,20 @@ class TaskResults:
                     action.triggered.connect(lambda: self.on_toggle_ignore(data))  # type: ignore
                 menu.exec(self.form.tvResults.viewport().mapToGlobal(point))
 
+    def on_save_clicked(self):
+        print("saved")
+
     def getStandardButtons(self):
-        return QtWidgets.QDialogButtonBox.StandardButton.Close
+        return (
+            QtWidgets.QDialogButtonBox.StandardButton.Save
+            | QtWidgets.QDialogButtonBox.StandardButton.Close
+        )
+
+    def clicked(self, button):
+        if button == QtWidgets.QDialogButtonBox.StandardButton.Save:
+            self._save_clicked = True
+            if self.on_save_clicked:
+                self.on_save_clicked()
 
     def reject(self):
         if self.on_closed:
@@ -171,6 +185,9 @@ class TaskResults:
         Gui.Control.closeDialog()
 
     def accept(self):
+        if self._save_clicked:
+            self._save_clicked = False
+            return
         if self.on_closed:
             self.on_closed()
         Gui.Control.closeDialog()
@@ -500,6 +517,7 @@ class TaskResultsPresenter:
         self.view.on_toggle_ignore = self.handle_ignore
         self.view.on_export_clicked = self.handle_export
         self.view.on_closed = self.handle_cleanup
+        self.view.on_save_clicked = self.handle_save
 
         self.view.adjust_details_height()
 
@@ -563,3 +581,8 @@ class TaskResultsPresenter:
         self.bridge.restore()
         Gui.Selection.addSelection(self.bridge.target_object)
         Gui.Selection.clearSelection()
+
+    def handle_save(self):
+        QMessageBox.information(
+            self.view.form, "Not Implemented", "Save Results is not yet implemented."
+        )

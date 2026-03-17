@@ -121,18 +121,8 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_3">
       <item>
-       <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1" columnminimumwidth="1,1">
-        <item row="0" column="0">
-         <widget class="QPushButton" name="pbSaveResults">
-          <property name="toolTip">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Saves the results to a local file so that the results can be reviewed later.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-          <property name="text">
-           <string>Save Results</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
+       <layout class="QGridLayout" name="gridLayout_2" columnstretch="1" columnminimumwidth="1">
+        <item row="0" column="0" alignment="Qt::AlignmentFlag::AlignHCenter">
          <widget class="QPushButton" name="pbExportResults">
           <property name="maximumSize">
            <size>
