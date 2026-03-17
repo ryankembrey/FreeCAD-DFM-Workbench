@@ -539,6 +539,15 @@ class TaskResultsPresenter:
             self.model.process.active_rules,
         )
 
+        if not self.model.active_results:
+            self.view.form.tbDetails.setHtml(
+                "<b>No issues found.</b><br>"
+                f"This design passed all active checks for <i>{self.model.process.name}</i> "
+                f"with material <i>{self.model.material}</i>. "
+                "It meets the manufacturing requirements as configured."
+            )
+            self.view.adjust_details_height()
+
     def handle_selection(self, data: CheckResult | list[CheckResult]):
         Gui.Selection.clearSelection()
         if isinstance(data, list):
