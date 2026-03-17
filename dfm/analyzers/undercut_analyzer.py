@@ -20,7 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import Any
+from typing import Any, Optional, Callable
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
 from OCC.Core.TopExp import TopExp_Explorer
@@ -49,7 +49,13 @@ class UndercutAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Undercut Analyzer"
 
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, Any]:
+    def execute(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+        **kwargs: Any,
+    ) -> dict[TopoDS_Face, Any]:
         pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         samples = kwargs.get("samples", 10)
 
@@ -59,8 +65,12 @@ class UndercutAnalyzer(BaseAnalyzer):
         results: dict[TopoDS_Face, float] = {}
 
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
+        faces_processed = 0
 
         while face_explorer.More():
+            if check_abort and check_abort():
+                return results
+
             current_face = topods.Face(face_explorer.Current())
 
             undercut_ratio = self._analyze_face(current_face, intersector, pull_direction, samples)
@@ -68,8 +78,11 @@ class UndercutAnalyzer(BaseAnalyzer):
             if undercut_ratio > 0.0:
                 results[current_face] = undercut_ratio
 
-            face_explorer.Next()
+            faces_processed += 1
+            if progress_cb:
+                progress_cb(faces_processed)
 
+            face_explorer.Next()
         return results
 
     def _analyze_face(self, face: TopoDS_Face, intersector, pull_direction, samples):

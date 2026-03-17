@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable, Optional
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 from dfm.models import ProcessRequirement
 
@@ -50,5 +50,11 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, Any]:
+    def execute(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+        **kwargs: Any,
+    ) -> dict[TopoDS_Face, Any]:
         pass

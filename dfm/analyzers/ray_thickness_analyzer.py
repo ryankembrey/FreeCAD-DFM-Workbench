@@ -20,7 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 import math
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
@@ -45,7 +45,13 @@ class RayThicknessAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Ray Thickness Analyzer"
 
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, list[float]]:
+    def execute(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+        **kwargs: Any,
+    ) -> dict[TopoDS_Face, list[float]]:
         """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
 
         intersector = IntCurvesFace_ShapeIntersector()
@@ -56,7 +62,11 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         results: dict[TopoDS_Face, list[float]] = {}
 
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
+        faces_processed = 0
+
         while face_explorer.More():
+            if check_abort and check_abort():
+                return results
             current_face = topods.Face(face_explorer.Current())
 
             thicknesses = self._ray_cast_for_face(current_face, intersector, samples)
@@ -66,6 +76,9 @@ class RayThicknessAnalyzer(BaseAnalyzer):
 
             face_explorer.Next()
 
+            faces_processed += 1
+            if progress_cb:
+                progress_cb(faces_processed)
         return results
 
     def _ray_cast_for_face(

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>488</width>
-    <height>437</height>
+    <height>442</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -139,6 +139,26 @@
      </layout>
     </widget>
    </item>
+   <item>
+    <widget class="QLabel" name="lProgress">
+     <property name="toolTip">
+      <string>The analyzer or check that is currently being run</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QProgressBar" name="progressBar">
+     <property name="toolTip">
+      <string>Displays the progression of the DFM analysis.</string>
+     </property>
+     <property name="value">
+      <number>24</number>
+     </property>
+    </widget>
+   </item>
    <item alignment="Qt::AlignmentFlag::AlignHCenter">
     <widget class="QPushButton" name="pbRunAnalysis">
      <property name="minimumSize">
@@ -154,7 +174,7 @@
       </size>
      </property>
      <property name="toolTip">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Executes a DFM analysis&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>Executes a DFM analysis</string>
      </property>
      <property name="text">
       <string>Run Analysis</string>

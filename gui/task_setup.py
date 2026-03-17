@@ -20,7 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtGui, QtWidgets, QtCore
 
 import FreeCAD  # type: ignore
 import FreeCADGui as Gui  # type: ignore
@@ -67,6 +67,9 @@ class TaskSetup:
         self.pull_dir = None
         self.indicator = DirectionIndicator()
 
+        self.is_running = False
+        self.abort_requested = False
+
         self.populate_categories()
         self.setup_initial_state()
         self.connect_signals()
@@ -86,6 +89,9 @@ class TaskSetup:
         self.form.cbMaterial.setEnabled(False)
         self.form.gbOptions.hide()
         self.form.leSelectModel.setReadOnly(True)
+
+        self.form.lProgress.hide()
+        self.form.progressBar.hide()
 
     def connect_signals(self):
         """Connects all widget signals to their handler methods."""
@@ -234,18 +240,25 @@ class TaskSetup:
 
     def on_run_analysis(self):
         """Validates inputs and starts the analysis."""
+
+        if self.is_running:
+            self.abort_requested = True
+            self.form.pbRunAnalysis.setText("Aborting…")
+            self.form.pbRunAnalysis.setEnabled(False)
+            return
+
         if not self.target_shape:
-            FreeCAD.Console.PrintError("No model selected to analyze.")
+            FreeCAD.Console.PrintError("No model selected to analyze.\n")
             return
 
         process_name = self.form.cbManProcess.currentData()
         if not process_name:
-            FreeCAD.Console.PrintError("Select a manufacturing process.")
+            FreeCAD.Console.PrintError("Select a manufacturing process.\n")
             return
 
         material_name = self.form.cbMaterial.currentText()
         if "--" in material_name:
-            FreeCAD.Console.PrintError("Select a material.")
+            FreeCAD.Console.PrintError("Select a material.\n")
             return
 
         active_reqs = self.get_active_requirements()
@@ -264,8 +277,30 @@ class TaskSetup:
                 return
             kwargs[ProcessRequirement.NEUTRAL_PLANE.name] = self.neutral_plane_face
 
-        Gui.Control.closeDialog()
-        self.indicator.remove()
+        self.is_running = True
+        self.abort_requested = False
+        self.form.pbRunAnalysis.setText("Abort Analysis")
+        self.form.lProgress.setText("Starting analysis…")
+        self.form.lProgress.show()
+        self.form.progressBar.setValue(0)
+        self.form.progressBar.show()
+
+        def progress_callback(current: int, total: int, message: str = ""):
+            if message:
+                self.form.lProgress.setText(f"Running: {message}…")
+
+            self.form.progressBar.setMaximum(total)
+            self.form.progressBar.setValue(current)
+
+            QtWidgets.QApplication.processEvents(
+                QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                | QtCore.QEventLoop.ProcessEventsFlag.WaitForMoreEvents,
+                5,
+            )
+
+        def check_abort() -> bool:
+            QtWidgets.QApplication.processEvents()
+            return self.abort_requested
 
         try:
             runner = AnalysisRunner()
@@ -273,26 +308,44 @@ class TaskSetup:
                 process_name=process_name,
                 material_name=material_name,
                 shape=self.target_shape,
+                progress_cb=progress_callback,
+                check_abort=check_abort,
                 **kwargs,
             )
 
-            report_model = DFMReportModel(
-                results=results, process=self.process, material=material_name
-            )
-
-            view_bridge = DFMViewProvider(self.target_object)
-
-            results_view = TaskResults()
-
-            self.results_presenter = TaskResultsPresenter(
-                view=results_view, model=report_model, bridge=view_bridge
-            )
+            if self.abort_requested:
+                FreeCAD.Console.PrintMessage("DFM Analysis aborted by user.\n")
+            elif results:
+                self.indicator.remove()
+                Gui.Control.closeDialog()
+                report_model = DFMReportModel(
+                    results=results, process=self.process, material=material_name
+                )
+                view_bridge = DFMViewProvider(self.target_object)
+                results_view = TaskResults()
+                self.results_presenter = TaskResultsPresenter(
+                    view=results_view, model=report_model, bridge=view_bridge
+                )
 
         except Exception as e:
             FreeCAD.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
             import traceback
 
             FreeCAD.Console.PrintError(traceback.format_exc())
+
+        finally:
+            self.is_running = False
+            self.abort_requested = False
+
+            if self.form:
+                try:
+                    self.form.pbRunAnalysis.setText("Run Analysis")
+                    self.form.pbRunAnalysis.setEnabled(True)
+                    self.form.lProgress.hide()
+                    self.form.lProgress.setText("")
+                    self.form.progressBar.hide()
+                except RuntimeError:
+                    pass
 
     def on_select_shape(self):
         """Updates the selected shape from the user's selection in the document."""
@@ -311,6 +364,9 @@ class TaskSetup:
         return QtWidgets.QDialogButtonBox.StandardButton.Close
 
     def reject(self):
+        if self.is_running:
+            self.abort_requested = True
+
         self.indicator.remove()
         Gui.Control.closeDialog()
 

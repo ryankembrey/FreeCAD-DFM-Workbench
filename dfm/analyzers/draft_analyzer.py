@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 import math
-from typing import Any
+from typing import Any, Callable, Optional
 
 import FreeCAD  # type: ignore
 
@@ -63,7 +63,13 @@ class DraftAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Draft Analyzer"
 
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, float]:
+    def execute(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+        **kwargs: Any,
+    ) -> dict[TopoDS_Face, float]:
         """
         Runs a full draft analysis on an inputted shape.
         """
@@ -79,13 +85,20 @@ class DraftAnalyzer(BaseAnalyzer):
         self.core_cavity_mapping = self.classify_moldside(shape, pull_direction)
 
         results: dict[TopoDS_Face, float] = {}
+        faces_processed = 0
 
         while face_explorer.More():
+            if check_abort and check_abort():
+                return results
             current_face = topods.Face(face_explorer.Current())
             draft_result = self.get_draft_for_face(current_face, pull_direction, samples)
 
             if draft_result is not None:
                 results[current_face] = draft_result
+
+            faces_processed += 1
+            if progress_cb:
+                progress_cb(faces_processed)
 
             face_explorer.Next()
         return results

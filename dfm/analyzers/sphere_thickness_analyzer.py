@@ -21,7 +21,7 @@
 #  ***************************************************************************
 
 
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods, TopoDS_Compound
 from OCC.Core.TopExp import TopExp_Explorer
@@ -48,7 +48,13 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Sphere Thickness Analyzer"
 
-    def execute(self, shape: TopoDS_Shape, **kwargs: Any) -> dict[TopoDS_Face, list[float]]:
+    def execute(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+        **kwargs: Any,
+    ) -> dict[TopoDS_Face, list[float]]:
         samples = kwargs.get("samples", 10)
         results: dict[TopoDS_Face, list[float]] = {}
 
@@ -68,16 +74,24 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         dist_tool.LoadS2(face_compound)
 
         face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
+        faces_processed = 0
+
         while face_explorer.More():
+            if check_abort and check_abort():
+                return results
+
             current_face = topods.Face(face_explorer.Current())
 
             thicknesses = self._sphere_cast_for_face(current_face, intersector, dist_tool, samples)
-
             if thicknesses:
                 results[current_face] = thicknesses
 
             face_explorer.Next()
 
+            faces_processed += 1
+
+            if progress_cb:
+                progress_cb(faces_processed)
         return results
 
     def _sphere_cast_for_face(
