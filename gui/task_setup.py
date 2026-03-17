@@ -316,7 +316,7 @@ class TaskSetup:
 
             if self.abort_requested:
                 FreeCAD.Console.PrintMessage("DFM Analysis aborted by user.\n")
-            elif results:
+            else:
                 self.indicator.remove()
                 Gui.Control.closeDialog()
                 report_model = DFMReportModel(
