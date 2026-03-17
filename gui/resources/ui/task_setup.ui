@@ -54,7 +54,7 @@
      <property name="flat">
       <bool>false</bool>
      </property>
-     <layout class="QGridLayout" name="gridLayout">
+     <layout class="QGridLayout" name="gridLayout" columnstretch="1,1">
       <property name="verticalSpacing">
        <number>12</number>
       </property>
@@ -67,6 +67,12 @@
       </item>
       <item row="0" column="1">
        <widget class="QComboBox" name="cbManCategory">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="toolTip">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selects the high-level manufacturing category. After a selection is made, the &amp;quot;Manufacturing process&amp;quot; may be chosen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
@@ -81,8 +87,17 @@
       </item>
       <item row="1" column="1">
        <widget class="QComboBox" name="cbManProcess">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="toolTip">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The manufcaturing process the design will be checked against.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="sizeAdjustPolicy">
+         <enum>QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon</enum>
         </property>
        </widget>
       </item>
@@ -95,6 +110,12 @@
       </item>
       <item row="2" column="1">
        <widget class="QComboBox" name="cbMaterial">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="toolTip">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The material of the design. This affects parameters associated to rules.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
