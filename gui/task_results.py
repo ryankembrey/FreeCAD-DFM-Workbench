@@ -337,7 +337,6 @@ class DFMViewProvider:
     def __init__(self, target_object):
         self.target_object = target_object
         self.anno = DFMAnnotation()
-        self._overlay_name: str | None = None
         self._highlighted_faces: list[str] = []
         self._original_transparency: int = target_object.ViewObject.Transparency
 
@@ -437,8 +436,7 @@ class DFMViewProvider:
         overlay = self._get_overlay()
 
         if overlay is None:
-            overlay = doc.addObject("Part::Feature", _OVERLAY_NAME)  # type: ignore
-            self._overlay_name = overlay.Name
+            overlay = doc.addObject("Part::Feature", self.OVERLAY_NAME)  # type: ignore
 
         overlay.Shape = self.target_object.Shape
 
@@ -466,20 +464,19 @@ class DFMViewProvider:
     def _remove_overlay(self):
         """Removes the overlay object from the document if it exists."""
         doc = FreeCAD.ActiveDocument
-        if self._overlay_name:
+        if self.OVERLAY_NAME:
             try:
-                obj = doc.getObject(self._overlay_name)  # type: ignore
+                obj = doc.getObject(self.OVERLAY_NAME)  # type: ignore
                 if obj:
-                    doc.removeObject(self._overlay_name)  # type: ignore
+                    doc.removeObject(self.OVERLAY_NAME)  # type: ignore
             except Exception as e:
                 FreeCAD.Console.PrintWarning(f"Failed to remove DFM overlay: {e}\n")
-            self._overlay_name = None
         self._highlighted_faces = []
 
     def _get_overlay(self):
         """Returns the live overlay document object, or None if it doesn't exist."""
-        if self._overlay_name:
-            return FreeCAD.ActiveDocument.getObject(self._overlay_name)  # type: ignore
+        if self.OVERLAY_NAME:
+            return FreeCAD.ActiveDocument.getObject(self.OVERLAY_NAME)  # type: ignore
         return None
 
     def _get_face_index(self, occ_face) -> int:
