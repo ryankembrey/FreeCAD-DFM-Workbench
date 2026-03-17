@@ -179,6 +179,7 @@ class TaskSetup:
             self.form.lePullDir.setText(f"[{normal.x:.2f}] [{normal.y:.2f}] [{normal.z:.2f}]")
 
             self.indicator.show(pnt, normal)
+            Gui.Selection.clearSelection()
 
         except Exception as e:
             FreeCAD.Console.PrintError(f"Visualizing pull direction failed: {e}\n")
