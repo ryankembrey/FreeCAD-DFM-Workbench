@@ -528,6 +528,9 @@ class TaskResultsPresenter:
         self.view.form.leTarget.setText(self.bridge.target_object.Label)
         self.view.form.leProcess.setText(self.model.process.name)
         self.view.form.leMaterial.setText(self.model.material)
+        self.view.form.leTarget.setCursorPosition(0)
+        self.view.form.leProcess.setCursorPosition(0)
+        self.view.form.leMaterial.setCursorPosition(0)
 
         text, color = self.model.get_verdict()
         self.view.form.leVerdict.setText(text)
