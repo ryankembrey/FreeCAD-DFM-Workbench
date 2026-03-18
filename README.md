@@ -9,8 +9,6 @@
 ---
 ![DFM Workbench](.github/images/showcase1.png)
 
-![DFM Workbench](.github/images/showcase_process_manager.png)
-
 A FreeCAD workbench that automatically analyses 3D models for 
 Design for Manufacturability (DFM) issues — helping designers catch 
 problems before they reach the factory floor.
@@ -23,6 +21,9 @@ problems before they reach the factory floor.
 - **Customisation** — Add manufacturing processes, add/edit materials
 - **Interactive results** — failing faces highlighted directly in the 3D viewport with annotations
 - **Export** — analysis results exportable to CSV
+
+
+![Process Manager](.github/images/showcase_process_manager.png)
 
 **Built-in processes:** Plastic Injection Molding (more planned)
 
