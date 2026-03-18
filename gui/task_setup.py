@@ -90,12 +90,12 @@ class TaskSetup:
         self.form.gbOptions.hide()
         self.form.leSelectModel.setReadOnly(True)
 
-        self.form.lProgress.hide()
-        self.form.progressBar.hide()
+        self.form.gbAnalysis.hide()
 
     def connect_signals(self):
         """Connects all widget signals to their handler methods."""
         self.form.pbRunAnalysis.clicked.connect(self.on_run_analysis)
+        self.form.pbAbort.clicked.connect(self.on_run_analysis)
         self.form.pbSelectModel.clicked.connect(self.on_select_shape)
         self.form.cbManCategory.currentIndexChanged.connect(self.on_category_changed)
         self.form.cbManProcess.currentIndexChanged.connect(self.on_process_changed)
@@ -244,8 +244,7 @@ class TaskSetup:
 
         if self.is_running:
             self.abort_requested = True
-            self.form.pbRunAnalysis.setText("Aborting…")
-            self.form.pbRunAnalysis.setEnabled(False)
+            self.form.pbAbort.setText("Aborting…")
             return
 
         if not self.target_shape:
@@ -280,11 +279,10 @@ class TaskSetup:
 
         self.is_running = True
         self.abort_requested = False
-        self.form.pbRunAnalysis.setText("Abort Analysis")
+        self.form.pbRunAnalysis.hide()
         self.form.lProgress.setText("Starting analysis…")
-        self.form.lProgress.show()
         self.form.progressBar.setValue(0)
-        self.form.progressBar.show()
+        self.form.gbAnalysis.show()
 
         def progress_callback(current: int, total: int, message: str = ""):
             if message:
@@ -316,6 +314,7 @@ class TaskSetup:
 
             if self.abort_requested:
                 FreeCAD.Console.PrintMessage("DFM Analysis aborted by user.\n")
+                self.form.pbRunAnalysis.show()
             else:
                 self.indicator.remove()
                 Gui.Control.closeDialog()
@@ -340,11 +339,8 @@ class TaskSetup:
 
             if self.form:
                 try:
-                    self.form.pbRunAnalysis.setText("Run Analysis")
-                    self.form.pbRunAnalysis.setEnabled(True)
-                    self.form.lProgress.hide()
                     self.form.lProgress.setText("")
-                    self.form.progressBar.hide()
+                    self.form.gbAnalysis.hide()
                 except RuntimeError:
                     pass
 

@@ -66,6 +66,8 @@ class TaskResults:
         self.on_row_double_clicked: Callable[[CheckResult], None] | None = None
         self.on_toggle_ignore: Callable[[CheckResult], None] | None = None
         self.on_export_clicked: Callable[[], None] | None = None
+        self.on_toggle_ignore_all: Callable[[list[CheckResult]], None] | None = None
+        self.on_zoom_to_rule: Callable[[list[CheckResult]], None] | None = None
 
         self.form.tvResults.clicked.connect(self._handle_click)
         self.form.tvResults.doubleClicked.connect(self._handle_double_click)
@@ -154,15 +156,93 @@ class TaskResults:
     def _show_context_menu(self, point: QtCore.QPoint):
         index = self.form.tvResults.indexAt(point)
         item = self.model.itemFromIndex(index)
-        if item:
-            data = item.data(QtCore.Qt.ItemDataRole.UserRole)
-            if isinstance(data, CheckResult):
-                menu = QtWidgets.QMenu()
-                txt = "Restore" if data.ignore else "Ignore"
-                action = menu.addAction(txt)
-                if self.on_toggle_ignore:
-                    action.triggered.connect(lambda: self.on_toggle_ignore(data))  # type: ignore
-                menu.exec(self.form.tvResults.viewport().mapToGlobal(point))
+        if not item:
+            return
+
+        data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        menu = QtWidgets.QMenu()
+
+        if isinstance(data, list):
+            # Rule-level context menu
+            findings: list[CheckResult] = data
+            active = [f for f in findings if not f.ignore]
+            ignored = [f for f in findings if f.ignore]
+
+            zoom_action = menu.addAction("Zoom to All Findings")
+            menu.addSeparator()
+
+            if active:
+                ignore_all = menu.addAction(f"Ignore All ({len(active)})")
+                ignore_all.triggered.connect(
+                    lambda: self.on_toggle_ignore_all(active) if self.on_toggle_ignore_all else None
+                )
+
+            if ignored:
+                restore_all = menu.addAction(f"Restore All ({len(ignored)})")
+                restore_all.triggered.connect(
+                    lambda: self.on_toggle_ignore_all(ignored)
+                    if self.on_toggle_ignore_all
+                    else None
+                )
+
+            menu.addSeparator()
+            copy_action = menu.addAction("Copy Summary")
+
+            zoom_action.triggered.connect(
+                lambda: self.on_zoom_to_rule(findings) if self.on_zoom_to_rule else None
+            )
+            copy_action.triggered.connect(lambda: self._copy_rule_summary(findings))
+
+        elif isinstance(data, CheckResult):
+            # Issue-level context menu
+            finding: CheckResult = data
+
+            zoom_action = menu.addAction("Zoom to Face")
+            zoom_action.triggered.connect(
+                lambda: self.on_row_double_clicked(finding) if self.on_row_double_clicked else None
+            )
+
+            menu.addSeparator()
+
+            ignore_txt = "Restore" if finding.ignore else "Ignore"
+            ignore_action = menu.addAction(ignore_txt)
+            ignore_action.triggered.connect(
+                lambda: self.on_toggle_ignore(finding) if self.on_toggle_ignore else None
+            )
+
+            menu.addSeparator()
+            copy_action = menu.addAction("Copy Details")
+            copy_action.triggered.connect(lambda: self._copy_issue_details(finding))
+
+        else:
+            return
+
+        menu.exec(self.form.tvResults.viewport().mapToGlobal(point))
+
+    def _copy_rule_summary(self, findings: list[CheckResult]):
+        """Copies a plain-text summary of all findings under a rule to the clipboard."""
+        if not findings:
+            return
+        rule_label = findings[0].rule_id.label
+        lines = [f"{rule_label} — {len(findings)} finding(s)"]
+        for f in findings:
+            status = "[ignored]" if f.ignore else f"[{f.severity.name}]"
+            lines.append(f"  {status} {f.overview}")
+        QtWidgets.QApplication.clipboard().setText("\n".join(lines))
+
+    def _copy_issue_details(self, finding: CheckResult):
+        """Copies full issue details to the clipboard as plain text."""
+        lines = [
+            f"Rule: {finding.rule_id.label}",
+            f"Severity: {finding.severity.name}",
+            f"Overview: {finding.overview}",
+            f"Details: {finding.message}",
+        ]
+        if finding.value is not None:
+            lines.append(f"Measured: {finding.value:.2f}{finding.unit}")
+        if finding.limit is not None:
+            lines.append(f"Limit: {finding.limit:.2f}{finding.unit}")
+        QtWidgets.QApplication.clipboard().setText("\n".join(lines))
 
     def on_save_clicked(self):
         print("saved")
@@ -518,6 +598,8 @@ class TaskResultsPresenter:
         self.view.on_export_clicked = self.handle_export
         self.view.on_closed = self.handle_cleanup
         self.view.on_save_clicked = self.handle_save
+        self.view.on_toggle_ignore_all = self.handle_ignore_all
+        self.view.on_zoom_to_rule = self.handle_zoom_to_rule
 
         self.view.adjust_details_height()
 
@@ -598,3 +680,16 @@ class TaskResultsPresenter:
         QMessageBox.information(
             self.view.form, "Not Implemented", "Save Results is not yet implemented."
         )
+
+    def handle_ignore_all(self, findings: list[CheckResult]):
+        for finding in findings:
+            self.model.toggle_ignore_state(finding)
+        self.refresh_ui()
+
+    def handle_zoom_to_rule(self, findings: list[CheckResult]):
+        all_faces = [f for r in findings if not r.ignore for f in r.failing_geometry]
+        rule_name = findings[0].rule_id.label if findings else "Rule"
+        self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
+        self.bridge.highlight_faces(all_faces)
+        self.bridge.zoom_to_selection()
+        self.view.adjust_details_height()
