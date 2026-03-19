@@ -560,6 +560,89 @@ class MaterialTableView(QtCore.QObject):
 # =============================================================================
 
 
+class VisualizerBar(QtWidgets.QFrame):
+    """Paints three solid colour zones with boundary labels overlaid at the transitions."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(32)
+        self._left_label = ""
+        self._right_label = ""
+        self._left_label_color = "#E24B4A"
+        self._right_label_color = "#639922"
+        self._zones: list[tuple[str, str]] = []
+
+    def set_zones(
+        self,
+        zones: list[tuple[str, str]],
+        left_label: str,
+        right_label: str,
+    ):
+        self._zones = zones
+        self._left_label = left_label
+        self._right_label = right_label
+        self.update()
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor, QFont, QPen
+
+        if not self._zones:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w, h = self.width(), self.height()
+        zone_w = w / len(self._zones)
+
+        # Draw solid colour zones
+        for i, (label, color) in enumerate(self._zones):
+            x = int(i * zone_w)
+            rect = QtCore.QRect(x, 0, int(zone_w) + 1, h)
+            painter.fillRect(rect, QColor(color))
+
+            # Zone label centred
+            painter.setPen(QPen(QColor(255, 255, 255, 200)))
+            f = QFont(painter.font())
+            f.setPointSize(8)
+            f.setBold(True)
+            painter.setFont(f)
+            painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, label)
+
+        # Draw boundary dividers and labels overlaid at transitions
+        for i in range(1, len(self._zones)):
+            x = int(i * zone_w)
+            label = self._left_label if i == 1 else self._right_label
+
+            # Divider line
+            painter.setPen(QPen(QColor(255, 255, 255, 80), 1))
+            painter.drawLine(x, 0, x, h)
+
+            # Label pill overlaid on the divider
+            f2 = QFont(painter.font())
+            f2.setPointSize(8)
+            f2.setBold(True)
+            painter.setFont(f2)
+            fm = painter.fontMetrics()
+            text_w = fm.horizontalAdvance(label) + 12
+            text_h = 18
+            pill_x = x - text_w // 2
+            pill_y = (h - text_h) // 2
+            pill_rect = QtCore.QRect(pill_x, pill_y, text_w, text_h)
+
+            painter.setPen(QPen(QtCore.Qt.PenStyle.NoPen))
+            painter.setBrush(QColor(0, 0, 0, 130))
+            painter.drawRoundedRect(pill_rect, 4, 4)
+
+            painter.setPen(QPen(QColor(255, 255, 255, 230)))
+            painter.drawText(pill_rect, QtCore.Qt.AlignmentFlag.AlignCenter, label)
+
+        painter.end()
+
+
+# =============================================================================
+
+
 class VisualizerView(QtCore.QObject):
     def __init__(self, container: QtWidgets.QWidget):
         super().__init__()
@@ -569,45 +652,13 @@ class VisualizerView(QtCore.QObject):
     def _setup_ui(self):
         layout = self.container.layout()
         if layout is None:
-            layout = QtWidgets.QHBoxLayout(self.container)
-            layout.setContentsMargins(10, 0, 10, 0)
-            layout.setSpacing(8)
+            layout = QtWidgets.QVBoxLayout(self.container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
 
-        box_layout: QtWidgets.QHBoxLayout = layout  # type: ignore
-
+        self.bar = VisualizerBar(self.container)
+        layout.addWidget(self.bar)
         self.container.setFixedHeight(32)
-        self.container.setStyleSheet("border-radius: 6px; background-color: #222;")
-
-        style_status = "QLabel { color: #000; font-weight: bold; background: rgba(220, 220, 220, 0.7); font-size: 10px; border-radius: 8px; margin: 6px 0; padding: 0 12px; }"
-        style_bound = "QLabel { color: #ccc; font-weight: bold; background: rgba(0, 0, 0, 0.6); border-radius: 8px; margin: 6px 0; padding: 0 8px; font-size: 10px; }"
-
-        self.zone_1 = QtWidgets.QLabel("ERROR")
-        self.boundary_left = QtWidgets.QLabel("0")
-        self.zone_2 = QtWidgets.QLabel("WARNING")
-        self.boundary_right = QtWidgets.QLabel("0")
-        self.zone_3 = QtWidgets.QLabel("SUCCESS")
-
-        for lbl in [self.zone_1, self.zone_2, self.zone_3]:
-            lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(style_status)
-            lbl.setSizePolicy(
-                QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred
-            )
-
-        for lbl in [self.boundary_left, self.boundary_right]:
-            lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(style_bound)
-
-        for widget in [
-            self.zone_1,
-            self.boundary_left,
-            self.zone_2,
-            self.boundary_right,
-            self.zone_3,
-        ]:
-            box_layout.addStretch(1)
-            box_layout.addWidget(widget)
-        box_layout.addStretch(1)
 
     def update_display(self, rule, target: Optional[float], limit: Optional[float]):
         if not rule or getattr(rule, "is_binary", False) or target is None or limit is None:
@@ -619,21 +670,19 @@ class VisualizerView(QtCore.QObject):
         is_min_rule = rule.comparison == "min"
 
         if is_min_rule:
-            self.zone_1.setText("ERROR")
-            self.zone_3.setText("SUCCESS")
-            stops = "stop:0 #8a2b2b, stop:0.4 #94571a, stop:0.6 #94571a, stop:1 #3e7a4a"
-            self.boundary_left.setText(f"{limit}{unit}")
-            self.boundary_right.setText(f"{target}{unit}")
+            zones = [
+                ("Error", "#E24B4A"),
+                ("Warning", "#D4900A"),
+                ("Success", "#639922"),
+            ]
+            self.bar.set_zones(zones, f"{limit}{unit}", f"{target}{unit}")
         else:
-            self.zone_1.setText("SUCCESS")
-            self.zone_3.setText("ERROR")
-            stops = "stop:0 #3e7a4a, stop:0.4 #94571a, stop:0.6 #94571a, stop:1 #8a2b2b"
-            self.boundary_left.setText(f"{target}{unit}")
-            self.boundary_right.setText(f"{limit}{unit}")
-
-        self.container.setStyleSheet(
-            f"QFrame {{ border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {stops}); border: 1px solid rgba(255,255,255,0.05); }}"
-        )
+            zones = [
+                ("Success", "#639922"),
+                ("Warning", "#D4900A"),
+                ("Error", "#E24B4A"),
+            ]
+            self.bar.set_zones(zones, f"{target}{unit}", f"{limit}{unit}")
 
     def hide(self):
         self.container.hide()

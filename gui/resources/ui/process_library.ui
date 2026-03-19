@@ -25,7 +25,7 @@
   <property name="modal">
    <bool>false</bool>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0,0">
+  <layout class="QVBoxLayout" name="verticalLayout_5" stretch="0">
    <property name="sizeConstraint">
     <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
    </property>
@@ -305,7 +305,7 @@
            <widget class="QTableWidget" name="twMaterialEdit"/>
           </item>
           <item>
-           <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0">
+           <layout class="QGridLayout" name="gridLayout_2" columnstretch="2,0">
             <item row="0" column="1">
              <widget class="QDialogButtonBox" name="buttonBox">
               <property name="acceptDrops">
@@ -328,6 +328,22 @@
               </property>
              </widget>
             </item>
+            <item row="0" column="0">
+             <widget class="QFrame" name="visualizer_container">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Shape::StyledPanel</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Shadow::Raised</enum>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
          </layout>
@@ -335,22 +351,6 @@
        </item>
       </layout>
      </widget>
-    </widget>
-   </item>
-   <item>
-    <widget class="QFrame" name="visualizer_container">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="frameShape">
-      <enum>QFrame::Shape::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Shadow::Raised</enum>
-     </property>
     </widget>
    </item>
   </layout>
