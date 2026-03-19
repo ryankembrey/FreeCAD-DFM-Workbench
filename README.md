@@ -23,7 +23,7 @@ problems before they reach the factory floor.
 - **Export** — analysis results exportable to CSV
 
 
-![Process Manager](.github/images/showcase_process_manager.png)
+![Process Manager](.github/images/process_library.png)
 
 **Built-in processes:** Plastic Injection Molding (more planned)
 
