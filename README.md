@@ -7,7 +7,7 @@
 > **NOTE:** This workbench is currently in active development (Alpha) for a University Capstone Project. It is functional, but subject to rapid changes. 
 
 ---
-![DFM Workbench](.github/images/showcase1.png)
+![DFM Workbench](.github/images/showcase2.png)
 
 A FreeCAD workbench that automatically analyses 3D models for 
 Design for Manufacturability (DFM) issues — helping designers catch 
