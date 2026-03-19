@@ -76,24 +76,27 @@ class DraftAngleCheck(BaseCheck):
 
             if severity:
                 template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
+                effective_limit = limit if limit is not None else 0.0
+                effective_target = target if target is not None else 0.0
+                formatted_msg = self.format_feedback(
+                    template, measured, effective_target, effective_limit, unit
+                )
 
-                limit = limit if limit is not None else 0.0
-                target = target if target is not None else 0.0
-
-                formatted_msg = self.format_feedback(template, measured, target, limit, unit)
+                # Use the threshold that was actually violated for the overview
+                threshold = effective_limit if severity == Severity.ERROR else effective_target
 
                 results.append(
                     CheckResult(
                         rule_id=rule,
-                        overview=f"{measured:.2f}{unit} < {limit:.2f}{unit}",
+                        overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}",
                         message=formatted_msg,
                         severity=severity,
                         failing_geometry=[face],
                         ignore=False,
                         value=round(float(measured), 4),
-                        limit=float(limit),
+                        limit=float(effective_limit),
                         comparison="<",
-                        unit="°",
+                        unit=unit,
                     )
                 )
 

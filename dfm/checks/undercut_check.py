@@ -58,7 +58,7 @@ class UndercutCheck(BaseCheck):
                 severity = Severity.ERROR
                 template = fb.error_msg
 
-                msg = template
+                msg = self.format_feedback(template, percentage, 0.0, 0.0, "%")
 
                 results.append(
                     CheckResult(

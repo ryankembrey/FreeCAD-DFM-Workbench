@@ -72,21 +72,23 @@ class MinThicknessCheck(BaseCheck):
 
             if severity:
                 template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
+                effective_limit = limit if limit is not None else 0.0
+                effective_target = target if target is not None else 0.0
+                threshold = effective_limit if severity == Severity.ERROR else effective_target
 
-                limit = limit if limit is not None else 0.0
-                target = target if target is not None else 0.0
-
-                formatted_msg = self.format_feedback(template, measured, target, limit, unit)
+                formatted_msg = self.format_feedback(
+                    template, measured, effective_target, effective_limit, unit
+                )
                 results.append(
                     CheckResult(
                         rule_id=rule,
-                        overview=f"{measured:.2f}mm < {limit:.2f}mm",
+                        overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}",
                         message=formatted_msg,
                         severity=severity,
                         failing_geometry=[face],
                         ignore=False,
                         value=float(measured),
-                        limit=float(limit),
+                        limit=effective_limit,
                         comparison="<",
                         unit="mm",
                     )
@@ -136,23 +138,23 @@ class MaxThicknessCheck(BaseCheck):
 
             if severity:
                 template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
-                display_limit = limit if severity == Severity.ERROR else target
+                effective_limit = limit if limit is not None else 0.0
+                effective_target = target if target is not None else 0.0
+                threshold = effective_limit if severity == Severity.ERROR else effective_target
 
-                limit = display_limit if display_limit is not None else 0.0
-                target = target if target is not None else 0.0
-
-                formatted_msg = self.format_feedback(template, measured, target, limit, unit)
-
+                formatted_msg = self.format_feedback(
+                    template, measured, effective_target, effective_limit, unit
+                )
                 results.append(
                     CheckResult(
                         rule_id=rule,
-                        overview=f"{measured:.2f}{unit} > {limit:.2f}{unit}",
+                        overview=f"{measured:.2f}{unit} > {threshold:.2f}{unit}",
                         message=formatted_msg,
                         severity=severity,
                         failing_geometry=[face],
                         ignore=False,
                         value=float(measured),
-                        limit=float(limit),
+                        limit=effective_limit,
                         comparison=">",
                         unit="mm",
                     )
