@@ -37,6 +37,142 @@ from dfm.processes.process import Process
 from dfm.rules import Rulebook
 
 
+def _severity_color(severity: Severity) -> str:
+    return {
+        Severity.ERROR: "#E24B4A",
+        Severity.WARNING: "#D4900A",
+        Severity.INFO: "#378ADD",
+        Severity.SUCCESS: "#639922",
+    }.get(severity, "#639922")
+
+
+class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
+    """Custom delegate that renders rule rows and finding rows with distinct visual styles."""
+
+    _LABEL_COLOR = QtGui.QColor("#aaaaaa")
+    _IGNORE_COLOR = QtGui.QColor("#666666")
+
+    def paint(self, painter, option, index):
+        painter.save()
+
+        item_type = index.data(QtCore.Qt.ItemDataRole.UserRole + 1)
+        primary = index.data(QtCore.Qt.ItemDataRole.UserRole + 2) or ""
+        secondary = index.data(QtCore.Qt.ItemDataRole.UserRole + 3) or ""
+        color_hex = index.data(QtCore.Qt.ItemDataRole.UserRole + 4) or "#aaaaaa"
+        ignored = index.data(QtCore.Qt.ItemDataRole.UserRole + 5) or False
+
+        is_selected = option.state & QtWidgets.QStyle.StateFlag.State_Selected
+        if is_selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+
+        icon = index.data(QtCore.Qt.ItemDataRole.DecorationRole)
+        icon_rect = QtCore.QRect(option.rect.left() + 4, option.rect.top() + 4, 16, 16)
+        if icon and not icon.isNull():
+            icon.paint(painter, icon_rect)
+
+        text_left = icon_rect.right() + 6
+        rect = option.rect
+
+        accent = QtGui.QColor(color_hex)
+
+        if item_type == "rule":
+            error_count = index.data(QtCore.Qt.ItemDataRole.UserRole + 6) or 0
+            warning_count = index.data(QtCore.Qt.ItemDataRole.UserRole + 7) or 0
+
+            badge_font = QtGui.QFont(option.font)
+            badge_font.setPointSizeF(option.font.pointSizeF() * 0.85)
+            fm_badge = QtGui.QFontMetrics(badge_font)
+
+            badges = []
+            if not error_count and not warning_count:
+                badges.append((secondary, QtGui.QColor("#639922")))
+            else:
+                if warning_count:
+                    badges.append((str(warning_count), QtGui.QColor("#D4900A")))
+                if error_count:
+                    badges.append((str(error_count), QtGui.QColor("#E24B4A")))
+
+            badge_spacing = 4
+            badge_widths = [fm_badge.horizontalAdvance(f"  {t}  ") + 8 for t, _ in badges]
+            total_badge_w = sum(badge_widths) + badge_spacing * (len(badges) - 1)
+
+            label_rect = QtCore.QRect(
+                text_left, rect.top(), rect.right() - total_badge_w - 14 - text_left, rect.height()
+            )
+            label_font = QtGui.QFont(option.font)
+            label_font.setWeight(QtGui.QFont.Weight.Medium)
+            painter.setFont(label_font)
+            painter.setPen(
+                QtGui.QColor("#cccccc")
+                if not is_selected
+                else option.palette.highlightedText().color()
+            )
+            painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, primary)
+
+            def draw_badge(text, color, x, w):
+                badge_rect = QtCore.QRect(x, rect.top() + 5, w, rect.height() - 10)
+                bg = QtGui.QColor(color)
+                bg.setAlpha(70)
+                painter.setPen(QtCore.Qt.PenStyle.NoPen)
+                painter.setBrush(bg)
+                painter.drawRoundedRect(badge_rect, 3, 3)
+                painter.setFont(badge_font)
+                painter.setPen(QtGui.QColor(color).lighter(130))
+                painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
+
+            x = rect.right() - 6
+            for (text, color), w in zip(reversed(badges), reversed(badge_widths)):
+                x -= w
+                draw_badge(text, color, x, w)
+                x -= badge_spacing
+
+        elif item_type == "finding":
+            # Finding row: face name + muted overview separated visually
+            name_font = QtGui.QFont(option.font)
+            if ignored:
+                name_font.setStrikeOut(True)
+            painter.setFont(name_font)
+
+            text_color = (
+                self._IGNORE_COLOR
+                if ignored
+                else (
+                    option.palette.highlightedText().color()
+                    if is_selected
+                    else QtGui.QColor("#cccccc")
+                )
+            )
+            painter.setPen(text_color)
+
+            fm = QtGui.QFontMetrics(name_font)
+            name_w = fm.horizontalAdvance(primary) + 8
+            name_rect = QtCore.QRect(text_left, rect.top(), name_w, rect.height())
+            painter.drawText(name_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, primary)
+
+            dot_x = text_left + name_w + 2  # Separator dot
+            dot_rect = QtCore.QRect(dot_x, rect.top(), 12, rect.height())
+            painter.setPen(self._LABEL_COLOR)
+            painter.drawText(dot_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, "·")
+
+            overview_font = QtGui.QFont(option.font)
+            overview_font.setPointSizeF(option.font.pointSizeF() * 0.9)
+            if ignored:
+                overview_font.setStrikeOut(True)
+            painter.setFont(overview_font)
+            muted = QtGui.QColor(accent)
+            muted.setAlpha(220 if not ignored else 150)
+            painter.setPen(muted)
+            overview_rect = QtCore.QRect(
+                dot_x + 14, rect.top(), rect.right() - dot_x - 14, rect.height()
+            )
+            painter.drawText(overview_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, secondary)
+
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return QtCore.QSize(option.rect.width(), 28)
+
+
 class TaskResults:
     """Passive View: Only handles Widgets and Signals."""
 
@@ -88,38 +224,63 @@ class TaskResults:
         for i in range(self.model.rowCount()):
             idx = self.model.index(i, 0)
             if self.form.tvResults.isExpanded(idx):
-                expanded_rules.add(self.model.item(i).text().split(" [")[0])
+                expanded_rules.add(self.model.item(i).text().split("\x00")[0])
 
         self.model.clear()
+        self.form.tvResults.setItemDelegate(DFMTreeDelegate())
         root = self.model.invisibleRootItem()
 
         for rule_id, findings in grouped_data.items():
+            error_count = sum(1 for f in findings if not f.ignore and f.severity == Severity.ERROR)
+            warning_count = sum(
+                1 for f in findings if not f.ignore and f.severity == Severity.WARNING
+            )
             active_count = sum(1 for f in findings if not f.ignore)
-            rule_item = QStandardItem(f"{rule_id.label} [{active_count}]")
+            all_ignored = active_count == 0
+
+            # Use success icon and color if all findings are ignored
+            severity = findings[0].severity
+            icon = self._get_icon(Severity.SUCCESS) if all_ignored else self._get_icon(severity)
+            color = "#639922" if all_ignored else _severity_color(severity)
+
+            rule_item = QStandardItem()
             rule_item.setEditable(False)
             rule_item.setData(findings, QtCore.Qt.ItemDataRole.UserRole)
-            rule_item.setIcon(self._get_icon(findings[0].severity))
+            rule_item.setData("rule", QtCore.Qt.ItemDataRole.UserRole + 1)
+            rule_item.setData(rule_id.label, QtCore.Qt.ItemDataRole.UserRole + 2)
+            rule_item.setData(str(active_count), QtCore.Qt.ItemDataRole.UserRole + 3)
+            rule_item.setData(color, QtCore.Qt.ItemDataRole.UserRole + 4)
+            rule_item.setData(error_count, QtCore.Qt.ItemDataRole.UserRole + 6)
+            rule_item.setData(warning_count, QtCore.Qt.ItemDataRole.UserRole + 7)
+            rule_item.setIcon(icon)
 
             for finding in findings:
                 name = face_namer_func(finding.failing_geometry[0])
-                child = QStandardItem(f"{name} ({finding.overview})")
+                child = QStandardItem()
                 child.setEditable(False)
                 child.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
+                child.setData("finding", QtCore.Qt.ItemDataRole.UserRole + 1)
+                child.setData(name, QtCore.Qt.ItemDataRole.UserRole + 2)
+                child.setData(finding.overview, QtCore.Qt.ItemDataRole.UserRole + 3)
+                child.setData(
+                    _severity_color(finding.severity), QtCore.Qt.ItemDataRole.UserRole + 4
+                )
+                child.setData(finding.ignore, QtCore.Qt.ItemDataRole.UserRole + 5)
                 child.setIcon(self._get_icon(finding.severity))
-                if finding.ignore:
-                    child.setForeground(QtGui.QBrush(QtCore.Qt.GlobalColor.gray))
-                    font = child.font()
-                    font.setStrikeOut(True)
-                    child.setFont(font)
                 rule_item.appendRow(child)
+
             root.appendRow(rule_item)
             if rule_id.label in expanded_rules:
                 self.form.tvResults.setExpanded(rule_item.index(), True)
 
         for rule in all_process_rules:
             if rule not in grouped_data:
-                pass_item = QStandardItem(f"{rule.label} [Passed]")
+                pass_item = QStandardItem()
                 pass_item.setEditable(False)
+                pass_item.setData("rule", QtCore.Qt.ItemDataRole.UserRole + 1)
+                pass_item.setData(rule.label, QtCore.Qt.ItemDataRole.UserRole + 2)
+                pass_item.setData("0", QtCore.Qt.ItemDataRole.UserRole + 3)
+                pass_item.setData("#639922", QtCore.Qt.ItemDataRole.UserRole + 4)
                 pass_item.setIcon(QtGui.QIcon(":/icons/dfm_success.svg"))
                 root.appendRow(pass_item)
 
@@ -423,9 +584,14 @@ class DFMAnnotation:
 class DFMViewProvider:
     """Manages 3D visual feedback, including face highlighting and annotations."""
 
-    OVERLAY_HIGHLIGHT_COLOR = (1.0, 0.0, 0.0, 0.0)
+    OVERLAY_HIGHLIGHT_COLORS = {
+        "#E24B4A": (0.886, 0.294, 0.290, 0.0),
+        "#D4900A": (0.831, 0.565, 0.039, 0.0),
+        "#378ADD": (0.216, 0.541, 0.867, 0.0),
+        "#639922": (0.388, 0.600, 0.133, 0.0),
+    }
     OVERLAY_INACTIVE_COLOR = (0.5, 0.5, 0.5, 0.7)
-    OVERLAY_TRANSPARENCY = 0
+    OVERLAY_TRANSPARENCY = 30
     OVERLAY_NAME = "DFM_Highlight_Overlay"
     ANNOTATION_OFFSET = FreeCAD.Vector(15, 15, 15)
 
@@ -440,22 +606,38 @@ class DFMViewProvider:
         idx = self._get_face_index(occ_face)
         return f"Face{idx + 1}" if idx != -1 else "Unknown"
 
-    def highlight_faces(self, topo_faces: list):
-        """Shows colored face overlays for the given faces without touching the original object's colors."""
+    def highlight_faces(self, topo_faces: list, color_hex: str = "#E24B4A"):
+        """Shows colored face overlays. topo_faces can be a flat list (single color)
+        or a list of (face, color_hex) tuples for per-face coloring."""
+        self._current_color_hex = color_hex
         self.anno.remove(FreeCAD.ActiveDocument)
         Gui.Selection.clearSelection()
 
-        target_indices = {idx for f in topo_faces if (idx := self._get_face_index(f)) != -1}
-        self._highlighted_faces = [f"Face{i + 1}" for i in target_indices]
+        if topo_faces and isinstance(topo_faces[0], tuple):
+            face_color_pairs = topo_faces
+        else:
+            face_color_pairs = [(f, color_hex) for f in topo_faces]
 
-        if not target_indices:
+        index_color_map: dict[int, str] = {}
+        for face, hex_col in face_color_pairs:
+            idx = self._get_face_index(face)
+            if idx != -1:
+                # If a face appears under multiple severities, error wins over warning
+                existing = index_color_map.get(idx)
+                if existing is None or hex_col == "#E24B4A":
+                    index_color_map[idx] = hex_col
+
+        self._highlighted_faces = [f"Face{i + 1}" for i in index_color_map]
+
+        if not index_color_map:
             self._remove_overlay()
+            self.target_object.ViewObject.Visibility = True
             self.target_object.ViewObject.Transparency = self._original_transparency
             return
 
-        self.target_object.ViewObject.Visibility = False
+        self.target_object.ViewObject.Visibility = True
 
-        self._update_overlay(target_indices)
+        self._update_overlay(index_color_map)
 
         if self._highlighted_faces:
             overlay = self._get_overlay()
@@ -463,7 +645,7 @@ class DFMViewProvider:
                 Gui.Selection.addSelection(overlay, self._highlighted_faces[0])
                 Gui.Selection.clearSelection()
 
-    def annotate_issue(self, topo_faces: list, text: str):
+    def annotate_issue(self, topo_faces: list, text: str, color_hex: str = "#E24B4A"):
         """Adds a 3D label pointing to a point guaranteed to lie on the face surface."""
         if not topo_faces:
             return
@@ -475,13 +657,55 @@ class DFMViewProvider:
         face = self.target_object.Shape.Faces[idx]
         base_pos = self._find_on_surface_point(face)
 
+        h = color_hex.lstrip("#")
+        r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
+
         self.anno.create(
             doc=FreeCAD.ActiveDocument,
             base_pos=base_pos,
             text_pos=base_pos.add(self.ANNOTATION_OFFSET),
             text=text,
+            style_cfg={"bg_color": (r, g, b)},
         )
         FreeCAD.ActiveDocument.recompute()  # type: ignore
+
+    def _update_overlay(self, index_color_map: dict[int, str]):
+        """Creates or updates the overlay with per-face colors from an index→hex map."""
+        doc = FreeCAD.ActiveDocument
+        overlay = self._get_overlay()
+
+        if overlay is None:
+            overlay = doc.addObject("Part::Feature", self.OVERLAY_NAME)  # type: ignore
+
+        overlay.Shape = self.target_object.Shape.copy()
+
+        self.target_object.ViewObject.Visibility = False
+
+        vo = overlay.ViewObject
+        if vo is None:
+            return
+
+        if hasattr(vo, "ShowInTree"):
+            vo.ShowInTree = False
+
+        vo.Transparency = self.OVERLAY_TRANSPARENCY
+        vo.LineWidth = 0
+        vo.PointSize = 0
+
+        def hex_to_rgba(hex_color: str) -> tuple:
+            h = hex_color.lstrip("#")
+            r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
+            return (r, g, b, 0.0)
+
+        num_faces = len(self.target_object.Shape.Faces)
+        colors = [
+            hex_to_rgba(index_color_map[i]) if i in index_color_map else self.OVERLAY_INACTIVE_COLOR
+            for i in range(num_faces)
+        ]
+
+        vo.DiffuseColor = colors
+        vo.Transparency = self.OVERLAY_TRANSPARENCY
+        doc.recompute()  # type: ignore
 
     def _find_on_surface_point(self, face) -> FreeCAD.Vector:
         """Returns a point guaranteed to lie on the face surface.
@@ -524,37 +748,6 @@ class DFMViewProvider:
         self.anno.remove(FreeCAD.ActiveDocument)
         self._remove_overlay()
         self.target_object.ViewObject.Visibility = True
-
-    def _update_overlay(self, target_indices: set[int]):
-        """Creates or updates the overlay object with per-face colors."""
-        doc = FreeCAD.ActiveDocument
-        overlay = self._get_overlay()
-
-        if overlay is None:
-            overlay = doc.addObject("Part::Feature", self.OVERLAY_NAME)  # type: ignore
-
-        overlay.Shape = self.target_object.Shape
-
-        vo = overlay.ViewObject
-        if vo is None:
-            return
-
-        if hasattr(vo, "ShowInTree"):
-            vo.ShowInTree = False
-
-        vo.Transparency = self.OVERLAY_TRANSPARENCY
-        vo.LineWidth = 0
-        vo.PointSize = 0
-
-        num_faces = len(self.target_object.Shape.Faces)
-        colors = []
-        for i in range(num_faces):
-            colors.append(
-                self.OVERLAY_HIGHLIGHT_COLOR if i in target_indices else self.OVERLAY_INACTIVE_COLOR
-            )
-
-        vo.DiffuseColor = colors
-        doc.recompute()  # type: ignore
 
     def _remove_overlay(self):
         """Removes the overlay object from the document if it exists."""
@@ -634,15 +827,25 @@ class TaskResultsPresenter:
     def handle_selection(self, data: CheckResult | list[CheckResult]):
         Gui.Selection.clearSelection()
         if isinstance(data, list):
-            all_faces = [f for r in data if not r.ignore for f in r.failing_geometry]
             rule_name = data[0].rule_id.label if data else "Rule"
             self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
-            self.bridge.highlight_faces(all_faces)
+
+            # Build per-face colour pairs so each face uses its finding's severity colour
+            face_color_pairs = [
+                (face, _severity_color(r.severity))
+                for r in data
+                if not r.ignore
+                for face in r.failing_geometry
+            ]
+            self.bridge.highlight_faces(face_color_pairs)
         elif isinstance(data, CheckResult):
             overview = html.escape(data.overview)
-            self.view.form.tbDetails.setHtml(f"<b>{overview}</b><br>{data.message}")
-            self.bridge.highlight_faces(data.failing_geometry)
-            self.bridge.annotate_issue(data.failing_geometry, data.overview)
+            color = _severity_color(data.severity)
+            self.view.form.tbDetails.setHtml(
+                f"<b style='color:{color}'>{overview}</b><br>{data.message}"
+            )
+            self.bridge.highlight_faces(data.failing_geometry, color)
+            self.bridge.annotate_issue(data.failing_geometry, data.overview, color)
         self.view.adjust_details_height()
 
     def handle_zoom(self, result: CheckResult):
