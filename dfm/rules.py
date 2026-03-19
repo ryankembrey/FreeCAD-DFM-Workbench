@@ -29,7 +29,7 @@ from typing import Optional
 class RuleType:
     label: str
     unit: Optional[str] = "mm"
-    is_binary: bool = False  # If True, Target/Warning/Error columns are irrelevant
+    is_binary: bool = False  # If True, Target/Limit columns are irrelevant
     comparison: str = "min"  # "min" or "max"
 
 
