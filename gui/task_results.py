@@ -275,9 +275,9 @@ class DFMReportModel:
     """Holds the data of a DFM report and handles grouping and verdicts."""
 
     STATUS_THEMES = {
-        "FAILED": {"text": "Failed", "color": "#D32F2F"},
-        "WARNING": {"text": "Warning", "color": "#E65100"},
-        "SUCCESSFUL": {"text": "Successful", "color": "#2E7D32"},
+        "FAILED": {"text": "Failed", "color": "#E24B4A"},
+        "WARNING": {"text": "Warning", "color": "#D4900A"},
+        "SUCCESSFUL": {"text": "Successful", "color": "#639922"},
     }
 
     def __init__(self, results: list[CheckResult], process: Process, material: str):
