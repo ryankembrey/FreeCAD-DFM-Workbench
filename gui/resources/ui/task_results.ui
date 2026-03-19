@@ -36,7 +36,7 @@
      <item row="2" column="1">
       <widget class="QLineEdit" name="leMaterial">
        <property name="toolTip">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The material of the design.&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;This may affect parameters the design is checked against, such as minimum thickness. &lt;/p&gt;&lt;p&gt;The parameters are editable in the Rule Manager.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The material of the design.&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;This may affect parameters the design is checked against, such as minimum thickness. &lt;/p&gt;&lt;p&gt;The parameters are editable in the Process Library.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
       </widget>
      </item>

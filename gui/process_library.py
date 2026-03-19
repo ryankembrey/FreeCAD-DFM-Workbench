@@ -37,7 +37,7 @@ from . import DFM_rc
 # =============================================================================
 
 
-class ProcessManagerModel:
+class ProcessLibraryModel:
     """Manages the application state, data persistence, and active selections."""
 
     def __init__(self):
@@ -862,8 +862,8 @@ class AddMaterialDialog(QtWidgets.QDialog):
 # =============================================================================
 
 
-class ProcessManagerController(QtCore.QObject):
-    def __init__(self, view: "ProcessManager", model: ProcessManagerModel):
+class ProcessLibraryController(QtCore.QObject):
+    def __init__(self, view: "ProcessLibrary", model: ProcessLibraryModel):
         super().__init__()
         self.view = view
         self.model = model
@@ -1061,7 +1061,7 @@ class ProcessManagerController(QtCore.QObject):
 # =============================================================================
 
 
-class ProcessManager(QtWidgets.QDialog):
+class ProcessLibrary(QtWidgets.QDialog):
     """The main QDialog bridging FreeCAD into the MVC architecture."""
 
     save_requested = QtCore.Signal()
@@ -1072,8 +1072,8 @@ class ProcessManager(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent or Gui.getMainWindow())
-        self.form = Gui.PySideUic.loadUi(":/ui/process_manager.ui")  # type: ignore
-        self.setWindowTitle("DFM Process Manager")
+        self.form = Gui.PySideUic.loadUi(":/ui/process_library.ui")  # type: ignore
+        self.setWindowTitle("DFM Process Library")
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.form)
@@ -1103,8 +1103,8 @@ class ProcessManager(QtWidgets.QDialog):
         self.form.buttonBox.accepted.connect(self.save_requested.emit)
         self.form.buttonBox.rejected.connect(self.reject_requested.emit)
 
-        self.model = ProcessManagerModel()
-        self.controller = ProcessManagerController(self, self.model)
+        self.model = ProcessLibraryModel()
+        self.controller = ProcessLibraryController(self, self.model)
 
     def set_dirty_title(self, is_dirty: bool):
         title = self.windowTitle().replace(" *", "")
@@ -1130,16 +1130,16 @@ class ProcessManager(QtWidgets.QDialog):
 # =============================================================================
 
 
-class ProcessManagerCommand:
+class ProcessLibraryCommand:
     def GetResources(self):
         return {
-            "Pixmap": ":/icons/process_manager.svg",
-            "MenuText": "Process Manager",
+            "Pixmap": ":/icons/process_library.svg",
+            "MenuText": "Process Library",
             "ToolTip": "Create, configure and save manufacturing processes.",
         }
 
     def Activated(self):
-        dlg = ProcessManager()
+        dlg = ProcessLibrary()
         dlg.exec()
 
     def IsActive(self):
@@ -1147,4 +1147,4 @@ class ProcessManagerCommand:
 
 
 if App.GuiUp:
-    Gui.addCommand("DFM_ProcessManager", ProcessManagerCommand())
+    Gui.addCommand("DFM_ProcessLibrary", ProcessLibraryCommand())

@@ -22,7 +22,7 @@
 
 import FreeCADGui as Gui  # type: ignore
 
-from gui import task_setup, task_show_normals, process_manager
+from gui import task_setup, task_show_normals, process_library
 
 
 class DFMWorkbench(Gui.Workbench):
@@ -37,7 +37,7 @@ class DFMWorkbench(Gui.Workbench):
 
         self.list = [
             "DFM_SetupAnalysis",
-            "DFM_ProcessManager",
+            "DFM_ProcessLibrary",
         ]
         self.appendToolbar("DFM Tools", self.list)
         self.appendMenu("DFM", self.list)  # creates a new menu
