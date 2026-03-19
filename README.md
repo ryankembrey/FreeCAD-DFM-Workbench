@@ -10,17 +10,17 @@
 ![DFM Workbench](.github/images/showcase3.png)
 
 A FreeCAD workbench that automatically analyses 3D models for 
-Design for Manufacturability (DFM) issues — helping designers catch 
+Design for Manufacturability (DFM) issues, helping designers catch 
 problems before they reach the factory floor.
 
 ## Features
 
-- **Draft angle analysis** — detects faces with insufficient taper for mold ejection
-- **Wall thickness analysis** — finds sections too thin or thick for the process and material
-- **Undercut detection** — identifies geometry that prevents mold separation
-- **Customisation** — Add manufacturing processes, add/edit materials
-- **Interactive results** — failing faces highlighted directly in the 3D viewport with annotations
-- **Export** — analysis results exportable to CSV
+- **Draft angle analysis:** detects faces with insufficient taper for mold ejection
+- **Wall thickness analysis:** finds sections too thin or thick for the process and material
+- **Undercut detection:** identifies geometry that prevents mold separation
+- **Customisation:** Add manufacturing processes, add/edit materials
+- **Interactive results:** failing faces highlighted directly in the 3D viewport with annotations
+- **Export:** analysis results exportable to CSV
 
 
 ![Process Manager](.github/images/process_library.png)
