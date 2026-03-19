@@ -369,14 +369,14 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
         context_text = f"{rule_name} ({process_name})"
         process_lbl = QtWidgets.QLabel(context_text)
-        process_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;")
+        process_lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
 
         header_layout.addWidget(process_lbl)
 
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
         line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        line.setStyleSheet("background-color: #3d3d3d;")
+        line.setStyleSheet("")
 
         layout.addWidget(header_container)
         layout.addWidget(line)
@@ -384,14 +384,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
         warn_header_layout = QtWidgets.QHBoxLayout()
         warn_icon = QtWidgets.QLabel()
-        warn_icon.setPixmap(
-            style.standardPixmap(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning).scaled(
-                16,
-                16,
-                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                QtCore.Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        warn_icon.setPixmap(QtGui.QIcon(":/icons/dfm_warning.svg").pixmap(16, 16))
         warn_label = QtWidgets.QLabel("Warning Message")
         warn_label.setStyleSheet("font-weight: bold;")
         warn_header_layout.addWidget(warn_icon)
@@ -412,14 +405,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
         err_header_layout = QtWidgets.QHBoxLayout()
         err_icon = QtWidgets.QLabel()
-        err_icon.setPixmap(
-            style.standardPixmap(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical).scaled(
-                16,
-                16,
-                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                QtCore.Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        err_icon.setPixmap(QtGui.QIcon(":/icons/dfm_error.svg").pixmap(16, 16))
         err_label = QtWidgets.QLabel("Error Message")
         err_label.setStyleSheet("font-weight: bold;")
         err_header_layout.addWidget(err_icon)
@@ -438,11 +424,9 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         help_container.setObjectName("HelpContainer")
         help_container.setStyleSheet("""
             #HelpContainer {
-                background-color: #2b2b2b; 
-                border: 1px solid #3d3d3d;
+                border: 1px solid palette(mid);
                 border-radius: 4px;
             }
-            QLabel { color: #aaaaaa; }
         """)
 
         help_layout = QtWidgets.QGridLayout(help_container)
@@ -450,7 +434,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         help_layout.setSpacing(6)
 
         help_title = QtWidgets.QLabel("Available Parameters")
-        help_title.setStyleSheet("font-weight: bold; color: #ffffff; margin-bottom: 2px;")
+        help_title.setStyleSheet("font-weight: bold; margin-bottom: 2px;")
         help_layout.addWidget(help_title, 0, 0, 1, 2)
 
         placeholders = [
