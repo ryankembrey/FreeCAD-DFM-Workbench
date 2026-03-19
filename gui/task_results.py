@@ -72,8 +72,19 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
 
         text_left = icon_rect.right() + 6
         rect = option.rect
-
         accent = QtGui.QColor(color_hex)
+
+        base_text = (
+            option.palette.highlightedText().color()
+            if is_selected
+            else option.palette.text().color()
+        )
+
+        muted_text = QtGui.QColor(base_text)
+        muted_text.setAlphaF(0.45)
+
+        ignored_color = QtGui.QColor(base_text)
+        ignored_color.setAlphaF(0.35)
 
         if item_type == "rule":
             error_count = index.data(QtCore.Qt.ItemDataRole.UserRole + 6) or 0
@@ -102,22 +113,18 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             label_font = QtGui.QFont(option.font)
             label_font.setWeight(QtGui.QFont.Weight.Medium)
             painter.setFont(label_font)
-            painter.setPen(
-                QtGui.QColor("#cccccc")
-                if not is_selected
-                else option.palette.highlightedText().color()
-            )
+            painter.setPen(base_text)
             painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, primary)
 
             def draw_badge(text, color, x, w):
                 badge_rect = QtCore.QRect(x, rect.top() + 5, w, rect.height() - 10)
                 bg = QtGui.QColor(color)
-                bg.setAlpha(70)
+                bg.setAlpha(180)
                 painter.setPen(QtCore.Qt.PenStyle.NoPen)
                 painter.setBrush(bg)
                 painter.drawRoundedRect(badge_rect, 3, 3)
                 painter.setFont(badge_font)
-                painter.setPen(QtGui.QColor(color).lighter(130))
+                painter.setPen(QtGui.QColor("white"))
                 painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
 
             x = rect.right() - 6
@@ -127,21 +134,12 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
                 x -= badge_spacing
 
         elif item_type == "finding":
-            # Finding row: face name + muted overview separated visually
             name_font = QtGui.QFont(option.font)
             if ignored:
                 name_font.setStrikeOut(True)
             painter.setFont(name_font)
 
-            text_color = (
-                self._IGNORE_COLOR
-                if ignored
-                else (
-                    option.palette.highlightedText().color()
-                    if is_selected
-                    else QtGui.QColor("#cccccc")
-                )
-            )
+            text_color = ignored_color if ignored else base_text
             painter.setPen(text_color)
 
             fm = QtGui.QFontMetrics(name_font)
@@ -149,9 +147,9 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             name_rect = QtCore.QRect(text_left, rect.top(), name_w, rect.height())
             painter.drawText(name_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, primary)
 
-            dot_x = text_left + name_w + 2  # Separator dot
+            dot_x = text_left + name_w + 2
             dot_rect = QtCore.QRect(dot_x, rect.top(), 12, rect.height())
-            painter.setPen(self._LABEL_COLOR)
+            painter.setPen(muted_text)
             painter.drawText(dot_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, "·")
 
             overview_font = QtGui.QFont(option.font)
@@ -159,9 +157,9 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             if ignored:
                 overview_font.setStrikeOut(True)
             painter.setFont(overview_font)
-            muted = QtGui.QColor(accent)
-            muted.setAlpha(220 if not ignored else 150)
-            painter.setPen(muted)
+            muted_accent = QtGui.QColor(accent)
+            muted_accent.setAlpha(220 if not ignored else 120)
+            painter.setPen(muted_accent)
             overview_rect = QtCore.QRect(
                 dot_x + 14, rect.top(), rect.right() - dot_x - 14, rect.height()
             )
