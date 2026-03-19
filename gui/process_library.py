@@ -296,7 +296,6 @@ class RuleItemWidget(QtWidgets.QWidget):
         self.checkbox.setChecked(is_active)
 
         self.label = QtWidgets.QLabel(rule.label)
-        self.label.setStyleSheet("color: #eeeeee;")
 
         self.edit_btn = QtWidgets.QPushButton("Edit")
         self.edit_btn.setFixedWidth(65)
@@ -728,7 +727,9 @@ class MaterialEditView(QtCore.QObject):
                 if getattr(rule, "is_binary", False):
                     table_item = QtWidgets.QTableWidgetItem("N/A")
                     table_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled)
-                    table_item.setForeground(QtGui.QColor("#666666"))
+                    muted = self.table.palette().text().color()
+                    muted.setAlphaF(0.4)
+                    table_item.setForeground(QtGui.QBrush(muted))
                 else:
                     val = getattr(limit_data, attr) if limit_data else ""
                     def_val = getattr(def_limit, attr) if def_limit else ""
@@ -744,7 +745,8 @@ class MaterialEditView(QtCore.QObject):
                         display_text = f"{display_text}{rule.unit}"
 
                     table_item = QtWidgets.QTableWidgetItem(str(display_text))
-                    table_item.setForeground(QtGui.QColor("#ffaa00" if is_custom else "#ffffff"))
+                    if is_custom:
+                        table_item.setForeground(QtGui.QColor("#D4900A"))
 
                 self.table.setItem(row, col, table_item)
 
