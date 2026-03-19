@@ -5,5 +5,9 @@
     <file>ui/process_manager.ui</file>
     <file>icons/dfm_analysis.svg</file>
     <file>icons/process_manager.svg</file>
+    <file>icons/dfm_success.svg</file>
+    <file>icons/dfm_error.svg</file>
+    <file>icons/dfm_warning.svg</file>
+    <file>icons/dfm_info.svg</file>
 </qresource>
 </RCC>

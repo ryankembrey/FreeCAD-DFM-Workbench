@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 16 16"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="success.svg"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="19.75"
+     inkscape:cx="7.9746835"
+     inkscape:cy="8"
+     inkscape:window-width="1078"
+     inkscape:window-height="1038"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg1" />
+  <defs
+     id="defs1">
+    <mask
+       id="cut">
+      <rect
+         width="16"
+         height="16"
+         fill="white"
+         id="rect1" />
+      <polyline
+         points="4.5,8 7,10.5 11.5,5.5"
+         fill="none"
+         stroke="black"
+         stroke-width="1.8"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="polyline1" />
+    </mask>
+  </defs>
+  <circle
+     cx="8"
+     cy="8"
+     r="7"
+     fill="#639922"
+     mask="url(#cut)"
+     id="circle1" />
+</svg>

@@ -120,20 +120,18 @@ class TaskResults:
             if rule not in grouped_data:
                 pass_item = QStandardItem(f"{rule.label} [Passed]")
                 pass_item.setEditable(False)
-                pass_item.setIcon(
-                    QtWidgets.QApplication.style().standardIcon(
-                        QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton
-                    )
-                )
+                pass_item.setIcon(QtGui.QIcon(":/icons/dfm_success.svg"))
                 root.appendRow(pass_item)
 
-    def _get_icon(self, severity: Severity):
-        style = QtWidgets.QApplication.style()
-        px = {
-            Severity.ERROR: QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical,
-            Severity.WARNING: QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning,
-        }.get(severity, QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation)
-        return style.standardIcon(px)
+    def _get_icon(self, severity: Severity) -> QtGui.QIcon:
+        """Returns a severity circle icon for the given severity level."""
+        icon_map = {
+            Severity.ERROR: ":/icons/dfm_error.svg",
+            Severity.WARNING: ":/icons/dfm_warning.svg",
+            Severity.INFO: ":/icons/dfm_info.svg",
+        }
+        path = icon_map.get(severity, ":/icons/dfm_success.svg")
+        return QtGui.QIcon(path)
 
     def _handle_click(self, index: QtCore.QModelIndex):
         item = self.model.itemFromIndex(index)
@@ -426,7 +424,7 @@ class DFMViewProvider:
     """Manages 3D visual feedback, including face highlighting and annotations."""
 
     OVERLAY_HIGHLIGHT_COLOR = (1.0, 0.0, 0.0, 0.0)
-    OVERLAY_INACTIVE_COLOR = (0.1, 0.1, 0.1, 0.6)
+    OVERLAY_INACTIVE_COLOR = (0.5, 0.5, 0.5, 0.7)
     OVERLAY_TRANSPARENCY = 0
     OVERLAY_NAME = "DFM_Highlight_Overlay"
     ANNOTATION_OFFSET = FreeCAD.Vector(15, 15, 15)
