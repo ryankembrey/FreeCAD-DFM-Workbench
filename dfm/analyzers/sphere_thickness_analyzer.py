@@ -56,7 +56,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
-        samples = kwargs.get("samples", 30)
+        samples = kwargs.get("samples", 25)
         results: dict[TopoDS_Face, list[float]] = {}
 
         intersector = IntCurvesFace_ShapeIntersector()
