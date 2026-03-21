@@ -22,9 +22,9 @@
 
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, Iterator
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
+from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods, TopoDS_Edge
 from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from dfm.models import ProcessRequirement
 
 
@@ -58,7 +58,7 @@ class BaseAnalyzer(ABC):
         progress_cb: Optional[Callable[[int], None]] = None,
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[TopoDS_Face, Any]:
+    ) -> dict:
         pass
 
     def iter_faces(
@@ -86,5 +86,39 @@ class BaseAnalyzer(ABC):
             count += 1
             if progress_cb:
                 progress_cb(count)
+
+            explorer.Next()
+
+    def iter_edges(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+    ) -> Iterator[TopoDS_Edge]:
+        """
+        Yields each unique TopoDS_Edge in shape, handling abort checks and
+        progress reporting automatically.
+
+        Note: edges are deduplicated by hash — shared edges between two faces
+        appear only once, which is correct for edge-level analysis.
+        """
+
+        explorer = TopExp_Explorer(shape, TopAbs_EDGE)  # type: ignore
+        seen: set[int] = set()
+        count = 0
+
+        while explorer.More():
+            if check_abort and check_abort():
+                return
+
+            edge = topods.Edge(explorer.Current())
+            edge_hash = edge.__hash__()
+
+            if edge_hash not in seen:
+                seen.add(edge_hash)
+                yield edge
+                count += 1
+                if progress_cb:
+                    progress_cb(count)
 
             explorer.Next()
