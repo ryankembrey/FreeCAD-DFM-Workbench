@@ -24,6 +24,7 @@ import csv
 import html
 from collections import defaultdict
 from typing import Any, Callable
+import base64
 
 import FreeCAD  # type: ignore
 import FreeCADGui as Gui  # type: ignore
@@ -137,10 +138,17 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             name_font = QtGui.QFont(option.font)
             if ignored:
                 name_font.setStrikeOut(True)
-            painter.setFont(name_font)
 
-            text_color = ignored_color if ignored else base_text
-            painter.setPen(text_color)
+            if is_selected:
+                primary_color = option.palette.highlightedText().color()
+            else:
+                primary_color = option.palette.text().color()
+
+            secondary_color = QtGui.QColor(primary_color)
+            secondary_color.setAlphaF(0.35 if ignored else 0.6)
+
+            painter.setFont(name_font)
+            painter.setPen(secondary_color if ignored else primary_color)
 
             fm = QtGui.QFontMetrics(name_font)
             name_w = fm.horizontalAdvance(primary) + 8
@@ -149,17 +157,11 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
 
             dot_x = text_left + name_w + 2
             dot_rect = QtCore.QRect(dot_x, rect.top(), 12, rect.height())
-            painter.setPen(muted_text)
+            painter.setPen(secondary_color)
             painter.drawText(dot_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, "·")
 
-            overview_font = QtGui.QFont(option.font)
-            overview_font.setPointSizeF(option.font.pointSizeF() * 0.9)
-            if ignored:
-                overview_font.setStrikeOut(True)
-            painter.setFont(overview_font)
-            muted_accent = QtGui.QColor(accent)
-            muted_accent.setAlpha(220 if not ignored else 120)
-            painter.setPen(muted_accent)
+            painter.setFont(name_font)
+            painter.setPen(secondary_color if ignored else primary_color)
             overview_rect = QtCore.QRect(
                 dot_x + 14, rect.top(), rect.right() - dot_x - 14, rect.height()
             )
@@ -839,8 +841,14 @@ class TaskResultsPresenter:
         elif isinstance(data, CheckResult):
             overview = html.escape(data.overview)
             color = _severity_color(data.severity)
+            icon = self.view._get_icon(data.severity)
+            icon_html = _icon_to_html(icon, size=16)
             self.view.form.tbDetails.setHtml(
-                f"<b style='color:{color}'>{overview}</b><br>{data.message}"
+                f"<table cellspacing='0' cellpadding='0'><tr>"
+                f"<td valign='middle' style='padding-right:4px'>{icon_html}</td>"
+                f"<td valign='middle'><b>{overview}</b></td>"
+                f"</tr></table>"
+                f"<p style='margin-top:4px'>{data.message}</p>"
             )
             self.bridge.highlight_faces(data.failing_geometry, color)
             self.bridge.annotate_issue(data.failing_geometry, data.overview, color)
@@ -892,3 +900,13 @@ class TaskResultsPresenter:
         self.bridge.highlight_faces(all_faces)
         self.bridge.zoom_to_selection()
         self.view.adjust_details_height()
+
+
+def _icon_to_html(icon: QtGui.QIcon, size: int = 16) -> str:
+    pixmap = icon.pixmap(size, size)
+    buffer = QtCore.QBuffer()
+    buffer.open(QtCore.QIODevice.OpenModeFlag.WriteOnly)
+    pixmap.save(buffer, "PNG")
+    b64 = base64.b64encode(buffer.data().data()).decode()
+    img = f"<img src='data:image/png;base64,{b64}' width='{size}' height='{size}'/>"
+    return img

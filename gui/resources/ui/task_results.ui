@@ -76,15 +76,11 @@
    <item>
     <widget class="QGroupBox" name="groupBox_2">
      <property name="title">
-      <string>Results</string>
+      <string>Findings</string>
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <layout class="QGridLayout" name="gridLayout_3">
-        <item row="0" column="0">
-         <widget class="QTreeView" name="tvResults"/>
-        </item>
-       </layout>
+       <widget class="QTreeView" name="tvResults"/>
       </item>
      </layout>
     </widget>
@@ -134,7 +130,7 @@
            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Exports a report of the DFM analysis results to a CSV file to be viewed in a spreadsheet editor.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
           <property name="text">
-           <string>Export Report</string>
+           <string>Export CSV</string>
           </property>
          </widget>
         </item>
