@@ -63,44 +63,20 @@ class DraftAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Draft Analyzer"
 
-    def execute(
-        self,
-        shape: TopoDS_Shape,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
-        **kwargs: Any,
-    ) -> dict[TopoDS_Face, float]:
-        """
-        Runs a full draft analysis on an inputted shape.
-        """
-
+    def execute(self, shape, progress_cb=None, check_abort=None, **kwargs):
+        """Runs a full draft analysis on an inputted shape."""
         pull_direction = kwargs.get("pull_direction", gp_Dir(0, 0, 1))
         samples = kwargs.get("samples", 20)
 
-        if not isinstance(pull_direction, gp_Dir):
-            raise ValueError(f"{self.name} requires a 'pull_direction' of type gp_Dir.")
-
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
-
         self.core_cavity_mapping = self.classify_moldside(shape, pull_direction)
 
-        results: dict[TopoDS_Face, float] = {}
-        faces_processed = 0
+        results = {}
 
-        while face_explorer.More():
-            if check_abort and check_abort():
-                return results
-            current_face = topods.Face(face_explorer.Current())
-            draft_result = self.get_draft_for_face(current_face, pull_direction, samples)
+        for face in self.iter_faces(shape, progress_cb, check_abort):
+            result = self.get_draft_for_face(face, pull_direction, samples)
+            if result is not None:
+                results[face] = result
 
-            if draft_result is not None:
-                results[current_face] = draft_result
-
-            faces_processed += 1
-            if progress_cb:
-                progress_cb(faces_processed)
-
-            face_explorer.Next()
         return results
 
     def get_draft_for_face(self, face: TopoDS_Face, pull_direction: gp_Dir, samples: int) -> float:

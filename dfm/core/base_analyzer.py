@@ -21,8 +21,10 @@
 #  ***************************************************************************
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
+from typing import Any, Callable, Optional, Iterator
+from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
+from OCC.Core.TopExp import TopExp_Explorer
+from OCC.Core.TopAbs import TopAbs_FACE
 from dfm.models import ProcessRequirement
 
 
@@ -58,3 +60,31 @@ class BaseAnalyzer(ABC):
         **kwargs: Any,
     ) -> dict[TopoDS_Face, Any]:
         pass
+
+    def iter_faces(
+        self,
+        shape: TopoDS_Shape,
+        progress_cb: Optional[Callable[[int], None]] = None,
+        check_abort: Optional[Callable[[], bool]] = None,
+    ) -> Iterator[TopoDS_Face]:
+        """
+        Yields each TopoDS_Face in the shape, handling abort checks.
+
+        Usage:
+            for face in self.iter_faces(shape, progress_cb, check_abort):
+                results[face] = self._process_face(face)
+        """
+        explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
+        count = 0
+
+        while explorer.More():
+            if check_abort and check_abort():
+                return
+
+            yield topods.Face(explorer.Current())
+
+            count += 1
+            if progress_cb:
+                progress_cb(count)
+
+            explorer.Next()

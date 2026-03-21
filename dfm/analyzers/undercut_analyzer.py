@@ -58,31 +58,13 @@ class UndercutAnalyzer(BaseAnalyzer):
     ) -> dict[TopoDS_Face, Any]:
         pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         samples = kwargs.get("samples", 10)
-
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
-
-        results: dict[TopoDS_Face, float] = {}
-
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
-        faces_processed = 0
-
-        while face_explorer.More():
-            if check_abort and check_abort():
-                return results
-
-            current_face = topods.Face(face_explorer.Current())
-
-            undercut_ratio = self._analyze_face(current_face, intersector, pull_direction, samples)
-
-            if undercut_ratio > 0.0:
-                results[current_face] = undercut_ratio
-
-            faces_processed += 1
-            if progress_cb:
-                progress_cb(faces_processed)
-
-            face_explorer.Next()
+        results = {}
+        for face in self.iter_faces(shape, progress_cb, check_abort):
+            ratio = self._analyze_face(face, intersector, pull_direction, samples)
+            if ratio > 0.0:
+                results[face] = ratio
         return results
 
     def _analyze_face(self, face: TopoDS_Face, intersector, pull_direction, samples):

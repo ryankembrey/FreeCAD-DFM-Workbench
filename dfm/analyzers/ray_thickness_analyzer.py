@@ -53,32 +53,14 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
         """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
-
+        samples = kwargs.get("samples", 10)
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
-
-        samples = kwargs.get("samples", 10)
-
-        results: dict[TopoDS_Face, list[float]] = {}
-
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
-        faces_processed = 0
-
-        while face_explorer.More():
-            if check_abort and check_abort():
-                return results
-            current_face = topods.Face(face_explorer.Current())
-
-            thicknesses = self._ray_cast_for_face(current_face, intersector, samples)
-
+        results = {}
+        for face in self.iter_faces(shape, progress_cb, check_abort):
+            thicknesses = self._ray_cast_for_face(face, intersector, samples)
             if thicknesses:
-                results[current_face] = thicknesses
-
-            face_explorer.Next()
-
-            faces_processed += 1
-            if progress_cb:
-                progress_cb(faces_processed)
+                results[face] = thicknesses
         return results
 
     def _ray_cast_for_face(

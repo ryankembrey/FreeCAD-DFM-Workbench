@@ -57,7 +57,6 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
         samples = kwargs.get("samples", 25)
-        results: dict[TopoDS_Face, list[float]] = {}
 
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
@@ -74,25 +73,11 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         dist_tool = BRepExtrema_DistShapeShape()
         dist_tool.LoadS2(face_compound)
 
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
-        faces_processed = 0
-
-        while face_explorer.More():
-            if check_abort and check_abort():
-                return results
-
-            current_face = topods.Face(face_explorer.Current())
-
-            thicknesses = self._sphere_cast_for_face(current_face, intersector, dist_tool, samples)
+        results = {}
+        for face in self.iter_faces(shape, progress_cb, check_abort):
+            thicknesses = self._sphere_cast_for_face(face, intersector, dist_tool, samples)
             if thicknesses:
-                results[current_face] = thicknesses
-
-            face_explorer.Next()
-
-            faces_processed += 1
-
-            if progress_cb:
-                progress_cb(faces_processed)
+                results[face] = thicknesses
         return results
 
     def _sphere_cast_for_face(
