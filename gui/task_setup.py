@@ -20,6 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+from typing import Optional
 from PySide6 import QtGui, QtWidgets, QtCore
 
 import FreeCAD  # type: ignore
@@ -32,7 +33,7 @@ from dfm.registries.analyzers_registry import get_analyzer_class
 from dfm.registries.checks_registry import get_check_class
 from dfm.registries.process_registry import ProcessRegistry
 from app.analysis_runner import AnalysisRunner
-from dfm.models import CheckResult, ProcessRequirement
+from dfm.models import CheckResult, GeometryRef, ProcessRequirement
 from dfm.rules import Rulebook
 
 from gui.visuals import DirectionIndicator
@@ -316,6 +317,8 @@ class TaskSetup:
                 FreeCAD.Console.PrintMessage("DFM Analysis aborted by user.\n")
                 self.form.pbRunAnalysis.show()
             else:
+                self.form.lProgress.setText("Resolving geometry references…")
+                _resolve_geometry_refs(results, self.target_object)
                 self.indicator.remove()
                 Gui.Control.closeDialog()
                 report_model = DFMReportModel(
@@ -370,6 +373,53 @@ class TaskSetup:
     def accept(self):
         self.indicator.remove()
         Gui.Control.closeDialog()
+
+
+def _resolve_geometry_refs(
+    results: list[CheckResult],
+    target_object,
+) -> None:
+    """
+    Converts raw OCC objects in CheckResult.failing_geometry into serialisable
+    GeometryRef instances stored in CheckResult.refs.
+
+    After this call, failing_geometry is cleared — the GUI layer must use .refs.
+
+    Supports: Face, Edge, Vertex.
+    """
+    shape = target_object.Shape
+
+    occ_faces = [Part.__toPythonOCC__(f) for f in shape.Faces]
+    occ_edges = [Part.__toPythonOCC__(e) for e in shape.Edges]
+    occ_vertices = [Part.__toPythonOCC__(v) for v in shape.Vertexes]
+
+    def resolve_one(occ_obj) -> Optional[GeometryRef]:
+        # Try Face
+        for i, occ_face in enumerate(occ_faces):
+            if occ_face.IsSame(occ_obj):
+                return GeometryRef(type="Face", index=i, label=f"Face{i + 1}")
+        # Try Edge
+        for i, occ_edge in enumerate(occ_edges):
+            if occ_edge.IsSame(occ_obj):
+                return GeometryRef(type="Edge", index=i, label=f"Edge{i + 1}")
+        # Try Vertex
+        for i, occ_vertex in enumerate(occ_vertices):
+            if occ_vertex.IsSame(occ_obj):
+                return GeometryRef(type="Vertex", index=i, label=f"Vertex{i + 1}")
+        return None
+
+    for result in results:
+        resolved = []
+        for occ_obj in result.failing_geometry:
+            ref = resolve_one(occ_obj)
+            if ref is not None:
+                resolved.append(ref)
+            else:
+                FreeCAD.Console.PrintWarning(
+                    f"Could not resolve geometry ref for {result.rule_id.label}\n"
+                )
+        result.refs = resolved
+        result.failing_geometry = []  # clear as OCC objects are no longer needed
 
 
 class DfmAnalysisCommand:

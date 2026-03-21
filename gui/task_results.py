@@ -23,7 +23,7 @@
 import csv
 import html
 from collections import defaultdict
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 import base64
 
 import FreeCAD  # type: ignore
@@ -33,7 +33,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from dfm.models import CheckResult, Severity
+from dfm.models import CheckResult, Severity, GeometryRef
 from dfm.processes.process import Process
 from dfm.rules import Rulebook
 
@@ -218,7 +218,7 @@ class TaskResults:
         final_height = int(content_height) + 10
         self.form.tbDetails.setFixedHeight(max(60, min(final_height, 300)))
 
-    def render_tree(self, grouped_data: dict, face_namer_func: Callable, all_process_rules: list):
+    def render_tree(self, grouped_data: dict, all_process_rules: list):
         """Renders the DFM results tree"""
         expanded_rules = set()
         for i in range(self.model.rowCount()):
@@ -255,7 +255,7 @@ class TaskResults:
             rule_item.setIcon(icon)
 
             for finding in findings:
-                name = face_namer_func(finding.failing_geometry[0])
+                name = finding.refs[0].label if finding.refs else "Unknown"
                 child = QStandardItem()
                 child.setEditable(False)
                 child.setData(finding, QtCore.Qt.ItemDataRole.UserRole)
@@ -484,7 +484,7 @@ class DFMReportModel:
 
 class CSVResultExporter:
     @staticmethod
-    def export(filepath: str, target_label: str, model: DFMReportModel, face_namer_func: Callable):
+    def export(filepath: str, target_label: str, model: DFMReportModel):
         try:
             with open(filepath, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -506,7 +506,7 @@ class CSVResultExporter:
                     if result.ignore:
                         continue
 
-                    faces = "; ".join([face_namer_func(f) for f in result.failing_geometry])
+                    faces = "; ".join([ref.label for ref in result.refs])
 
                     # Write issue rows
                     writer.writerow(
@@ -601,31 +601,20 @@ class DFMViewProvider:
         self._highlighted_faces: list[str] = []
         self._original_transparency: int = target_object.ViewObject.Transparency
 
-    def get_face_name(self, occ_face) -> str:
-        """Returns the internal face name (e.g. 'Face1') for a given OCC face."""
-        idx = self._get_face_index(occ_face)
-        return f"Face{idx + 1}" if idx != -1 else "Unknown"
-
-    def highlight_faces(self, topo_faces: list, color_hex: str = "#E24B4A"):
-        """Shows colored face overlays. topo_faces can be a flat list (single color)
-        or a list of (face, color_hex) tuples for per-face coloring."""
-        self._current_color_hex = color_hex
+    def highlight_by_index(self, index_color_pairs: list[tuple[int, str]]):
+        """
+        Highlights faces by their 0-based index in the target shape.
+        index_color_pairs: list of (face_index, hex_color).
+        """
+        self._current_color_hex = "#E24B4A"
         self.anno.remove(FreeCAD.ActiveDocument)
         Gui.Selection.clearSelection()
 
-        if topo_faces and isinstance(topo_faces[0], tuple):
-            face_color_pairs = topo_faces
-        else:
-            face_color_pairs = [(f, color_hex) for f in topo_faces]
-
         index_color_map: dict[int, str] = {}
-        for face, hex_col in face_color_pairs:
-            idx = self._get_face_index(face)
-            if idx != -1:
-                # If a face appears under multiple severities, error wins over warning
-                existing = index_color_map.get(idx)
-                if existing is None or hex_col == "#E24B4A":
-                    index_color_map[idx] = hex_col
+        for idx, hex_col in index_color_pairs:
+            existing = index_color_map.get(idx)
+            if existing is None or hex_col == "#E24B4A":
+                index_color_map[idx] = hex_col
 
         self._highlighted_faces = [f"Face{i + 1}" for i in index_color_map]
 
@@ -636,25 +625,21 @@ class DFMViewProvider:
             return
 
         self.target_object.ViewObject.Visibility = True
-
         self._update_overlay(index_color_map)
 
-        if self._highlighted_faces:
-            overlay = self._get_overlay()
-            if overlay:
-                Gui.Selection.addSelection(overlay, self._highlighted_faces[0])
-                Gui.Selection.clearSelection()
-
-    def annotate_issue(self, topo_faces: list, text: str, color_hex: str = "#E24B4A"):
-        """Adds a 3D label pointing to a point guaranteed to lie on the face surface."""
-        if not topo_faces:
+    def annotate_by_index(
+        self,
+        face_index: Optional[int],
+        text: str,
+        color_hex: str = "#E24B4A",
+    ):
+        """
+        Places an annotation on the face at the given 0-based index.
+        """
+        if face_index is None:
             return
 
-        idx = self._get_face_index(topo_faces[0])
-        if idx == -1:
-            return
-
-        face = self.target_object.Shape.Faces[idx]
+        face = self.target_object.Shape.Faces[face_index]
         base_pos = self._find_on_surface_point(face)
 
         h = color_hex.lstrip("#")
@@ -767,13 +752,6 @@ class DFMViewProvider:
             return FreeCAD.ActiveDocument.getObject(self.OVERLAY_NAME)  # type: ignore
         return None
 
-    def _get_face_index(self, occ_face) -> int:
-        """Finds the index of an OCC face within the target object's shape."""
-        for i, f in enumerate(self.target_object.Shape.Faces):
-            if Part.__toPythonOCC__(f).IsSame(occ_face):
-                return i
-        return -1
-
 
 class TaskResultsPresenter:
     """Presenter for the TaskResults view. Handles UI updates and event handling."""
@@ -811,7 +789,6 @@ class TaskResultsPresenter:
 
         self.view.render_tree(
             self.model.get_grouped_results(),
-            self.bridge.get_face_name,
             self.model.process.active_rules,
         )
 
@@ -830,14 +807,14 @@ class TaskResultsPresenter:
             rule_name = data[0].rule_id.label if data else "Rule"
             self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
 
-            # Build per-face colour pairs so each face uses its finding's severity colour
-            face_color_pairs = [
-                (face, _severity_color(r.severity))
+            index_color_pairs = [
+                (ref.index, _severity_color(r.severity))
                 for r in data
                 if not r.ignore
-                for face in r.failing_geometry
+                for ref in r.refs
+                if ref.type == "Face"
             ]
-            self.bridge.highlight_faces(face_color_pairs)
+            self.bridge.highlight_by_index(index_color_pairs)
         elif isinstance(data, CheckResult):
             overview = html.escape(data.overview)
             color = _severity_color(data.severity)
@@ -850,8 +827,11 @@ class TaskResultsPresenter:
                 f"</tr></table>"
                 f"<p style='margin-top:4px'>{data.message}</p>"
             )
-            self.bridge.highlight_faces(data.failing_geometry, color)
-            self.bridge.annotate_issue(data.failing_geometry, data.overview, color)
+            face_refs = [ref for ref in data.refs if ref.type == "Face"]
+            self.bridge.highlight_by_index([(ref.index, color) for ref in face_refs])
+            self.bridge.annotate_by_index(
+                face_refs[0].index if face_refs else None, data.overview, color
+            )
         self.view.adjust_details_height()
 
     def handle_zoom(self, result: CheckResult):
@@ -873,9 +853,7 @@ class TaskResultsPresenter:
         if not path.lower().endswith(".csv"):
             path += ".csv"
 
-        if CSVResultExporter.export(
-            path, self.bridge.target_object.Label, self.model, self.bridge.get_face_name
-        ):
+        if CSVResultExporter.export(path, self.bridge.target_object.Label, self.model):
             QMessageBox.information(self.view.form, "Done", "Export Successful")
 
     def handle_cleanup(self):
@@ -894,10 +872,16 @@ class TaskResultsPresenter:
         self.refresh_ui()
 
     def handle_zoom_to_rule(self, findings: list[CheckResult]):
-        all_faces = [f for r in findings if not r.ignore for f in r.failing_geometry]
+        index_color_pairs = [
+            (ref.index, _severity_color(r.severity))
+            for r in findings
+            if not r.ignore
+            for ref in r.refs
+            if ref.type == "Face"
+        ]
         rule_name = findings[0].rule_id.label if findings else "Rule"
         self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
-        self.bridge.highlight_faces(all_faces)
+        self.bridge.highlight_by_index(index_color_pairs)
         self.bridge.zoom_to_selection()
         self.view.adjust_details_height()
 
