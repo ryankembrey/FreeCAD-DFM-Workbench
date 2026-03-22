@@ -36,7 +36,7 @@ rule_feedback:
             in "sink marks" or internal voids as the plastic shrinks.
 
             '
-        error_msg: 'Excessive Wall Thickness ({value}): This region will cause severe
+        error_msg: 'Excessive Wall Thickness ({measured}): This region will cause severe
             non-uniform  cooling. Expect high internal stresses, potential warping,
             and significantly  increased cycle times to ensure the core is solidified.
 
