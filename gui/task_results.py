@@ -33,6 +33,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from app.history import HistoryManager, RuleDiff
 from dfm.models import CheckResult, Severity, GeometryRef
 from dfm.processes.process import Process
 from dfm.rules import Rulebook
@@ -756,7 +757,15 @@ class DFMViewProvider:
 class TaskResultsPresenter:
     """Presenter for the TaskResults view. Handles UI updates and event handling."""
 
-    def __init__(self, view: TaskResults, model: DFMReportModel, bridge: DFMViewProvider):
+    def __init__(
+        self,
+        view: TaskResults,
+        model: DFMReportModel,
+        bridge: DFMViewProvider,
+        history_manager: HistoryManager,
+        doc_name="",
+        shape_name="",
+    ):
         self.view = view
         self.model = model
         self.bridge = bridge
@@ -769,6 +778,12 @@ class TaskResultsPresenter:
         self.view.on_save_clicked = self.handle_save
         self.view.on_toggle_ignore_all = self.handle_ignore_all
         self.view.on_zoom_to_rule = self.handle_zoom_to_rule
+
+        self.history_manager = history_manager
+        self.doc_name = doc_name
+        self.shape_name = shape_name
+
+        self.build_history_tab()
 
         self.view.adjust_details_height()
 
@@ -884,6 +899,390 @@ class TaskResultsPresenter:
         self.bridge.highlight_by_index(index_color_pairs)
         self.bridge.zoom_to_selection()
         self.view.adjust_details_height()
+
+    def build_history_tab(self):
+        runs = self.history_manager.load_runs(self.doc_name, self.shape_name)
+        if not runs:
+            if hasattr(self.view.form, "gbHistoryTrend"):
+                self.view.form.gbHistoryTrend.setVisible(False)
+            return
+
+        self.sparkline = DFMSparkline()
+        recent_runs = runs[-10:]  # Last 10 runs
+        e_hist, w_hist, s_hist, n_hist = [], [], [], []
+
+        for run in recent_runs:
+            e_hist.append(
+                sum(1 for f in run.findings if not f.ignore and f.severity == Severity.ERROR)
+            )
+            w_hist.append(
+                sum(1 for f in run.findings if not f.ignore and f.severity == Severity.WARNING)
+            )
+            s_hist.append(
+                sum(1 for f in run.findings if not f.ignore and f.severity == Severity.SUCCESS)
+            )
+            n_hist.append(run.run)
+
+        self.sparkline.set_data(e_hist, w_hist, s_hist, n_hist)
+
+        container = self.view.form.gbHistoryTrend
+        layout = container.layout()
+
+        if layout is None:
+            layout = QtWidgets.QVBoxLayout(container)
+            layout.setContentsMargins(4, 8, 4, 4)
+
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        layout.addWidget(self.sparkline)
+
+        if len(runs) < 2:
+            self.view.form.cbRun1.setEnabled(False)
+            self.view.form.cbRun2.setEnabled(False)
+            self.view.form.pbExportDiff.setEnabled(False)
+            return
+
+        for run in runs:
+            self.view.form.cbRun1.addItem(run.label, userData=run.run)
+            self.view.form.cbRun2.addItem(run.label, userData=run.run)
+
+        self.view.form.cbRun1.setCurrentIndex(len(runs) - 2)
+        self.view.form.cbRun2.setCurrentIndex(len(runs) - 1)
+
+        self.view.form.lwDiffs.setItemDelegate(HistoryRowDelegate())
+
+        self.view.form.pbExportDiff.clicked.connect(self._export_diff)
+        self.view.form.cbRun1.currentIndexChanged.connect(self.render_diff)
+        self.view.form.cbRun2.currentIndexChanged.connect(self.render_diff)
+
+        self.render_diff()
+
+    def render_diff(self):
+        from app.history import diff_runs
+
+        a_idx = self.view.form.cbRun1.currentData()
+        b_idx = self.view.form.cbRun2.currentData()
+
+        self.view.form.lwDiffs.clear()
+
+        if a_idx is None or b_idx is None or a_idx == b_idx:
+            self.view.form.lResolved.setText("—")
+            self.view.form.lRegressed.setText("—")
+            self.view.form.lUnchanged.setText("—")
+            return
+
+        run_a = self.history_manager.load_run(self.doc_name, self.shape_name, a_idx)
+        run_b = self.history_manager.load_run(self.doc_name, self.shape_name, b_idx)
+
+        if not run_a or not run_b:
+            return
+
+        diffs = diff_runs(run_a, run_b)
+
+        resolved = sum(1 for d in diffs if d.status in ("resolved", "improved"))
+        regressed = sum(1 for d in diffs if d.status in ("regressed", "new"))
+        unchanged = sum(1 for d in diffs if d.status == "unchanged")
+
+        C_ERR = "#E24B4A"
+        C_WARN = "#D4900A"
+        C_OK = "#639922"
+        C_INFO = "#378ADD"
+
+        self.view.form.lResolved.setText(f"+{resolved}" if resolved else "0")
+        res_color = C_OK if resolved else "#666666"
+        self.view.form.lResolved.setStyleSheet(f"color: {res_color}; font-weight: bold;")
+
+        self.view.form.lRegressed.setText(f"+{regressed}" if regressed else "0")
+        reg_color = C_ERR if regressed else "#666666"
+        self.view.form.lRegressed.setStyleSheet(f"color: {reg_color}; font-weight: bold;")
+
+        self.view.form.lUnchanged.setText(str(unchanged))
+        unch_color = C_INFO if unchanged else "#666666"
+        self.view.form.lUnchanged.setStyleSheet(f"color: {unch_color}; font-weight: bold;")
+
+        def _pill(errors, warnings, successes):
+            if errors == 0 and warnings == 0:
+                return "Pass", C_OK
+            if errors > 0:
+                return f"{errors} E", C_ERR
+            if warnings > 0:
+                return f"{warnings} W", C_WARN
+            return "S", C_OK
+
+        # Sorting order for the list
+        ORDER = {"regressed": 0, "new": 0, "improved": 1, "resolved": 1, "unchanged": 2}
+
+        for d in sorted(diffs, key=lambda x: (ORDER.get(x.status, 3), x.rule_label)):
+            if d.status in ("regressed", "new"):
+                icon_path = ":/icons/dfm_error.svg"
+            elif d.status in ("improved", "resolved"):
+                icon_path = ":/icons/dfm_success.svg"
+            else:
+                if d.current_errors > 0:
+                    icon_path = ":/icons/dfm_error.svg"
+                elif d.current_warnings > 0:
+                    icon_path = ":/icons/dfm_error.svg"
+                else:
+                    icon_path = ":/icons/dfm_success.svg"
+
+            from_text, from_color = _pill(
+                d.previous_errors, d.previous_warnings, d.previous_success
+            )
+            to_text, to_color = _pill(d.current_errors, d.current_warnings, d.current_success)
+
+            item = QtWidgets.QListWidgetItem()
+            item.setIcon(QtGui.QIcon(icon_path))
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 1, "diff")
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 2, d.rule_label)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 3, from_text)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 4, from_color)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 5, to_text)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole + 6, to_color)
+            self.view.form.lwDiffs.addItem(item)
+
+        # Dynamic Height
+        item_count = self.view.form.lwDiffs.count()
+        row_height = 28
+        total_height = min(300, (item_count * row_height) + 4)
+        self.view.form.lwDiffs.setFixedHeight(total_height)
+
+        self.view.form.lwDiffs.viewport().update()
+        QtWidgets.QApplication.processEvents()
+
+    def _export_diff(self):
+        a_idx = self.view.form.cbRun1.currentData()
+        b_idx = self.view.form.cbRun2.currentData()
+
+        if a_idx is None or b_idx is None or a_idx == b_idx:
+            return
+
+        run_a = self.history_manager.load_run(self.doc_name, self.shape_name, a_idx)
+        run_b = self.history_manager.load_run(self.doc_name, self.shape_name, b_idx)
+        if not run_a or not run_b:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self.view.form, "Export Diff Report", "", "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+
+        from app.history import diff_runs
+
+        diffs = diff_runs(run_a, run_b)
+
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["DFM Diff Report"])
+                writer.writerow(["Document", self.doc_name, "Shape", self.shape_name])
+                writer.writerow(["Run A", run_a.label, run_a.process, run_a.material])
+                writer.writerow(["Run B", run_b.label, run_b.process, run_b.material])
+                writer.writerow([])
+                writer.writerow(["Rule", "Run A", "Run B", "Status"])
+                for d in diffs:
+                    writer.writerow([d.rule_label, d.previous_count, d.current_count, d.status])
+            QMessageBox.information(self.view.form, "Done", "Diff report exported.")
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"Diff export failed: {e}\n")
+
+
+class HistoryRowDelegate(QtWidgets.QStyledItemDelegate):
+    """
+    Renders history rows with fixed-width badges for vertical alignment.
+    Layout: [Icon] Rule Label (flexible) [Badge Fixed] → [Badge Fixed]
+    """
+
+    BADGE_WIDTH = 45
+    ARROW_WIDTH = 20
+    RIGHT_MARGIN = 8
+    SPACING = 4
+
+    def paint(self, painter, option, index):
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+
+        #  Extract data
+        rule_label = index.data(QtCore.Qt.ItemDataRole.UserRole + 2) or ""
+        prev_text = index.data(QtCore.Qt.ItemDataRole.UserRole + 3) or ""
+        prev_color = index.data(QtCore.Qt.ItemDataRole.UserRole + 4) or "#666666"
+        curr_text = index.data(QtCore.Qt.ItemDataRole.UserRole + 5) or ""
+        curr_color = index.data(QtCore.Qt.ItemDataRole.UserRole + 6) or "#666666"
+
+        is_selected = option.state & QtWidgets.QStyle.StateFlag.State_Selected
+        rect = option.rect
+
+        # Draw background
+        if is_selected:
+            painter.fillRect(rect, option.palette.highlight())
+
+        base_text_color = (
+            option.palette.highlightedText().color()
+            if is_selected
+            else option.palette.text().color()
+        )
+
+        muted_text = QtGui.QColor(base_text_color)
+        muted_text.setAlphaF(0.4)
+
+        # Draw icon
+        icon = index.data(QtCore.Qt.ItemDataRole.DecorationRole)
+        icon_rect = QtCore.QRect(rect.left() + 6, rect.top() + (rect.height() - 16) // 2, 16, 16)
+        if icon and not icon.isNull():
+            icon.paint(painter, icon_rect)
+
+        # Define UI positions (Right to Left)
+        curr_x = rect.right() - self.RIGHT_MARGIN - self.BADGE_WIDTH
+        arrow_x = curr_x - self.ARROW_WIDTH
+        prev_x = arrow_x - self.BADGE_WIDTH
+
+        # Helper to draw Badge
+        def draw_badge(text, color_hex, x):
+            # Badge background
+            badge_rect = QtCore.QRect(x, rect.top() + 5, self.BADGE_WIDTH, rect.height() - 10)
+            bg = QtGui.QColor(color_hex)
+            bg.setAlpha(180)
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(badge_rect, 3, 3)
+
+            # Badge text
+            badge_font = QtGui.QFont(option.font)
+            badge_font.setPointSizeF(option.font.pointSizeF() * 0.8)
+            painter.setFont(badge_font)
+            painter.setPen(QtGui.QColor("white"))
+            painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
+
+        # Draw badges and arrow
+        draw_badge(curr_text, curr_color, curr_x)
+
+        painter.setFont(option.font)
+        painter.setPen(muted_text)
+        arrow_rect = QtCore.QRect(arrow_x, rect.top(), self.ARROW_WIDTH, rect.height())
+        painter.drawText(arrow_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "→")
+
+        draw_badge(prev_text, prev_color, prev_x)
+
+        # Draw rule label
+        text_left = icon_rect.right() + 8
+        label_w = prev_x - text_left - self.SPACING
+        label_rect = QtCore.QRect(text_left, rect.top(), label_w, rect.height())
+
+        label_font = QtGui.QFont(option.font)
+        label_font.setWeight(QtGui.QFont.Weight.Medium)
+        painter.setFont(label_font)
+        painter.setPen(base_text_color)
+
+        elided_text = QtGui.QFontMetrics(label_font).elidedText(
+            rule_label, QtCore.Qt.TextElideMode.ElideRight, label_w
+        )
+        painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, elided_text)
+
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return QtCore.QSize(option.rect.width(), 28)
+
+
+class DFMSparkline(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.error_data = []
+        self.warning_data = []
+        self.success_data = []
+        self.run_labels = []
+        self.setFixedHeight(130)
+
+    def set_data(self, errors, warnings, successes, run_nums):
+        self.error_data = errors
+        self.warning_data = warnings
+        self.success_data = successes
+        self.run_labels = [f"Run {n}" for n in run_nums]
+        self.update()
+
+    def paintEvent(self, _event):
+        if not self.error_data:
+            return
+
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        rect = self.contentsRect()
+
+        p_top, p_bottom, p_left, p_right = 25, 25, 35, 15
+        w = rect.width() - p_left - p_right
+        h = rect.height() - p_top - p_bottom
+
+        all_series = [self.error_data, self.warning_data, self.success_data]
+        raw_max = max([max(s) if s else 0 for s in all_series] + [5])
+        max_val = int(((raw_max // 5) + 1) * 5)
+
+        num_points = len(self.error_data)
+        x_step = w / (num_points - 1) if num_points > 1 else 0
+
+        # Y-axis and grid
+        font = painter.font()
+        font.setPointSizeF(6.5)
+        painter.setFont(font)
+
+        intervals = 4
+        for i in range(intervals + 1):
+            val = int((max_val / intervals) * i)
+            y = int(rect.height() - p_bottom - (val / max_val * h))
+
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 15), 1))
+            painter.drawLine(p_left, y, rect.width() - p_right, y)
+
+            painter.setPen(QtGui.QColor("#666666"))
+            painter.drawText(2, y + 4, str(val).rjust(3))
+
+        # X-axis labels
+        for i, label in enumerate(self.run_labels):
+            x = int(p_left + (i * x_step))
+            painter.setPen(QtGui.QColor("#666666"))
+            if num_points < 6 or i % 2 == 0 or i == num_points - 1:
+                painter.drawText(x - 15, int(rect.height() - 5), label)
+
+        def draw_series(data, color_hex):
+            if not data or max(data) == 0:
+                return
+            color = QtGui.QColor(color_hex)
+            pts = [
+                QtCore.QPointF(p_left + (i * x_step), rect.height() - p_bottom - (v / max_val * h))
+                for i, v in enumerate(data)
+            ]
+
+            path = QtGui.QPainterPath()
+            path.moveTo(pts[0].x(), rect.height() - p_bottom)
+            for p in pts:
+                path.lineTo(p)
+            path.lineTo(pts[-1].x(), rect.height() - p_bottom)
+
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            fill = QtGui.QColor(color)
+            fill.setAlpha(35)
+            painter.setBrush(fill)
+            painter.drawPath(path)
+
+            painter.setPen(QtGui.QPen(color, 1.5))
+            painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+            line_path = QtGui.QPainterPath()
+            line_path.moveTo(pts[0])
+            for p in pts[1:]:
+                line_path.lineTo(p)
+            painter.drawPath(line_path)
+
+            painter.setBrush(color)
+            for p in pts:
+                painter.drawEllipse(p, 2, 2)
+
+        draw_series(self.success_data, "#639922")
+        draw_series(self.warning_data, "#D4900A")
+        draw_series(self.error_data, "#E24B4A")
 
 
 def _icon_to_html(icon: QtGui.QIcon, size: int = 16) -> str:

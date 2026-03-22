@@ -63,36 +63,40 @@ class MinThicknessCheck(BaseCheck):
                 continue
 
             measured = min(valid_thicknesses)
+
             severity: Optional[Severity] = None
+            template = ""
 
             if limit is not None and measured < limit:
                 severity = Severity.ERROR
+                template = fb.error_msg
             elif target is not None and measured < target:
                 severity = Severity.WARNING
+                template = fb.warning_msg
+            else:
+                severity = Severity.SUCCESS
 
-            if severity:
-                template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
-                effective_limit = limit if limit is not None else 0.0
-                effective_target = target if target is not None else 0.0
-                threshold = effective_limit if severity == Severity.ERROR else effective_target
+            effective_limit = limit if limit is not None else 0.0
+            effective_target = target if target is not None else 0.0
+            threshold = effective_limit if severity == Severity.ERROR else effective_target
 
-                formatted_msg = self.format_feedback(
-                    template, measured, effective_target, effective_limit, unit
+            formatted_msg = self.format_feedback(
+                template, measured, effective_target, effective_limit, unit
+            )
+            results.append(
+                CheckResult(
+                    rule_id=rule,
+                    overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}",
+                    message=formatted_msg,
+                    severity=severity,
+                    failing_geometry=[face],
+                    ignore=False,
+                    value=float(measured),
+                    limit=effective_limit,
+                    comparison="<",
+                    unit="mm",
                 )
-                results.append(
-                    CheckResult(
-                        rule_id=rule,
-                        overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}",
-                        message=formatted_msg,
-                        severity=severity,
-                        failing_geometry=[face],
-                        ignore=False,
-                        value=float(measured),
-                        limit=effective_limit,
-                        comparison="<",
-                        unit="mm",
-                    )
-                )
+            )
 
         return results
 
@@ -129,35 +133,39 @@ class MaxThicknessCheck(BaseCheck):
                 continue
 
             measured = max(diameters)
+
             severity: Optional[Severity] = None
+            template = ""
 
             if limit is not None and measured > limit:
                 severity = Severity.ERROR
+                template = fb.error_msg
             elif target is not None and measured > target:
                 severity = Severity.WARNING
+                template = fb.warning_msg
+            else:
+                severity = Severity.SUCCESS
 
-            if severity:
-                template = fb.error_msg if severity == Severity.ERROR else fb.warning_msg
-                effective_limit = limit if limit is not None else 0.0
-                effective_target = target if target is not None else 0.0
-                threshold = effective_limit if severity == Severity.ERROR else effective_target
+            effective_limit = limit if limit is not None else 0.0
+            effective_target = target if target is not None else 0.0
+            threshold = effective_limit if severity == Severity.ERROR else effective_target
 
-                formatted_msg = self.format_feedback(
-                    template, measured, effective_target, effective_limit, unit
+            formatted_msg = self.format_feedback(
+                template, measured, effective_target, effective_limit, unit
+            )
+            results.append(
+                CheckResult(
+                    rule_id=rule,
+                    overview=f"{measured:.2f}{unit} > {threshold:.2f}{unit}",
+                    message=formatted_msg,
+                    severity=severity,
+                    failing_geometry=[face],
+                    ignore=False,
+                    value=float(measured),
+                    limit=effective_limit,
+                    comparison=">",
+                    unit="mm",
                 )
-                results.append(
-                    CheckResult(
-                        rule_id=rule,
-                        overview=f"{measured:.2f}{unit} > {threshold:.2f}{unit}",
-                        message=formatted_msg,
-                        severity=severity,
-                        failing_geometry=[face],
-                        ignore=False,
-                        value=float(measured),
-                        limit=effective_limit,
-                        comparison=">",
-                        unit="mm",
-                    )
-                )
+            )
 
         return results

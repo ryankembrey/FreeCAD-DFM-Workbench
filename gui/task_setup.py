@@ -20,6 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+from pathlib import Path
 from typing import Optional
 from PySide6 import QtGui, QtWidgets, QtCore
 
@@ -44,6 +45,7 @@ from .task_results import (
     DFMViewProvider,
     TaskResultsPresenter,
 )
+from app.history import HistoryManager, diff_runs, RuleDiff
 
 
 class TaskSetup:
@@ -319,6 +321,16 @@ class TaskSetup:
             else:
                 self.form.lProgress.setText("Resolving geometry references…")
                 _resolve_geometry_refs(results, self.target_object)
+                history_manager = HistoryManager(Path(FreeCAD.getUserAppDataDir()))
+                verdict_text, _ = DFMReportModel(results, self.process, material_name).get_verdict()
+                history_manager.save_run(
+                    results=results,
+                    doc_name=FreeCAD.ActiveDocument.Name,  # type: ignore
+                    shape_name=self.target_object.Label,  # type: ignore
+                    process_name=process_name,
+                    material=material_name,
+                    verdict=verdict_text,
+                )
                 self.indicator.remove()
                 Gui.Control.closeDialog()
                 report_model = DFMReportModel(
@@ -327,7 +339,12 @@ class TaskSetup:
                 view_bridge = DFMViewProvider(self.target_object)
                 results_view = TaskResults()
                 self.results_presenter = TaskResultsPresenter(
-                    view=results_view, model=report_model, bridge=view_bridge
+                    view=results_view,
+                    model=report_model,
+                    bridge=view_bridge,
+                    history_manager=history_manager,
+                    doc_name=FreeCAD.ActiveDocument.Name,  # type: ignore
+                    shape_name=self.target_object.Label,  # type: ignore
                 )
 
         except Exception as e:
