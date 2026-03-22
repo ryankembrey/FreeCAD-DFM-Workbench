@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 from PySide6 import QtGui, QtWidgets, QtCore
 
-import FreeCAD  # type: ignore
+import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 import Part  # type: ignore
 
@@ -35,17 +35,15 @@ from dfm.registries.checks_registry import get_check_class
 from dfm.registries.process_registry import ProcessRegistry
 from app.analysis_runner import AnalysisRunner
 from dfm.models import CheckResult, GeometryRef, ProcessRequirement
-from dfm.rules import Rulebook
 
+from app.history import HistoryManager
+
+from gui import DFM_rc
+from gui.results.bridge import DFMViewProvider
+from gui.results.models import DFMReportModel
+from gui.results.presenter import TaskResultsPresenter
+from gui.task_results import TaskResults
 from gui.visuals import DirectionIndicator
-from . import DFM_rc
-from .task_results import (
-    TaskResults,
-    DFMReportModel,
-    DFMViewProvider,
-    TaskResultsPresenter,
-)
-from app.history import HistoryManager, diff_runs, RuleDiff
 
 
 class TaskSetup:
@@ -166,7 +164,7 @@ class TaskSetup:
         try:
             sel = Gui.Selection.getSelectionEx()
             if not sel or not sel[0].SubObjects:
-                FreeCAD.Console.PrintError("Please select a face in the 3D view.\n")
+                App.Console.PrintError("Please select a face in the 3D view.\n")
                 return
 
             face = sel[0].SubObjects[0]
@@ -185,7 +183,7 @@ class TaskSetup:
             Gui.Selection.clearSelection()
 
         except Exception as e:
-            FreeCAD.Console.PrintError(f"Visualizing pull direction failed: {e}\n")
+            App.Console.PrintError(f"Visualizing pull direction failed: {e}\n")
 
     def on_select_neutral_plane(self):
         """
@@ -194,18 +192,18 @@ class TaskSetup:
         try:
             sel = Gui.Selection.getSelectionEx()
             if not sel:
-                FreeCAD.Console.PrintError("Nothing selected. Please select a face on the model.\n")
+                App.Console.PrintError("Nothing selected. Please select a face on the model.\n")
                 return
 
             if not sel[0].SubElementNames:
-                FreeCAD.Console.PrintError("Please select a specific face, not the whole object.\n")
+                App.Console.PrintError("Please select a specific face, not the whole object.\n")
                 return
 
             face_name = sel[0].SubElementNames[0]
             face_obj = sel[0].SubObjects[0]
 
             if not isinstance(face_obj, Part.Face):
-                FreeCAD.Console.PrintError(f"Selected element '{face_name}' is not a face.\n")
+                App.Console.PrintError(f"Selected element '{face_name}' is not a face.\n")
                 return
 
             self.neutral_plane_face = Part.__toPythonOCC__(face_obj)
@@ -213,7 +211,7 @@ class TaskSetup:
             self.form.leNPlane.setReadOnly(True)
 
         except Exception as e:
-            FreeCAD.Console.PrintError(f"Selection error: {e}\n")
+            App.Console.PrintError(f"Selection error: {e}\n")
 
     def get_active_requirements(self) -> set[ProcessRequirement]:
         """
@@ -237,7 +235,7 @@ class TaskSetup:
                     requirements.update(analyzer_cls().requirements)
 
             except KeyError:
-                FreeCAD.Console.PrintWarning(f"Rule '{rule.name}' not found in Rulebook.\n")
+                App.Console.PrintWarning(f"Rule '{rule.name}' not found in Rulebook.\n")
                 continue
 
         return requirements
@@ -251,17 +249,17 @@ class TaskSetup:
             return
 
         if not self.target_shape:
-            FreeCAD.Console.PrintError("No model selected to analyze.\n")
+            App.Console.PrintError("No model selected to analyze.\n")
             return
 
         process_name = self.form.cbManProcess.currentData()
         if not process_name:
-            FreeCAD.Console.PrintError("Select a manufacturing process.\n")
+            App.Console.PrintError("Select a manufacturing process.\n")
             return
 
         material_name = self.form.cbMaterial.currentText()
         if "--" in material_name:
-            FreeCAD.Console.PrintError("Select a material.\n")
+            App.Console.PrintError("Select a material.\n")
             return
 
         active_reqs = self.get_active_requirements()
@@ -270,13 +268,13 @@ class TaskSetup:
 
         if ProcessRequirement.PULL_DIRECTION in active_reqs:
             if not self.pull_dir:
-                FreeCAD.Console.PrintError("Pull direction is required.\n")
+                App.Console.PrintError("Pull direction is required.\n")
                 return
             kwargs[ProcessRequirement.PULL_DIRECTION.name] = self.pull_dir
 
         if ProcessRequirement.NEUTRAL_PLANE in active_reqs:
             if not hasattr(self, "neutral_plane_face"):
-                FreeCAD.Console.PrintError("Neutral plane face is required.\n")
+                App.Console.PrintError("Neutral plane face is required.\n")
                 return
             kwargs[ProcessRequirement.NEUTRAL_PLANE.name] = self.neutral_plane_face
 
@@ -316,16 +314,16 @@ class TaskSetup:
             )
 
             if self.abort_requested:
-                FreeCAD.Console.PrintMessage("DFM Analysis aborted by user.\n")
+                App.Console.PrintMessage("DFM Analysis aborted by user.\n")
                 self.form.pbRunAnalysis.show()
             else:
                 self.form.lProgress.setText("Resolving geometry references…")
                 _resolve_geometry_refs(results, self.target_object)
-                history_manager = HistoryManager(Path(FreeCAD.getUserAppDataDir()))
+                history_manager = HistoryManager(Path(App.getUserAppDataDir()))
                 verdict_text, _ = DFMReportModel(results, self.process, material_name).get_verdict()
                 history_manager.save_run(
                     results=results,
-                    doc_name=FreeCAD.ActiveDocument.Name,  # type: ignore
+                    doc_name=App.ActiveDocument.Name,  # type: ignore
                     shape_name=self.target_object.Label,  # type: ignore
                     process_name=process_name,
                     material=material_name,
@@ -343,15 +341,15 @@ class TaskSetup:
                     model=report_model,
                     bridge=view_bridge,
                     history_manager=history_manager,
-                    doc_name=FreeCAD.ActiveDocument.Name,  # type: ignore
+                    doc_name=App.ActiveDocument.Name,  # type: ignore
                     shape_name=self.target_object.Label,  # type: ignore
                 )
 
         except Exception as e:
-            FreeCAD.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
+            App.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
             import traceback
 
-            FreeCAD.Console.PrintError(traceback.format_exc())
+            App.Console.PrintError(traceback.format_exc())
 
         finally:
             self.is_running = False
@@ -371,9 +369,9 @@ class TaskSetup:
             self.target_shape = self.target_object.Shape
             self.form.leSelectModel.setText(self.target_object.Label)
         except IndexError:
-            FreeCAD.Console.PrintUserError("Select a shape in the Tree or 3D view first.\n")
+            App.Console.PrintUserError("Select a shape in the Tree or 3D view first.\n")
         except Exception as e:
-            FreeCAD.Console.PrintError(f"Could not use the selected object. {e}\n")
+            App.Console.PrintError(f"Could not use the selected object. {e}\n")
         finally:
             Gui.Selection.clearSelection()
 
@@ -432,7 +430,7 @@ def _resolve_geometry_refs(
             if ref is not None:
                 resolved.append(ref)
             else:
-                FreeCAD.Console.PrintWarning(
+                App.Console.PrintWarning(
                     f"Could not resolve geometry ref for {result.rule_id.label}\n"
                 )
         result.refs = resolved
@@ -454,5 +452,5 @@ class DfmAnalysisCommand:
         return True
 
 
-if FreeCAD.GuiUp:
+if App.GuiUp:
     Gui.addCommand("DFM_SetupAnalysis", DfmAnalysisCommand())
