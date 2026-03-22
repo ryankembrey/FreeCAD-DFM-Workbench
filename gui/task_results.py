@@ -65,11 +65,11 @@ class TaskResults:
         self.on_toggle_ignore_all: Callable[[list[CheckResult]], None] | None = None
         self.on_zoom_to_rule: Callable[[list[CheckResult]], None] | None = None
 
-        self.form.tvResults.clicked.connect(self._handle_click)
         self.form.tvResults.doubleClicked.connect(self._handle_double_click)
         self.form.pbExportResults.clicked.connect(self._handle_export_btn)
         self.form.tvResults.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.form.tvResults.customContextMenuRequested.connect(self._show_context_menu)
+        self.form.tvResults.selectionModel().currentChanged.connect(self._handle_selection_change)
 
     def adjust_details_height(self):
         """Dynamic resizing of the description box based on content."""
@@ -142,6 +142,8 @@ class TaskResults:
                 pass_item.setIcon(QtGui.QIcon(":/icons/dfm_success.svg"))
                 root.appendRow(pass_item)
 
+        self.form.tvResults.setFocus()
+
     def _get_icon(self, severity: Severity) -> QtGui.QIcon:
         """Returns a severity circle icon for the given severity level."""
         icon_map = {
@@ -151,13 +153,6 @@ class TaskResults:
         }
         path = icon_map.get(severity, ":/icons/dfm_success.svg")
         return QtGui.QIcon(path)
-
-    def _handle_click(self, index: QtCore.QModelIndex):
-        item = self.model.itemFromIndex(index)
-        if item and self.on_row_selected:
-            data = item.data(QtCore.Qt.ItemDataRole.UserRole)
-            if data:
-                self.on_row_selected(data)
 
     def _handle_double_click(self, index: QtCore.QModelIndex):
         item = self.model.itemFromIndex(index)
@@ -260,6 +255,14 @@ class TaskResults:
         if finding.limit is not None:
             lines.append(f"Limit: {finding.limit:.2f}{finding.unit}")
         QtWidgets.QApplication.clipboard().setText("\n".join(lines))
+
+    def _handle_selection_change(self, current: QtCore.QModelIndex, previous: QtCore.QModelIndex):
+        """Notifies the presenter when the focused row changes (via Mouse or Keyboard)."""
+        item = self.model.itemFromIndex(current)
+        if item and self.on_row_selected:
+            data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+            if data:
+                self.on_row_selected(data)
 
     def on_save_clicked(self):
         print("saved")
