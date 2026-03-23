@@ -23,6 +23,7 @@
 import collections
 from typing import Any, Optional, Callable
 
+from scipy.spatial import KDTree
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
@@ -110,9 +111,12 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         face_area = props.Mass()
         adaptive_samples = int(max(5, min(samples, 2 + (face_area**0.5) / 10)))
 
-        # Inject seeds found by previous faces
-        if face in face_seeds:
-            for s_u, s_v, s_thick in face_seeds[face]:
+        # Inject seeds found by previous faces and build spatial index
+        seeds = face_seeds.get(face, [])
+        tree = KDTree([(s[0], s[1]) for s in seeds]) if seeds else None
+
+        if seeds:
+            for s_u, s_v, s_thick in seeds:
                 thicknesses.append(s_thick)
                 if s_thick > max_t:
                     max_t, best_uv = s_thick, (s_u, s_v)
@@ -120,16 +124,39 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         # Check the center
         u_mid, v_mid = get_face_uv_center(face)
         if is_point_on_face(u_mid, v_mid, face):
-            mid_result = self._shrink_sphere_at_uv(
-                face, u_mid, v_mid, intersector, dist_tool, face_seeds
-            )
+            mid_result = None
+            skip = False
+            if tree:
+                dist, idx = tree.query((u_mid, v_mid))
+                if dist < 1e-7:
+                    mid_result = seeds[idx][2]
+                    skip = True
+
+            if not skip:
+                mid_result = self._shrink_sphere_at_uv(
+                    face, u_mid, v_mid, intersector, dist_tool, face_seeds
+                )
+
             if mid_result is not None and mid_result != float("inf"):
                 thicknesses.append(mid_result)
-                max_t, best_uv = mid_result, (u_mid, v_mid)
+                if mid_result > max_t:
+                    max_t, best_uv = mid_result, (u_mid, v_mid)
 
         # Coarse grid
         for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.05):
-            thick = self._shrink_sphere_at_uv(face, u, v, intersector, dist_tool, face_seeds, max_t)
+            thick = None
+            skip = False
+            if tree:
+                dist, idx = tree.query((u, v))
+                if dist < 1e-7:
+                    thick = seeds[idx][2]
+                    skip = True
+
+            if not skip:
+                thick = self._shrink_sphere_at_uv(
+                    face, u, v, intersector, dist_tool, face_seeds, max_t
+                )
+
             if thick is not None and thick != float("inf"):
                 thicknesses.append(thick)
                 if thick > max_t:
@@ -168,9 +195,19 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 u_test = max(u_min, min(u_max, u_test))
                 v_test = max(v_min, min(v_max, v_test))
 
-                thick = self._shrink_sphere_at_uv(
-                    face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
-                )
+                thick = None
+                skip = False
+                if tree:
+                    dist, idx = tree.query((u_test, v_test))
+                    if dist < 1e-7:
+                        thick = seeds[idx][2]
+                        skip = True
+
+                if not skip:
+                    thick = self._shrink_sphere_at_uv(
+                        face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
+                    )
+
                 if thick is not None and thick > current_max_t and thick != float("inf"):
                     current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
                     thicknesses.append(thick)
