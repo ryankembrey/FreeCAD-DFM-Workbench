@@ -173,6 +173,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         gain_threshold = 0.0001
 
         current_best_uv, current_max_t = best_uv, max_t
+        last_dir = None  # Stores the direction multiplier
 
         for _ in range(50):
             improved = False
@@ -181,19 +182,13 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             du = step_size * u_ratio
             dv = step_size * v_ratio
 
-            neighbors = [
-                (current_best_uv[0] + du, current_best_uv[1]),
-                (current_best_uv[0] - du, current_best_uv[1]),
-                (current_best_uv[0], current_best_uv[1] + dv),
-                (current_best_uv[0], current_best_uv[1] - dv),
-                (current_best_uv[0] + du, current_best_uv[1] + dv),
-                (current_best_uv[0] - du, current_best_uv[1] + dv),
-                (current_best_uv[0] + du, current_best_uv[1] - dv),
-                (current_best_uv[0] - du, current_best_uv[1] - dv),
-            ]
-            for u_test, v_test in neighbors:
-                u_test = max(u_min, min(u_max, u_test))
-                v_test = max(v_min, min(v_max, v_test))
+            cardinals = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
+
+            # Try the last successful direction first
+            if last_dir:
+                u_test = max(u_min, min(u_max, current_best_uv[0] + last_dir[0] * du))
+                v_test = max(v_min, min(v_max, current_best_uv[1] + last_dir[1] * dv))
 
                 thick = None
                 skip = False
@@ -202,7 +197,6 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                     if dist < 1e-7:
                         thick = seeds[idx][2]
                         skip = True
-
                 if not skip:
                     thick = self._shrink_sphere_at_uv(
                         face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
@@ -211,6 +205,54 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 if thick is not None and thick > current_max_t and thick != float("inf"):
                     current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
                     thicknesses.append(thick)
+
+            # If momentum didn't work, try Cardinals
+            if not improved:
+                for d_u_m, d_v_m in cardinals:
+                    u_test = max(u_min, min(u_max, current_best_uv[0] + d_u_m * du))
+                    v_test = max(v_min, min(v_max, current_best_uv[1] + d_v_m * dv))
+
+                    thick = None
+                    skip = False
+                    if tree:
+                        dist, idx = tree.query((u_test, v_test))
+                        if dist < 1e-7:
+                            thick = seeds[idx][2]
+                            skip = True
+                    if not skip:
+                        thick = self._shrink_sphere_at_uv(
+                            face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
+                        )
+
+                    if thick is not None and thick > current_max_t and thick != float("inf"):
+                        current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
+                        last_dir = (d_u_m, d_v_m)
+                        thicknesses.append(thick)
+                        break  # Short-circuit
+
+            # If cardinals didn't work, try Diagonals
+            if not improved:
+                for d_u_m, d_v_m in diagonals:
+                    u_test = max(u_min, min(u_max, current_best_uv[0] + d_u_m * du))
+                    v_test = max(v_min, min(v_max, current_best_uv[1] + d_v_m * dv))
+
+                    thick = None
+                    skip = False
+                    if tree:
+                        dist, idx = tree.query((u_test, v_test))
+                        if dist < 1e-7:
+                            thick = seeds[idx][2]
+                            skip = True
+                    if not skip:
+                        thick = self._shrink_sphere_at_uv(
+                            face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
+                        )
+
+                    if thick is not None and thick > current_max_t and thick != float("inf"):
+                        current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
+                        last_dir = (d_u_m, d_v_m)
+                        thicknesses.append(thick)
+                        break  # Short-circuit
 
             if improved:
                 relative_gain = (current_max_t - prev_t) / max(prev_t, 1e-6)
@@ -222,6 +264,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 if plateau_hits >= plateau_patience:
                     break
             else:
+                last_dir = None  # Reset direction
                 step_size /= 2.0
                 if step_size < min_step:
                     break

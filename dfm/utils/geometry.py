@@ -23,6 +23,7 @@
 # This file defines geometry functions that are often reused between analyzers
 
 from typing import Generator, Optional
+import math
 
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
@@ -73,6 +74,8 @@ def yield_face_uv_grid(
         samples: Number of points along each axis.
         margin: Percentage (0.0 to 0.5) to crop from edges to avoid corner noise.
     """
+    classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
+
     u_min, u_max, v_min, v_max = breptools.UVBounds(face)
 
     # Apply margin (Default to none)
@@ -98,7 +101,7 @@ def yield_face_uv_grid(
         u = s_u_min + i * u_step
         for j in range(samples):
             v = s_v_min + j * v_step
-            if is_point_on_face(u, v, face):
+            if is_point_on_face(u, v, face, classifier):
                 yield u, v
 
 
@@ -155,9 +158,13 @@ def get_face_uv_ratios(face: TopoDS_Face):
     return u_ratio, v_ratio
 
 
-def is_point_on_face(u: float, v: float, face: TopoDS_Face) -> bool:
+def is_point_on_face(
+    u: float, v: float, face: TopoDS_Face, classifier: BRepTopAdaptor_FClass2d | None = None
+) -> bool:
     """Checks if a point by UV is on a face."""
-    classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
+    if not classifier:
+        classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
+
     state = classifier.Perform(gp_Pnt2d(u, v))
 
     if state == TopAbs_IN or state == TopAbs_ON:
