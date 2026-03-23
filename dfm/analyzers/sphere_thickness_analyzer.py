@@ -147,7 +147,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                     max_t, best_uv = mid_result, (u_mid, v_mid)
 
         # Coarse grid
-        for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.05):
+        for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.01):
             thick = None
             skip = False
             if tree:
