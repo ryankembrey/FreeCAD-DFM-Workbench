@@ -26,7 +26,7 @@ from typing import Any, Optional, Callable
 from scipy.spatial import KDTree
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_OUT
 from OCC.Core.BRep import BRep_Builder, BRep_Tool
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec
@@ -36,6 +36,7 @@ from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop
 from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
+from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
@@ -65,6 +66,8 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
 
+        classifier = BRepClass3d_SolidClassifier(shape)
+
         builder = BRep_Builder()
         face_compound = TopoDS_Compound()
         builder.MakeCompound(face_compound)
@@ -82,7 +85,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
             thicknesses = self._sphere_cast_for_face(
-                face, intersector, dist_tool, samples, face_seeds
+                face, intersector, dist_tool, classifier, samples, face_seeds
             )
             if thicknesses:
                 results[face] = thicknesses
@@ -93,6 +96,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         face: TopoDS_Face,
         intersector: IntCurvesFace_ShapeIntersector,
         dist_tool: BRepExtrema_DistShapeShape,
+        classifier: BRepClass3d_SolidClassifier,
         samples: int,
         face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]],
     ) -> list[float]:
@@ -134,7 +138,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
             if not skip:
                 mid_result = self._shrink_sphere_at_uv(
-                    face, u_mid, v_mid, intersector, dist_tool, face_seeds
+                    face, u_mid, v_mid, intersector, dist_tool, classifier, face_seeds
                 )
 
             if mid_result is not None and mid_result != float("inf"):
@@ -154,7 +158,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
             if not skip:
                 thick = self._shrink_sphere_at_uv(
-                    face, u, v, intersector, dist_tool, face_seeds, max_t
+                    face, u, v, intersector, dist_tool, classifier, face_seeds, max_t
                 )
 
             if thick is not None and thick != float("inf"):
@@ -199,7 +203,14 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                         skip = True
                 if not skip:
                     thick = self._shrink_sphere_at_uv(
-                        face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
+                        face,
+                        u_test,
+                        v_test,
+                        intersector,
+                        dist_tool,
+                        classifier,
+                        face_seeds,
+                        current_max_t,
                     )
 
                 if thick is not None and thick > current_max_t and thick != float("inf"):
@@ -221,7 +232,14 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                             skip = True
                     if not skip:
                         thick = self._shrink_sphere_at_uv(
-                            face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
+                            face,
+                            u_test,
+                            v_test,
+                            intersector,
+                            dist_tool,
+                            classifier,
+                            face_seeds,
+                            current_max_t,
                         )
 
                     if thick is not None and thick > current_max_t and thick != float("inf"):
@@ -245,7 +263,14 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                             skip = True
                     if not skip:
                         thick = self._shrink_sphere_at_uv(
-                            face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
+                            face,
+                            u_test,
+                            v_test,
+                            intersector,
+                            dist_tool,
+                            classifier,
+                            face_seeds,
+                            current_max_t,
                         )
 
                     if thick is not None and thick > current_max_t and thick != float("inf"):
@@ -278,6 +303,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         v: float,
         intersector: IntCurvesFace_ShapeIntersector,
         dist_tool: BRepExtrema_DistShapeShape,
+        classifier: BRepClass3d_SolidClassifier,
         face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]],
         min_to_beat: float = 0.0,
     ) -> Optional[float]:
@@ -290,6 +316,10 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         epsilon = 1e-4
         p_exact = get_point_from_uv(face, inward_norm, u, v, 0.0)
         p_offset = get_point_from_uv(face, inward_norm, u, v, epsilon)
+
+        classifier.Perform(p_offset, 1e-6)
+        if classifier.State() == TopAbs_OUT:
+            return None
 
         # Initial candidate sphere
         ray = gp_Lin(p_offset, inward_norm)
@@ -343,8 +373,11 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             v_sq = v_vec.SquareMagnitude()
             v_dot_n = v_vec.Dot(gp_Vec(inward_norm))
 
-            if v_sq < epsilon**2 or v_dot_n <= 0:
+            if v_sq < epsilon**2:
                 break
+
+            if v_dot_n <= 0:
+                return float("inf")
 
             r_new = v_sq / (2.0 * v_dot_n)
 
