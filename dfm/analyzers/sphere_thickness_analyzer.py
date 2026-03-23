@@ -280,17 +280,17 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             dist_tool.LoadS1(vertex)
             dist_tool.Perform()
 
-            if not dist_tool.IsDone():
+            if not dist_tool.IsDone() or dist_tool.NbSolution() == 0:
                 break
 
             d_min = dist_tool.Value()
-
             if d_min >= r - epsilon:
                 break
 
             p_closest = dist_tool.PointOnShape2(1)
-            best_d_sq = float("inf")
-            for i in range(1, dist_tool.NbSolution() + 1):
+            best_d_sq = p_closest.SquareDistance(center)
+
+            for i in range(2, dist_tool.NbSolution() + 1):
                 p_cand = dist_tool.PointOnShape2(i)
                 d_sq = p_cand.SquareDistance(center)
                 if d_sq < best_d_sq:
@@ -317,18 +317,19 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             p_exact.Z() + r * inward_norm.Z(),
         )
 
-        for i in range(1, dist_tool.NbSolution() + 1):
-            p_contact = dist_tool.PointOnShape2(i)
-            if abs(p_contact.Distance(final_center) - r) < epsilon * 10:
-                if dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
-                    support_shape = dist_tool.SupportOnShape2(i)
-                    other_face = topods.Face(support_shape)
+        if dist_tool.IsDone() and dist_tool.NbSolution() > 0:
+            for i in range(1, dist_tool.NbSolution() + 1):
+                p_contact = dist_tool.PointOnShape2(i)
+                if abs(p_contact.Distance(final_center) - r) < epsilon * 10:
+                    if dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
+                        support_shape = dist_tool.SupportOnShape2(i)
+                        other_face = topods.Face(support_shape)
 
-                    if not other_face.IsSame(face):
-                        surf = BRep_Tool.Surface(other_face)
-                        projector = GeomAPI_ProjectPointOnSurf(p_contact, surf)
-                        if projector.IsDone() and projector.NbPoints() > 0:
-                            u_other, v_other = projector.LowerDistanceParameters()
-                            face_seeds[other_face].append((u_other, v_other, thickness))
+                        if not other_face.IsSame(face):
+                            surf = BRep_Tool.Surface(other_face)
+                            projector = GeomAPI_ProjectPointOnSurf(p_contact, surf)
+                            if projector.IsDone() and projector.NbPoints() > 0:
+                                u_other, v_other = projector.LowerDistanceParameters()
+                                face_seeds[other_face].append((u_other, v_other, thickness))
 
         return thickness
