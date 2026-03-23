@@ -20,18 +20,19 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-
 from typing import Any, Optional, Callable
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods, TopoDS_Compound
+from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
-from OCC.Core.BRep import BRep_Builder, BRep_Tool
+from OCC.Core.BRep import BRep_Builder
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape
 from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+from OCC.Core.GProp import GProp_GProps
+from OCC.Core.BRepGProp import brepgprop
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
@@ -56,7 +57,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
-        samples = kwargs.get("samples", 25)
+        samples = kwargs.get("samples", 10)
 
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
@@ -96,34 +97,43 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         u_min, u_max = adaptor.FirstUParameter(), adaptor.LastUParameter()
         v_min, v_max = adaptor.FirstVParameter(), adaptor.LastVParameter()
 
+        # Adaptive sampling based on face area
+        props = GProp_GProps()
+        brepgprop.SurfaceProperties(face, props)
+        face_area = props.Mass()
+        adaptive_samples = int(max(5, min(samples, 2 + (face_area**0.5) / 10)))
+
         # Check the center
         u_mid, v_mid = get_face_uv_center(face)
         if is_point_on_face(u_mid, v_mid, face):
             mid_result = self._shrink_sphere_at_uv(face, u_mid, v_mid, intersector, dist_tool)
             if mid_result is not None and mid_result != float("inf"):
                 thicknesses.append(mid_result)
-                max_t = mid_result
-                best_uv = (u_mid, v_mid)
+                max_t, best_uv = mid_result, (u_mid, v_mid)
 
         # Coarse grid
-        for u, v in yield_face_uv_grid(face, samples, margin=0.05):
-            thick = self._shrink_sphere_at_uv(face, u, v, intersector, dist_tool)
+        for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.05):
+            thick = self._shrink_sphere_at_uv(face, u, v, intersector, dist_tool, max_t)
             if thick is not None and thick != float("inf"):
                 thicknesses.append(thick)
                 if thick > max_t:
-                    max_t = thick
-                    best_uv = (u, v)
+                    max_t, best_uv = thick, (u, v)
 
         # Iterative hill climb
-        step_size = 0.05
-        min_step = 0.001
-        max_hill_iters = 16
+        face_width_mm = (u_max - u_min) / u_ratio
+        max_step_limit = 5.0
+        step_size = max(0.1, min(face_width_mm * 0.02, max_step_limit))
+        min_step = min(0.01, step_size * 0.001)
 
-        current_best_uv = best_uv
-        current_max_t = max_t
+        plateau_patience = 3
+        plateau_hits = 0
+        gain_threshold = 0.0001
 
-        for _ in range(max_hill_iters):
+        current_best_uv, current_max_t = best_uv, max_t
+
+        for _ in range(50):
             improved = False
+            prev_t = current_max_t
 
             du = step_size * u_ratio
             dv = step_size * v_ratio
@@ -133,30 +143,35 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 (current_best_uv[0] - du, current_best_uv[1]),
                 (current_best_uv[0], current_best_uv[1] + dv),
                 (current_best_uv[0], current_best_uv[1] - dv),
-                (current_best_uv[0] + du, current_best_uv[1] + dv),  # diagonals
+                (current_best_uv[0] + du, current_best_uv[1] + dv),
                 (current_best_uv[0] - du, current_best_uv[1] + dv),
                 (current_best_uv[0] + du, current_best_uv[1] - dv),
                 (current_best_uv[0] - du, current_best_uv[1] - dv),
             ]
             for u_test, v_test in neighbors:
-                # Keep UV coordinates within valid [0, 1] parametric space bounds
                 u_test = max(u_min, min(u_max, u_test))
                 v_test = max(v_min, min(v_max, v_test))
 
-                thick = self._shrink_sphere_at_uv(face, u_test, v_test, intersector, dist_tool)
-                if thick is not None and thick != float("inf"):
+                thick = self._shrink_sphere_at_uv(
+                    face, u_test, v_test, intersector, dist_tool, current_max_t
+                )
+                if thick is not None and thick > current_max_t and thick != float("inf"):
+                    current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
                     thicknesses.append(thick)
 
-                    if thick > current_max_t:
-                        current_max_t = thick
-                        current_best_uv = (u_test, v_test)
-                        improved = True
+            if improved:
+                relative_gain = (current_max_t - prev_t) / max(prev_t, 1e-6)
+                if relative_gain < gain_threshold:
+                    plateau_hits += 1
+                else:
+                    plateau_hits = 0
 
-            # If no neighbor is thicker, shrink the step size to dial in the peak
-            if not improved:
+                if plateau_hits >= plateau_patience:
+                    break
+            else:
                 step_size /= 2.0
                 if step_size < min_step:
-                    break  # Found the local peak
+                    break
 
         return thicknesses
 
@@ -167,6 +182,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         v: float,
         intersector: IntCurvesFace_ShapeIntersector,
         dist_tool: BRepExtrema_DistShapeShape,
+        min_to_beat: float = 0.0,
     ) -> Optional[float]:
         outward_norm = get_face_uv_normal(face, u, v)
         if not outward_norm:
@@ -188,18 +204,18 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         min_dist = float("inf")
         for i in range(1, intersector.NbPnt() + 1):
             w_dist = intersector.WParameter(i)
-            if w_dist > epsilon * 10 and w_dist < min_dist:  # skip self-intersection
+            if w_dist > epsilon * 10 and w_dist < min_dist:
                 min_dist = w_dist
 
         if min_dist == float("inf"):
             return float("inf")
 
         r = (min_dist - epsilon) / 2.0
+        if (r * 2.0) <= min_to_beat:
+            return r * 2.0
 
         # Shrinking loop
-        max_iters = 10
-
-        for _ in range(max_iters):
+        for _ in range(10):
             center = gp_Pnt(
                 p_exact.X() + r * inward_norm.X(),
                 p_exact.Y() + r * inward_norm.Y(),
@@ -215,36 +231,22 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
             d_min = dist_tool.Value()
 
-            # Condition A: Sphere is fully inscribed without hitting anything else
             if d_min >= r - epsilon:
                 break
 
-            # Condition B: Something is inside the sphere. Shrink it.
-            # Find the closest point by computing distances manually across all solutions
             p_closest = dist_tool.PointOnShape2(1)
-            best_dist = float("inf")
+            best_d_sq = float("inf")
             for i in range(1, dist_tool.NbSolution() + 1):
-                p_candidate = dist_tool.PointOnShape2(i)
-                center_x = p_exact.X() + r * inward_norm.X()
-                center_y = p_exact.Y() + r * inward_norm.Y()
-                center_z = p_exact.Z() + r * inward_norm.Z()
-                dx = p_candidate.X() - center_x
-                dy = p_candidate.Y() - center_y
-                dz = p_candidate.Z() - center_z
-                dist = (dx * dx + dy * dy + dz * dz) ** 0.5
-                if dist < best_dist:
-                    best_dist = dist
-                    p_closest = p_candidate
+                p_cand = dist_tool.PointOnShape2(i)
+                d_sq = p_cand.SquareDistance(center)
+                if d_sq < best_d_sq:
+                    best_d_sq, p_closest = d_sq, p_cand
 
             v_vec = gp_Vec(p_exact, p_closest)
             v_sq = v_vec.SquareMagnitude()
-
-            if v_sq < epsilon**2:
-                break
-
             v_dot_n = v_vec.Dot(gp_Vec(inward_norm))
 
-            if v_dot_n <= 0:
+            if v_sq < epsilon**2 or v_dot_n <= 0:
                 break
 
             r_new = v_sq / (2.0 * v_dot_n)
