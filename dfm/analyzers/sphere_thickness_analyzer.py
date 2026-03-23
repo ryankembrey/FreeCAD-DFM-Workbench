@@ -20,19 +20,21 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+import collections
 from typing import Any, Optional, Callable
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound
+from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
-from OCC.Core.BRep import BRep_Builder
+from OCC.Core.BRep import BRep_Builder, BRep_Tool
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
-from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape
+from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_IsInFace
 from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop
+from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
@@ -74,9 +76,13 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         dist_tool = BRepExtrema_DistShapeShape()
         dist_tool.LoadS2(face_compound)
 
+        face_seeds = collections.defaultdict(list)
+
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
-            thicknesses = self._sphere_cast_for_face(face, intersector, dist_tool, samples)
+            thicknesses = self._sphere_cast_for_face(
+                face, intersector, dist_tool, samples, face_seeds
+            )
             if thicknesses:
                 results[face] = thicknesses
         return results
@@ -87,6 +93,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         intersector: IntCurvesFace_ShapeIntersector,
         dist_tool: BRepExtrema_DistShapeShape,
         samples: int,
+        face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]],
     ) -> list[float]:
         thicknesses = []
         best_uv = (0.5, 0.5)
@@ -103,17 +110,26 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         face_area = props.Mass()
         adaptive_samples = int(max(5, min(samples, 2 + (face_area**0.5) / 10)))
 
+        # Inject seeds found by previous faces
+        if face in face_seeds:
+            for s_u, s_v, s_thick in face_seeds[face]:
+                thicknesses.append(s_thick)
+                if s_thick > max_t:
+                    max_t, best_uv = s_thick, (s_u, s_v)
+
         # Check the center
         u_mid, v_mid = get_face_uv_center(face)
         if is_point_on_face(u_mid, v_mid, face):
-            mid_result = self._shrink_sphere_at_uv(face, u_mid, v_mid, intersector, dist_tool)
+            mid_result = self._shrink_sphere_at_uv(
+                face, u_mid, v_mid, intersector, dist_tool, face_seeds
+            )
             if mid_result is not None and mid_result != float("inf"):
                 thicknesses.append(mid_result)
                 max_t, best_uv = mid_result, (u_mid, v_mid)
 
         # Coarse grid
         for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.05):
-            thick = self._shrink_sphere_at_uv(face, u, v, intersector, dist_tool, max_t)
+            thick = self._shrink_sphere_at_uv(face, u, v, intersector, dist_tool, face_seeds, max_t)
             if thick is not None and thick != float("inf"):
                 thicknesses.append(thick)
                 if thick > max_t:
@@ -153,7 +169,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 v_test = max(v_min, min(v_max, v_test))
 
                 thick = self._shrink_sphere_at_uv(
-                    face, u_test, v_test, intersector, dist_tool, current_max_t
+                    face, u_test, v_test, intersector, dist_tool, face_seeds, current_max_t
                 )
                 if thick is not None and thick > current_max_t and thick != float("inf"):
                     current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
@@ -182,6 +198,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         v: float,
         intersector: IntCurvesFace_ShapeIntersector,
         dist_tool: BRepExtrema_DistShapeShape,
+        face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]],
         min_to_beat: float = 0.0,
     ) -> Optional[float]:
         outward_norm = get_face_uv_normal(face, u, v)
@@ -256,4 +273,25 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
             r = r_new
 
-        return r * 2.0
+        thickness = r * 2.0
+        final_center = gp_Pnt(
+            p_exact.X() + r * inward_norm.X(),
+            p_exact.Y() + r * inward_norm.Y(),
+            p_exact.Z() + r * inward_norm.Z(),
+        )
+
+        for i in range(1, dist_tool.NbSolution() + 1):
+            p_contact = dist_tool.PointOnShape2(i)
+            if abs(p_contact.Distance(final_center) - r) < epsilon * 10:
+                if dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
+                    support_shape = dist_tool.SupportOnShape2(i)
+                    other_face = topods.Face(support_shape)
+
+                    if not other_face.IsSame(face):
+                        surf = BRep_Tool.Surface(other_face)
+                        projector = GeomAPI_ProjectPointOnSurf(p_contact, surf)
+                        if projector.IsDone() and projector.NbPoints() > 0:
+                            u_other, v_other = projector.LowerDistanceParameters()
+                            face_seeds[other_face].append((u_other, v_other, thickness))
+
+        return thickness
