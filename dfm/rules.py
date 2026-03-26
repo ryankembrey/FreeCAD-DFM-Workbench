@@ -38,6 +38,7 @@ class Rulebook(Enum):
     MIN_WALL_THICKNESS = RuleType("Minimum Wall Thickness", unit="mm", comparison="min")
     MAX_WALL_THICKNESS = RuleType("Maximum Wall Thickness", unit="mm", comparison="max")
     NO_UNDERCUTS = RuleType("Undercut", unit=None, is_binary=True)
+    SHARP_CORNERS = RuleType("Sharp Corners", unit="°", comparison="max")
 
     @property
     def id(self) -> str:
