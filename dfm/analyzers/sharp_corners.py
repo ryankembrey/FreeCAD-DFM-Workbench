@@ -1,19 +1,20 @@
 from typing import Any, Callable, Optional
+import math
 
 from OCC.Core.TopoDS import TopoDS_Edge, TopoDS_Shape, topods
 from OCC.Core.TopExp import topexp
 from OCC.Core.TopAbs import TopAbs_EDGE, TopAbs_FACE
 from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+from OCC.Core.BRep import BRep_Tool
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.models import ProcessRequirement
 from dfm.registries.analyzers_registry import register_analyzer
+from dfm.utils.geometry import get_face_uv_normal
 
 
-# @register_analyzer("SHARP_CORNER_ANALYZER")
-class SharpCornerAnalyzer(BaseAnalyzer):
-    _MIN_SAMPLE_DISTANCE = 0.5  # mm
-
+@register_analyzer("SHARP_CORNER_ANALYZER")
+class SharpCornersAnalyzer(BaseAnalyzer):
     @property
     def name(self) -> str:
         return "Sharp Corner Analyzer"
@@ -66,4 +67,37 @@ class SharpCornerAnalyzer(BaseAnalyzer):
         face1 = topods.Face(adjacent_faces.First())
         face2 = topods.Face(adjacent_faces.Last())
 
-        # TODO: finish analyzer
+        if BRep_Tool.Degenerated(edge):
+            return None
+
+        try:
+            first, last = BRep_Tool.Range(edge)
+            mid_param = (first + last) / 2.0
+        except Exception:
+            return None
+
+        n1 = self._get_normal_at_edge(face1, edge, mid_param)
+        n2 = self._get_normal_at_edge(face2, edge, mid_param)
+
+        if n1 is None or n2 is None:
+            return None
+
+        angle_rad = n1.Angle(n2)
+        angle_deg = math.degrees(angle_rad)
+
+        print(f"Deg {angle_deg}")
+        return angle_deg
+
+    def _get_normal_at_edge(self, face, edge, param):
+        try:
+            curve_on_surf = BRep_Tool.CurveOnSurface(edge, face)
+            if not curve_on_surf or curve_on_surf[0] is None:
+                return None
+
+            pcurve = curve_on_surf[0]
+            uv = pcurve.Value(param)
+
+            return get_face_uv_normal(face, uv.X(), uv.Y())
+
+        except Exception:
+            return None
