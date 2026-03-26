@@ -26,6 +26,14 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 
+import math
+import time
+from typing import Optional
+
+from pivy import coin
+from PySide6.QtCore import QTimer
+
+
 class DFMViewProvider:
     """Manages 3D visual feedback, including face highlighting and annotations."""
 
@@ -43,6 +51,7 @@ class DFMViewProvider:
     def __init__(self, target_object):
         self.target_object = target_object
         self.anno = DFMAnnotation()
+        self._cam_animator = CameraAnimator()
         self._highlighted_faces: list[str] = []
         self._original_transparency: int = target_object.ViewObject.Transparency
 
@@ -169,8 +178,9 @@ class DFMViewProvider:
         overlay = self._get_overlay()
         if self._highlighted_faces and overlay and Gui.activeView():
             Gui.Selection.addSelection(overlay, self._highlighted_faces)
-            Gui.SendMsgToActiveView("ViewSelection")
-            Gui.SendMsgToActiveView("AlignToSelection")
+            if not self._highlighted_faces or not overlay:
+                return
+            self._cam_animator.zoom_to_subelements(overlay, self._highlighted_faces)
             Gui.Selection.clearSelection()
 
     def restore(self):
@@ -250,3 +260,142 @@ class DFMAnnotation:
                 label.FontSize = f_size
 
         return label
+
+
+class CameraAnimator:
+    DURATION = 0.6
+    PADDING = 1.7
+    FPS = 60
+
+    def __init__(self) -> None:
+        self._timer: Optional[QTimer] = None
+        self._start: Optional[float] = None
+
+        self._cam = None
+
+        self._is_ortho: bool = True
+
+        self._pos0: Optional[App.Vector] = None
+        self._pos1: Optional[App.Vector] = None
+        self._h0: float = 1.0
+        self._h1: float = 1.0
+
+    def zoom_to_subelement(self, shape_object, subelement_name: str) -> None:
+        """Pan and zoom to frame a single subelement."""
+        bb = self._subelement_bounding_box(shape_object, subelement_name)
+        if bb is None:
+            App.Console.PrintWarning(
+                f"CameraAnimator: could not resolve subelement '{subelement_name}'\n"
+            )
+            return
+        self._zoom_to_boundbox(bb)
+
+    def zoom_to_subelements(self, shape_object, subelement_names: list[str]) -> None:
+        """Pan and zoom to frame all listed subelements together."""
+        merged: Optional[App.BoundBox] = None
+        for name in subelement_names:
+            bb = self._subelement_bounding_box(shape_object, name)
+            if bb is None:
+                continue
+            merged = App.BoundBox(bb) if merged is None else (merged.add(bb) or merged)  # type: ignore[func-returns-value]
+
+        if merged is None:
+            return
+        self._zoom_to_boundbox(merged)
+
+    def _subelement_bounding_box(self, shape_object, name: str) -> Optional[App.BoundBox]:
+        shape = shape_object.Shape
+        try:
+            if name.startswith("Face"):
+                sub = shape.Faces[int(name[4:]) - 1]
+            elif name.startswith("Edge"):
+                sub = shape.Edges[int(name[4:]) - 1]
+            elif name.startswith("Vertex"):
+                sub = shape.Vertexes[int(name[6:]) - 1]
+            else:
+                return None
+            return sub.BoundBox
+        except (IndexError, ValueError):
+            return None
+
+    def _zoom_to_boundbox(self, bb: App.BoundBox) -> None:
+        view = Gui.ActiveDocument.ActiveView  # type: ignore[union-attr]
+        if view is None:
+            return
+
+        cam = view.getCameraNode()  # type: ignore[attr-defined]
+        if cam is None:
+            return
+        self._cam = cam
+
+        center = bb.Center
+        bb_size = max(bb.XMax - bb.XMin, bb.YMax - bb.YMin, bb.ZMax - bb.ZMin)
+        frame_size = bb_size * self.PADDING
+
+        cp = cam.position.getValue()
+        pos0 = App.Vector(cp[0], cp[1], cp[2])
+
+        orient = cam.orientation.getValue()
+        fwd_coin = orient.multVec(coin.SbVec3f(0.0, 0.0, -1.0))
+        fwd = App.Vector(fwd_coin[0], fwd_coin[1], fwd_coin[2]).normalize()
+
+        cam_type = str(cam.getTypeId().getName())
+        self._is_ortho = "Orthographic" in cam_type
+        if "Orthographic" in cam_type:
+            dist = float(cam.focalDistance.getValue())
+            self._h0 = float(cam.height.getValue())
+            self._h1 = float(frame_size)
+        else:
+            fov_half = float(cam.heightAngle.getValue()) / 2.0
+            dist = (frame_size / 2.0) / math.tan(fov_half) if fov_half > 1e-6 else frame_size * 2.0
+            self._h0 = 0.0
+            self._h1 = 0.0
+
+        self._pos0 = pos0
+        self._pos1 = App.Vector(
+            center.x - fwd.x * dist,
+            center.y - fwd.y * dist,
+            center.z - fwd.z * dist,
+        )
+
+        if self._timer is not None:
+            self._timer.stop()
+            self._timer = None
+
+        self._start = time.perf_counter()
+        timer = QTimer()
+        timer.setInterval(max(1, int(1000 / self.FPS)))
+        timer.timeout.connect(self._tick)
+        timer.start()
+        self._timer = timer
+
+    @staticmethod
+    def _smoothstep(t: float) -> float:
+        t = max(0.0, min(1.0, t))
+        return t * t * (3.0 - 2.0 * t)
+
+    def _tick(self) -> None:
+        assert self._start is not None
+        assert self._pos0 is not None
+        assert self._pos1 is not None
+
+        elapsed = time.perf_counter() - self._start
+        raw_t = min(elapsed / self.DURATION, 1.0)
+        t = self._smoothstep(raw_t)
+
+        cam = self._cam
+        p0, p1 = self._pos0, self._pos1
+
+        cam.position.setValue(  # type: ignore[union-attr]
+            p0.x + (p1.x - p0.x) * t,
+            p0.y + (p1.y - p0.y) * t,
+            p0.z + (p1.z - p0.z) * t,
+        )
+
+        if self._is_ortho:
+            cam.height.setValue(self._h0 + (self._h1 - self._h0) * t)  # type: ignore[union-attr]
+
+        if raw_t >= 1.0:
+            if self._timer is not None:
+                self._timer.stop()
+            self._timer = None
