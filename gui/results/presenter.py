@@ -87,14 +87,22 @@ class TaskResultsPresenter:
             rule_name = data[0].rule_id.label if data else "Rule"
             self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
 
-            index_color_pairs = [
+            face_pairs = [
                 (ref.index, severity_color(r.severity))
                 for r in data
                 if not r.ignore
                 for ref in r.refs
                 if ref.type == "Face"
             ]
-            self.bridge.highlight_by_index(index_color_pairs)
+            edge_pairs = [
+                (ref.index, severity_color(r.severity))
+                for r in data
+                if not r.ignore
+                for ref in r.refs
+                if ref.type == "Edge"
+            ]
+            self.bridge.highlight_faces_and_edges_by_index(face_pairs, edge_pairs)
+
         elif isinstance(data, CheckResult):
             overview = html.escape(data.overview)
             color = severity_color(data.severity)
@@ -107,11 +115,42 @@ class TaskResultsPresenter:
                 f"</tr></table>"
                 f"<p style='margin-top:4px'>{data.message}</p>"
             )
+
             face_refs = [ref for ref in data.refs if ref.type == "Face"]
-            self.bridge.highlight_by_index([(ref.index, color) for ref in face_refs])
-            self.bridge.annotate_by_index(
-                face_refs[0].index if face_refs else None, data.overview, color
+            edge_refs = [ref for ref in data.refs if ref.type == "Edge"]
+
+            self.bridge.highlight_faces_and_edges_by_index(
+                [(ref.index, color) for ref in face_refs],
+                [(ref.index, color) for ref in edge_refs],
             )
+
+            # Annotate — prefer face, fall back to edge
+            if face_refs:
+                self.bridge.annotate_by_index(face_refs[0].index, data.overview, color)
+            elif edge_refs:
+                self.bridge.annotate_edge_by_index(edge_refs[0].index, data.overview, color)
+
+        self.view.adjust_details_height()
+
+    def handle_zoom_to_rule(self, findings: list[CheckResult]):
+        face_pairs = [
+            (ref.index, severity_color(r.severity))
+            for r in findings
+            if not r.ignore
+            for ref in r.refs
+            if ref.type == "Face"
+        ]
+        edge_pairs = [
+            (ref.index, severity_color(r.severity))
+            for r in findings
+            if not r.ignore
+            for ref in r.refs
+            if ref.type == "Edge"
+        ]
+        rule_name = findings[0].rule_id.label if findings else "Rule"
+        self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
+        self.bridge.highlight_faces_and_edges_by_index(face_pairs, edge_pairs)
+        self.bridge.zoom_to_selection()
         self.view.adjust_details_height()
 
     def handle_zoom(self, result: CheckResult):
@@ -150,20 +189,6 @@ class TaskResultsPresenter:
         for finding in findings:
             self.model.toggle_ignore_state(finding)
         self.refresh_ui()
-
-    def handle_zoom_to_rule(self, findings: list[CheckResult]):
-        index_color_pairs = [
-            (ref.index, severity_color(r.severity))
-            for r in findings
-            if not r.ignore
-            for ref in r.refs
-            if ref.type == "Face"
-        ]
-        rule_name = findings[0].rule_id.label if findings else "Rule"
-        self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
-        self.bridge.highlight_by_index(index_color_pairs)
-        self.bridge.zoom_to_selection()
-        self.view.adjust_details_height()
 
     def build_history_tab(self):
         runs = self.history_manager.load_runs(self.doc_name, self.shape_name)
