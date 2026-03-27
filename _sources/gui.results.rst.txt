@@ -1,0 +1,77 @@
+gui.results package
+===================
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   gui.results.tabs
+
+Submodules
+----------
+
+gui.results.bridge module
+-------------------------
+
+.. automodule:: gui.results.bridge
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.delegates module
+----------------------------
+
+.. automodule:: gui.results.delegates
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.models module
+-------------------------
+
+.. automodule:: gui.results.models
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.presenter module
+----------------------------
+
+.. automodule:: gui.results.presenter
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.utils module
+------------------------
+
+.. automodule:: gui.results.utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.visuals module
+--------------------------
+
+.. automodule:: gui.results.visuals
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.widgets module
+--------------------------
+
+.. automodule:: gui.results.widgets
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: gui.results
+   :members:
+   :show-inheritance:
+   :undoc-members:

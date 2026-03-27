@@ -1,0 +1,37 @@
+gui.results.tabs package
+========================
+
+Submodules
+----------
+
+gui.results.tabs.charts module
+------------------------------
+
+.. automodule:: gui.results.tabs.charts
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.tabs.help module
+----------------------------
+
+.. automodule:: gui.results.tabs.help
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.results.tabs.history module
+-------------------------------
+
+.. automodule:: gui.results.tabs.history
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: gui.results.tabs
+   :members:
+   :show-inheritance:
+   :undoc-members:
