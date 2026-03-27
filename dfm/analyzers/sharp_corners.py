@@ -85,7 +85,6 @@ class SharpCornersAnalyzer(BaseAnalyzer):
         angle_rad = n1.Angle(n2)
         angle_deg = math.degrees(angle_rad)
 
-        print(f"Deg {angle_deg}")
         return angle_deg
 
     def _get_normal_at_edge(self, face, edge, param):
