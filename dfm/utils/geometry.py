@@ -34,7 +34,7 @@ from OCC.Core.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
 from OCC.Core.TopoDS import TopoDS_Face
 
 
-def get_face_uv_center(face: TopoDS_Face) -> tuple[(float, float)]:
+def get_face_uv_center(face: TopoDS_Face) -> tuple[float, float]:
     """Returns the center of the UV parametric space for a TopoDS_Face."""
     u_min, u_max, v_min, v_max = breptools.UVBounds(face)
     u_mid: float = (u_max + u_min) / 2
