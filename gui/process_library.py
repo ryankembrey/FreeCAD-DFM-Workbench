@@ -960,6 +960,7 @@ class ProcessLibraryController(QtCore.QObject):
         self.model = model
         self._connect_signals()
         self._refresh_process_tree()
+        self._auto_select_first()
 
     def _connect_signals(self):
         self.view.save_requested.connect(self.on_save)
@@ -983,6 +984,22 @@ class ProcessLibraryController(QtCore.QObject):
 
     def _refresh_process_tree(self):
         self.view.tree_view.populate(self.model.get_categorized_processes())
+
+    def _auto_select_first(self):
+        """Selects the first process and its Default material on dialog open."""
+        categories = self.model.get_categorized_processes()
+
+        first_process = None
+        for processes in categories.values():
+            if processes:
+                first_process = processes[0]
+                break
+
+        if not first_process:
+            return
+
+        self.view.tree_view.select_process(first_process.name)
+        self.view.material_view.select_material("Default")
 
     def on_process_selected(self, name: str):
         process = self.model.set_active_process(name)
