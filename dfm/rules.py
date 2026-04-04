@@ -39,10 +39,10 @@ class Rulebook(Enum):
     MAX_WALL_THICKNESS = RuleType("Maximum Wall Thickness", unit="mm", comparison="max")
     NO_UNDERCUTS = RuleType("Undercut", unit=None, is_binary=True)
     SHARP_INTERNAL_CORNERS = RuleType(
-        "Sharp Internal Corners", unit="°", comparison="max", is_binary=True
+        "Sharp Internal Corners", unit="", comparison="max", is_binary=True
     )
     SHARP_EXTERNAL_CORNERS = RuleType(
-        "Sharp External Corners", unit="°", comparison="max", is_binary=True
+        "Sharp External Corners", unit="", comparison="max", is_binary=True
     )
 
     @property
