@@ -54,6 +54,17 @@ rule_feedback:
             core.
 
             '
+    SHARP_INTERNAL_CORNERS:
+      error_msg: "Internal Sharp Corner ({measured}): This concave edge disrupts
+        plastic flow and creates a stress concentration. An internal fillet of radius 0.5x
+        the nominal wall thickness is recommended."
+
+    SHARP_EXTERNAL_CORNERS:
+      warning_msg: "External Sharp Corner ({measured}): This external sharp corner
+        creates a sharp internal corner in the mold cavity that cannot be CNC machined
+        and requires EDM (Electrical Discharge Machining). Unless this edge lies on
+        the parting line or is perpendicular to the pull direction, an external fillet
+        of radius at least 0.5mm is recommended to reduce tooling cost and lead time."
 materials:
     Default:
         category: Default
@@ -69,6 +80,12 @@ materials:
                 target: '4.0'
                 limit: '5.0'
             NO_UNDERCUTS:
+                target: N/A
+                limit: N/A
+            SHARP_INTERNAL_CORNERS:
+                target: N/A
+                limit: N/A
+            SHARP_EXTERNAL_CORNERS:
                 target: N/A
                 limit: N/A
 

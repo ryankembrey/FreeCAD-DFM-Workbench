@@ -69,7 +69,7 @@ class SharpInternalCornerCheck(BaseCheck):
             results.append(
                 CheckResult(
                     rule_id=rule,
-                    overview=f"Missing Fillet",
+                    overview=f"{measured}{unit}",
                     message=formatted_msg,
                     severity=severity,
                     failing_geometry=[edge],
