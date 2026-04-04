@@ -50,30 +50,12 @@ class UndercutCheck(BaseCheck):
         results: list[CheckResult] = []
         fb = feedback or RuleFeedback()
 
-        if not analysis_data_map:
-            results.append(
-                CheckResult(
-                    rule_id=rule,
-                    overview="No undercuts",
-                    message="No undercut regions or occlusions detected for the defined pull direction.",
-                    severity=Severity.SUCCESS,
-                    failing_geometry=[],
-                    ignore=False,
-                    value=0.0,
-                    limit=0.0,
-                    comparison=">",
-                    unit="%",
-                )
-            )
-            return results
-
         for face, undercut_ratio in analysis_data_map.items():
             if undercut_ratio > 0.00:
                 severity = Severity.ERROR
                 template = fb.error_msg
             else:
-                severity = Severity.SUCCESS
-                template = ""
+                continue
 
             percentage = undercut_ratio * 100
 

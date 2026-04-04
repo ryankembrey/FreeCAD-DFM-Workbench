@@ -74,7 +74,7 @@ class MinThicknessCheck(BaseCheck):
                 severity = Severity.WARNING
                 template = fb.warning_msg
             else:
-                severity = Severity.SUCCESS
+                continue
 
             effective_limit = limit if limit is not None else 0.0
             effective_target = target if target is not None else 0.0
@@ -144,7 +144,7 @@ class MaxThicknessCheck(BaseCheck):
                 severity = Severity.WARNING
                 template = fb.warning_msg
             else:
-                severity = Severity.SUCCESS
+                continue
 
             effective_limit = limit if limit is not None else 0.0
             effective_target = target if target is not None else 0.0
