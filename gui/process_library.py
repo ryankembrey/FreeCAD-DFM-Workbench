@@ -146,12 +146,31 @@ class ProcessLibraryModel:
 # =============================================================================
 
 
-class NumericValidationDelegate(QtWidgets.QStyledItemDelegate):
-    """Validates that input is numeric or N/A, and manages UI unit stripping."""
+class RuleItemDelegate(QtWidgets.QStyledItemDelegate):
+    """Spawns text boxes for numeric rules, and drop-downs for binary rules."""
 
     def createEditor(self, parent, option, index):
         if index.column() not in [1, 2]:
             return super().createEditor(parent, option, index)
+
+        rule = index.model().index(index.row(), 0).data(QtCore.Qt.ItemDataRole.UserRole)
+
+        if getattr(rule, "is_binary", False):
+            if index.column() == 1:
+                editor = QtWidgets.QComboBox(parent)
+                editor.addItems(["ERROR", "WARNING"])
+                editor.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+
+                editor.setEditable(True)
+                line_edit = editor.lineEdit()
+                if line_edit:
+                    line_edit.setReadOnly(True)
+                    line_edit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+                return editor
+
+            dummy = QtWidgets.QWidget(parent)
+            dummy.setEnabled(False)
+            return dummy
 
         editor = QtWidgets.QLineEdit(parent)
         regex = QtCore.QRegularExpression(r"^-?\d*\.?\d+$|^(?i)N/A$")
@@ -159,16 +178,23 @@ class NumericValidationDelegate(QtWidgets.QStyledItemDelegate):
         return editor
 
     def setEditorData(self, editor, index):
-        text = index.model().data(index, QtCore.Qt.ItemDataRole.EditRole)
         rule = index.model().index(index.row(), 0).data(QtCore.Qt.ItemDataRole.UserRole)
+        text = str(index.model().data(index, QtCore.Qt.ItemDataRole.EditRole))
 
-        if rule and getattr(rule, "unit", "") and text:
-            text = str(text).replace(rule.unit, "").strip()
-
-        editor.setText(text)
+        if getattr(rule, "is_binary", False) and isinstance(editor, QtWidgets.QComboBox):
+            idx = editor.findText(text, QtCore.Qt.MatchFlag.MatchFixedString)
+            if idx >= 0:
+                editor.setCurrentIndex(idx)
+        elif isinstance(editor, QtWidgets.QLineEdit):
+            if rule and getattr(rule, "unit", "") and text:
+                text = text.replace(rule.unit, "").strip()
+            editor.setText(text)
 
     def setModelData(self, editor, model, index):
-        model.setData(index, editor.text(), QtCore.Qt.ItemDataRole.EditRole)
+        if isinstance(editor, QtWidgets.QComboBox):
+            model.setData(index, editor.currentText(), QtCore.Qt.ItemDataRole.EditRole)
+        elif isinstance(editor, QtWidgets.QLineEdit):
+            model.setData(index, editor.text(), QtCore.Qt.ItemDataRole.EditRole)
 
 
 # =============================================================================
@@ -502,6 +528,7 @@ class MaterialTableView(QtCore.QObject):
         self._is_populating = True
         self.table.blockSignals(True)
         self.table.setRowCount(0)
+        self.table.clearSpans()
 
         for name, mat in materials.items():
             row = self.table.rowCount()
@@ -687,8 +714,11 @@ class MaterialEditView(QtCore.QObject):
 
         self.table.cellChanged.connect(self._on_cell_changed)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
-
-        self.delegate = NumericValidationDelegate(self.table)
+        self.table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.CurrentChanged
+            | QtWidgets.QAbstractItemView.EditTrigger.SelectedClicked
+        )
+        self.delegate = RuleItemDelegate(self.table)
         self.table.setItemDelegate(self.delegate)
 
     def populate(self, material: Material, default_material: Material, active_rules: list):
@@ -707,14 +737,32 @@ class MaterialEditView(QtCore.QObject):
             limit_data = material.rule_limits.get(rule)
             def_limit = default_material.rule_limits.get(rule) if default_material else None
 
-            for col, attr in enumerate(["target", "limit"], start=1):
-                if getattr(rule, "is_binary", False):
-                    table_item = QtWidgets.QTableWidgetItem("N/A")
-                    table_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled)
-                    muted = self.table.palette().text().color()
-                    muted.setAlphaF(0.4)
-                    table_item.setForeground(QtGui.QBrush(muted))
+            if getattr(rule, "is_binary", False):
+                is_default_mat = material.name == "Default"
+
+                def_val = getattr(def_limit, "binary_severity", "ERROR") if def_limit else "ERROR"
+
+                if is_default_mat:
+                    display_text = def_val
+                    is_custom = False
                 else:
+                    override_val = (
+                        getattr(limit_data, "binary_severity", None) if limit_data else None
+                    )
+                    is_custom = override_val is not None and override_val != def_val
+                    display_text = override_val if override_val else def_val
+
+                table_item = QtWidgets.QTableWidgetItem(display_text)
+                table_item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+                if is_custom:
+                    table_item.setForeground(QtGui.QColor("#D4900A"))
+
+                self.table.setItem(row, 1, table_item)
+                self.table.setSpan(row, 1, 1, 2)
+
+            else:
+                for col, attr in enumerate(["target", "limit"], start=1):
                     val = getattr(limit_data, attr) if limit_data else ""
                     def_val = getattr(def_limit, attr) if def_limit else ""
 
@@ -732,9 +780,8 @@ class MaterialEditView(QtCore.QObject):
                     if is_custom:
                         table_item.setForeground(QtGui.QColor("#D4900A"))
 
-                self.table.setItem(row, col, table_item)
+                    self.table.setItem(row, col, table_item)
 
-            if not getattr(rule, "is_binary", False):
                 self._validate_row_values(row, rule)
 
         self.table.blockSignals(False)
@@ -744,9 +791,6 @@ class MaterialEditView(QtCore.QObject):
         self.table.setRowCount(0)
 
     def _on_cell_changed(self, row, col):
-        if col not in [1, 2]:
-            return
-
         item = self.table.item(row, col)
         rule_item = self.table.item(row, 0)
         if not item or not rule_item:
@@ -755,16 +799,28 @@ class MaterialEditView(QtCore.QObject):
         rule = rule_item.data(QtCore.Qt.ItemDataRole.UserRole)
         cleaned_val = item.text().replace(getattr(rule, "unit", ""), "").strip()
 
-        attr = "target" if col == 1 else "limit"
+        if getattr(rule, "is_binary", False):
+            if col != 1:
+                return
+            attr = "binary_severity"
+        else:
+            if col not in [1, 2]:
+                return
+            attr = "target" if col == 1 else "limit"
+
         self.limit_changed.emit(rule, attr, cleaned_val)
 
         self.table.blockSignals(True)
-        if cleaned_val and cleaned_val.upper() != "N/A" and getattr(rule, "unit", ""):
-            item.setText(f"{cleaned_val}{rule.unit}")
+        if not getattr(rule, "is_binary", False):
+            if cleaned_val and cleaned_val.upper() != "N/A" and getattr(rule, "unit", ""):
+                item.setText(f"{cleaned_val}{rule.unit}")
+
         item.setForeground(QtGui.QColor("#ffaa00"))
         self.table.blockSignals(False)
 
-        self._validate_row_values(row, rule)
+        if not getattr(rule, "is_binary", False):
+            self._validate_row_values(row, rule)
+
         self._on_selection_changed()
 
     def _get_numeric_val(self, row, col, rule) -> Optional[float]:
@@ -1065,7 +1121,8 @@ class ProcessLibraryController(QtCore.QObject):
         if confirm == QtWidgets.QMessageBox.StandardButton.Yes:
             if self.model.delete_material(mat_name):
                 self._update_dirty_state()
-                self.view.material_view.populate(self.model.active_process.materials)
+                if self.model.active_process:
+                    self.view.material_view.populate(self.model.active_process.materials)
                 self.view.material_edit_view.clear()
                 self.view.set_material_edit_title("Select a Material")
 

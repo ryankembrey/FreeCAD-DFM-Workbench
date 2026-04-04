@@ -26,6 +26,7 @@ from typing import Optional
 from dfm.models import CheckResult
 from dfm.processes.process import RuleFeedback, RuleLimit
 from dfm.rules import Rulebook
+from dfm.models import Severity
 
 
 class BaseCheck(ABC):
@@ -82,3 +83,9 @@ class BaseCheck(ABC):
             formatted_msg = formatted_msg.replace(placeholder, value)
 
         return formatted_msg
+
+    def severity_from_rule_config(self, rule_config: RuleLimit) -> Severity:
+        try:
+            return Severity[rule_config.binary_severity]
+        except (KeyError, AttributeError):
+            return Severity.ERROR

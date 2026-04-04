@@ -38,9 +38,10 @@ rule_feedback:
             in "sink marks" or internal voids as the plastic shrinks.
 
             '
-        error_msg: 'Excessive Wall Thickness ({measured}): This region will cause severe
-            non-uniform  cooling. Expect high internal stresses, potential warping,
-            and significantly  increased cycle times to ensure the core is solidified.
+        error_msg: 'Excessive Wall Thickness ({measured}): This region will cause
+            severe non-uniform  cooling. Expect high internal stresses, potential
+            warping, and significantly  increased cycle times to ensure the core is
+            solidified.
 
             '
     NO_UNDERCUTS:
@@ -55,16 +56,18 @@ rule_feedback:
 
             '
     SHARP_INTERNAL_CORNERS:
-      error_msg: "Internal Sharp Corner ({measured}): This concave edge disrupts
-        plastic flow and creates a stress concentration. An internal fillet of radius 0.5x
-        the nominal wall thickness is recommended."
-
+        warning_msg: ''
+        error_msg: 'Internal Sharp Corner ({measured}): This concave edge disrupts
+            plastic flow and creates a stress concentration. An internal fillet of
+            radius 0.5x the nominal wall thickness is recommended.'
     SHARP_EXTERNAL_CORNERS:
-      warning_msg: "External Sharp Corner ({measured}): This external sharp corner
-        creates a sharp internal corner in the mold cavity that cannot be CNC machined
-        and requires EDM (Electrical Discharge Machining). Unless this edge lies on
-        the parting line or is perpendicular to the pull direction, an external fillet
-        of radius at least 0.5mm is recommended to reduce tooling cost and lead time."
+        warning_msg: 'External Sharp Corner ({measured}): This external sharp corner
+            creates a sharp internal corner in the mold cavity that cannot be CNC
+            machined and requires EDM (Electrical Discharge Machining). Unless this
+            edge lies on the parting line or is perpendicular to the pull direction,
+            an external fillet of radius at least 0.5mm is recommended to reduce tooling
+            cost and lead time.'
+        error_msg: ''
 materials:
     Default:
         category: Default
@@ -80,16 +83,12 @@ materials:
                 target: '4.0'
                 limit: '5.0'
             NO_UNDERCUTS:
-                target: N/A
-                limit: N/A
+                binary_severity: ERROR
             SHARP_INTERNAL_CORNERS:
-                target: N/A
-                limit: N/A
+                binary_severity: ERROR
             SHARP_EXTERNAL_CORNERS:
-                target: N/A
-                limit: N/A
-
-    "PLA (Polylactic Acid)":
+                binary_severity: WARNING
+    PLA (Polylactic Acid):
         category: Bio-Thermoplastic
         is_active: true
         rule_limits:
@@ -99,8 +98,7 @@ materials:
             MIN_DRAFT_ANGLE:
                 target: '2.0'
                 limit: '1.0'
-
-    "ABS (Acrylonitrile Butadiene Styrene)":
+    ABS (Acrylonitrile Butadiene Styrene):
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -110,8 +108,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.56'
                 limit: '4.5'
-
-    "Acetal / POM (Polyoxymethylene)":
+    Acetal / POM (Polyoxymethylene):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -121,8 +118,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.05'
                 limit: '4.0'
-
-    "PMMA (Acrylic)":
+    PMMA (Acrylic):
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -132,8 +128,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '12.70'
                 limit: '14.0'
-
-    "LCP (Liquid Crystal Polymer)":
+    LCP (Liquid Crystal Polymer):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -143,8 +138,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.05'
                 limit: '4.0'
-
-    "Long-Fiber Reinforced Plastics":
+    Long-Fiber Reinforced Plastics:
         category: Composite Thermoplastic
         is_active: true
         rule_limits:
@@ -154,8 +148,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '27.94'
                 limit: '30.0'
-
-    "PA (Nylon)":
+    PA (Nylon):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -168,8 +161,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '2.92'
                 limit: '3.5'
-
-    "PC (Polycarbonate)":
+    PC (Polycarbonate):
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -182,8 +174,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
-
-    "PET / PBT (Polyester)":
+    PET / PBT (Polyester):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -193,8 +184,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.18'
                 limit: '4.0'
-
-    "PE (Polyethylene)":
+    PE (Polyethylene):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -207,8 +197,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '5.08'
                 limit: '6.0'
-
-    "PSU (Polyphenylene Sulfide)":
+    PSU (Polyphenylene Sulfide):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -218,8 +207,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '4.57'
                 limit: '5.5'
-
-    "PP (Polypropylene)":
+    PP (Polypropylene):
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -232,8 +220,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
-
-    "PS (Polystyrene)":
+    PS (Polystyrene):
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -243,8 +230,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
-
-    "PUR (Polyurethane)":
+    PUR (Polyurethane):
         category: Elastomer
         is_active: true
         rule_limits:
@@ -254,8 +240,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '19.05'
                 limit: '21.0'
-
-    "PVC (Polyvinyl Chloride)":
+    PVC (Polyvinyl Chloride):
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:

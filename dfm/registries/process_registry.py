@@ -1,10 +1,34 @@
+#  ***************************************************************************
+#  *   Copyright (c) 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>              *
+#  *                                                                         *
+#  *   This file is part of the FreeCAD CAx development system.              *
+#  *                                                                         *
+#  *   This library is free software; you can redistribute it and/or         *
+#  *   modify it under the terms of the GNU Library General Public           *
+#  *   License as published by the Free Software Foundation; either          *
+#  *   version 2 of the License, or (at your option) any later version.      *
+#  *                                                                         *
+#  *   This library  is distributed in the hope that it will be useful,      *
+#  *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+#  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+#  *   GNU Library General Public License for more details.                  *
+#  *                                                                         *
+#  *   You should have received a copy of the GNU Library General Public     *
+#  *   License along with this library; see the file COPYING.LIB. If not,    *
+#  *   write to the Free Software Foundation, Inc., 59 Temple Place,         *
+#  *   Suite 330, Boston, MA  02111-1307, USA                                *
+#  *                                                                         *
+#  ***************************************************************************
+
 import yaml
 from pathlib import Path
 from typing import Optional
 from dataclasses import asdict
 
 import FreeCAD as App  # type: ignore
+
 from dfm.processes.process import Process
+from dfm.rules import Rulebook
 
 
 class ProcessRegistry:
@@ -97,7 +121,8 @@ class ProcessRegistry:
                 "category": mat.category,
                 "is_active": mat.is_active,
                 "rule_limits": {
-                    rule.name: asdict(limit) for rule, limit in mat.rule_limits.items()
+                    rule.name: self._serialize_rule_limit(rule, limit)
+                    for rule, limit in mat.rule_limits.items()
                 },
             }
             data["materials"][mat_name] = mat_dict
@@ -121,3 +146,9 @@ class ProcessRegistry:
 
     def get_process_by_id(self, process_id: str) -> Process:
         return self.processes.get(process_id)  # type: ignore
+
+    def _serialize_rule_limit(self, rule: Rulebook, limit) -> dict:
+        if rule.is_binary:
+            return {"binary_severity": limit.binary_severity}
+        else:
+            return {"target": limit.target, "limit": limit.limit}

@@ -30,6 +30,7 @@ class RuleLimit:
 
     target: str = ""
     limit: str = ""
+    binary_severity: str = "ERROR"
 
     @classmethod
     def from_dict(cls, data: dict):

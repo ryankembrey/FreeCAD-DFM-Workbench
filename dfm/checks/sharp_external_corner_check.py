@@ -60,8 +60,7 @@ class SharpExternalCornerCheck(BaseCheck):
                 continue
 
             measured = angle_deg
-
-            severity = Severity.WARNING
+            severity = self.severity_from_rule_config(rule_config)
             template = fb.warning_msg if severity == Severity.WARNING else fb.error_msg
 
             formatted_msg = self.format_feedback(template, measured, 0.0, 0.0, unit)

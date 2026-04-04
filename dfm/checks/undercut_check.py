@@ -52,8 +52,8 @@ class UndercutCheck(BaseCheck):
 
         for face, undercut_ratio in analysis_data_map.items():
             if undercut_ratio > 0.00:
-                severity = Severity.ERROR
-                template = fb.error_msg
+                severity = self.severity_from_rule_config(rule_config)
+                template = fb.warning_msg if severity == Severity.WARNING else fb.error_msg
             else:
                 continue
 
