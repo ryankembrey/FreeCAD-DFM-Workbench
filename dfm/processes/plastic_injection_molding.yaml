@@ -10,6 +10,8 @@ active_rules:
 - MIN_WALL_THICKNESS
 - MAX_WALL_THICKNESS
 - NO_UNDERCUTS
+- SHARP_INTERNAL_CORNERS
+- SHARP_EXTERNAL_CORNERS
 rule_feedback:
     MIN_DRAFT_ANGLE:
         warning_msg: 'Insufficient Draft ({measured}): This angle is below the recommended
