@@ -22,9 +22,7 @@
 
 from typing import Any, Optional, Callable
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
+from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Dir
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
