@@ -23,4 +23,5 @@
 from .draft_angle_check import DraftAngleCheck
 from .thickness_check import MinThicknessCheck, MaxThicknessCheck
 from .undercut_check import UndercutCheck
-from .sharp_corner_check import SharpCornerCheck
+from .sharp_internal_corner_check import SharpInternalCornerCheck
+from .sharp_external_corner_check import SharpExternalCornerCheck
