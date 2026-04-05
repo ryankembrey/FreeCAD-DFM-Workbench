@@ -83,9 +83,35 @@ class TaskResultsPresenter:
 
     def handle_selection(self, data: CheckResult | list[CheckResult]):
         Gui.Selection.clearSelection()
-        if isinstance(data, list):
+        if isinstance(data, list) and len(data) == 0:
+            self.bridge.highlight_faces_and_edges_by_index([], [])
+            icon = self.view._get_icon(Severity.SUCCESS)
+            icon_html = icon_to_html(icon, size=16)
+            self.view.form.tbDetails.setHtml(
+                f"<table cellspacing='0' cellpadding='0'><tr>"
+                f"<td valign='middle' style='padding-right:4px'>{icon_html}</td>"
+                f"<td valign='middle'><b>No issues found.</b></td>"
+                f"</tr></table>"
+                f"<p style='margin-top:4px'>This rule passed all checks with the current process settings.</p>"
+            )
+            self.view.adjust_details_height()
+            return
+        elif isinstance(data, list):
             rule_name = data[0].rule_id.label if data else "Rule"
-            self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
+            active = [r for r in data if not r.ignore]
+            worst_severity = max(
+                (r.severity for r in active), key=lambda s: s.value, default=Severity.SUCCESS
+            )
+            icon = self.view._get_icon(worst_severity)
+            icon_html = icon_to_html(icon, size=16)
+
+            self.view.form.tbDetails.setHtml(
+                f"<table cellspacing='0' cellpadding='0'><tr>"
+                f"<td valign='middle' style='padding-right:4px'>{icon_html}</td>"
+                f"<td valign='middle'><b>{rule_name}</b></td>"
+                f"</tr></table>"
+                f"<p style='margin-top:4px'>Showing all {len(active)} finding{'s' if len(active) != 1 else ''}.</p>"
+            )
 
             face_pairs = [
                 (ref.index, severity_color(r.severity))
