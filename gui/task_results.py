@@ -33,10 +33,11 @@ from gui.results.delegates import DFMTreeDelegate
 from gui.results.visuals import severity_color
 
 
-class TaskResults:
+class TaskResults(QtCore.QObject):
     """Passive View: Only handles Widgets and Signals."""
 
     def __init__(self):
+        super().__init__()
         self.form: Any = Gui.PySideUic.loadUi(":/ui/task_results.ui", None)  # type: ignore
         self.form.setWindowTitle("DFM Analysis")
         icon = QtGui.QIcon(":/icons/dfm_analysis.svg")
@@ -44,6 +45,7 @@ class TaskResults:
         self.model = QStandardItemModel()
         self.form.tvResults.setModel(self.model)
         self.form.tvResults.setHeaderHidden(True)
+        self.form.tvResults.installEventFilter(self)
 
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setReadOnly(True)
@@ -257,12 +259,36 @@ class TaskResults:
         QtWidgets.QApplication.clipboard().setText("\n".join(lines))
 
     def _handle_selection_change(self, current: QtCore.QModelIndex, previous: QtCore.QModelIndex):
-        """Notifies the presenter when the focused row changes (via Mouse or Keyboard)."""
         item = self.model.itemFromIndex(current)
         if item and self.on_row_selected:
             data = item.data(QtCore.Qt.ItemDataRole.UserRole)
-            if data:
+            item_type = item.data(QtCore.Qt.ItemDataRole.UserRole + 1)
+            if item_type == "rule" and data is None:
+                self.on_row_selected([])
+            elif data:
                 self.on_row_selected(data)
+
+    def eventFilter(self, obj, event):
+        if self.form is None:
+            return False
+        if obj is self.form.tvResults and event.type() == QtCore.QEvent.Type.KeyPress:
+            if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+                index = self.form.tvResults.currentIndex()
+                item = self.model.itemFromIndex(index)
+                if item:
+                    data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+                    if isinstance(data, list):
+                        if self.form.tvResults.isExpanded(index):
+                            self.form.tvResults.collapse(index)
+                        else:
+                            self.form.tvResults.expand(index)
+                        if self.on_zoom_to_rule:
+                            self.on_zoom_to_rule(data)
+                    elif isinstance(data, CheckResult):
+                        if self.on_row_double_clicked:
+                            self.on_row_double_clicked(data)
+                return True
+        return False
 
     def on_save_clicked(self):
         print("saved")
@@ -280,14 +306,20 @@ class TaskResults:
                 self.on_save_clicked()
 
     def reject(self):
+        if self.form:
+            self.form.tvResults.removeEventFilter(self)
         if self.on_closed:
             self.on_closed()
+        self.form = None
         Gui.Control.closeDialog()
 
     def accept(self):
         if self._save_clicked:
             self._save_clicked = False
             return
+        if self.form:
+            self.form.tvResults.removeEventFilter(self)
         if self.on_closed:
             self.on_closed()
+        self.form = None
         Gui.Control.closeDialog()
