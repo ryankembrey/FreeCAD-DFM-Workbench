@@ -133,20 +133,26 @@ class AnalysisRunner:
 
     def _resolve_rule_config(self, process: Any, target_material: Any, rule_id: Any) -> RuleLimit:
         """Build a RuleLimit by layering the Default material config with any material override."""
-        config = RuleLimit(target="N/A", limit="N/A")
+        config = RuleLimit(target="N/A", limit="N/A", binary_severity=None)
 
         default_material = process.materials.get("Default")
         if default_material and rule_id in default_material.rule_limits:
             default_limit = default_material.rule_limits[rule_id]
             config.target = default_limit.target
             config.limit = default_limit.limit
+            config.binary_severity = default_limit.binary_severity
 
         if target_material and rule_id in target_material.rule_limits:
             override = target_material.rule_limits[rule_id]
-            if override.target != "N/A":
+            if override.target not in ("N/A", "", None):
                 config.target = override.target
-            if override.limit != "N/A":
+            if override.limit not in ("N/A", "", None):
                 config.limit = override.limit
+            if override.binary_severity is not None:
+                config.binary_severity = override.binary_severity
+
+        if config.binary_severity is None:
+            config.binary_severity = "ERROR"
 
         return config
 

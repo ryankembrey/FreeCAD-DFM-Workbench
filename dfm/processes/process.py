@@ -21,6 +21,8 @@
 #  ***************************************************************************
 
 from dataclasses import dataclass, field, fields
+from typing import Optional
+
 from dfm.rules import Rulebook
 
 
@@ -30,7 +32,7 @@ class RuleLimit:
 
     target: str = ""
     limit: str = ""
-    binary_severity: str = "ERROR"
+    binary_severity: Optional[str] = "ERROR"
 
     @classmethod
     def from_dict(cls, data: dict):
