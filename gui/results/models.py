@@ -28,7 +28,16 @@ class DFMReportModel:
             grouped[result.rule_id].append(result)
         for rule_id in grouped:
             grouped[rule_id].sort(key=lambda x: (x.ignore, -x.severity.value))
-        return dict(sorted(grouped.items(), key=lambda item: item[0].label))
+
+        def rule_sort_key(item):
+            rule_id, findings = item
+            active = [f for f in findings if not f.ignore]
+            if not active:
+                return (2, 0, rule_id.label)
+            worst = max(f.severity.value for f in active)
+            return (2 - worst, -len(active), rule_id.label)
+
+        return dict(sorted(grouped.items(), key=rule_sort_key))
 
     def get_verdict(self) -> tuple[str, str]:
         errors = sum(1 for r in self.active_results if r.severity == Severity.ERROR)
