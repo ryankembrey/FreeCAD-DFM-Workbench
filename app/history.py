@@ -24,12 +24,11 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-
-import yaml
 
 from dfm.models import CheckResult, GeometryRef, Severity
 from dfm.rules import Rulebook
@@ -38,7 +37,7 @@ from dfm.rules import Rulebook
 @dataclass
 class AnalysisRun:
     """
-    Represents one saved analysis run.  Fully serialisable — no OCC objects.
+    Represents one saved analysis run.  Fully serialisable.
     """
 
     run: int
@@ -52,7 +51,7 @@ class AnalysisRun:
 
     @property
     def label(self) -> str:
-        """Human-readable label for UI display, e.g. 'Run 3 — 2025-10-03 14:22'."""
+        """Human-readable label for UI display"""
         ts = self.timestamp[:16].replace("T", " ")
         return f"Run {self.run} — {ts}"
 
@@ -60,14 +59,6 @@ class AnalysisRun:
 class HistoryManager:
     """
     Manages analysis run history for the DFM workbench.
-
-    All file operations are centralised here.  Callers never deal with
-    paths, YAML, or run indices.
-
-    Usage:
-        manager = HistoryManager()
-        manager.save_run(results, doc_name, shape_name, process_name, material, verdict)
-        runs = manager.load_runs(doc_name, shape_name)
     """
 
     def __init__(self, user_data_dir: Path):
@@ -85,7 +76,7 @@ class HistoryManager:
     ) -> AnalysisRun:
         """
         Appends a new run to the history file for this document/shape pair.
-        Returns the saved AnalysisRun (includes the assigned run index).
+        Returns the saved AnalysisRun.
         """
         path = self._history_path(doc_name, shape_name)
         existing_runs = self._load_raw(path)
@@ -107,47 +98,38 @@ class HistoryManager:
         existing_runs.append(run_data)
 
         with open(path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                existing_runs,
-                f,
-                default_flow_style=False,
-                allow_unicode=True,
-                sort_keys=False,
-            )
+            json.dump(existing_runs, f, indent=2)
 
-        return self._run_from_dict(run_data)
+        return AnalysisRun(
+            run=run_index,
+            timestamp=timestamp,
+            document=doc_name,
+            shape=shape_name,
+            process=process_name,
+            material=material,
+            verdict=verdict,
+            findings=results,
+        )
 
     def load_runs(self, doc_name: str, shape_name: str) -> list[AnalysisRun]:
-        """
-        Returns all saved runs for a document/shape pair, oldest first.
-        Returns an empty list if no history exists yet.
-        """
         path = self._history_path(doc_name, shape_name)
         raw_runs = self._load_raw(path)
         return [self._run_from_dict(r) for r in raw_runs]
 
     def load_run(self, doc_name: str, shape_name: str, run_index: int) -> Optional[AnalysisRun]:
-        """Returns a specific run by 1-based index, or None if not found."""
         for run in self.load_runs(doc_name, shape_name):
             if run.run == run_index:
                 return run
         return None
 
     def latest_run(self, doc_name: str, shape_name: str) -> Optional[AnalysisRun]:
-        """Returns the most recent run, or None if no history exists."""
         runs = self.load_runs(doc_name, shape_name)
         return runs[-1] if runs else None
 
     def run_count(self, doc_name: str, shape_name: str) -> int:
-        """Returns the total number of saved runs for a document/shape pair."""
         return len(self.load_runs(doc_name, shape_name))
 
     def delete_run(self, doc_name: str, shape_name: str, run_index: int) -> bool:
-        """
-        Removes a single run by index.  Run indices of remaining runs are
-        preserved — gaps are intentional (history is an audit trail).
-        Returns True if the run was found and deleted.
-        """
         path = self._history_path(doc_name, shape_name)
         raw_runs = self._load_raw(path)
         original_count = len(raw_runs)
@@ -157,61 +139,47 @@ class HistoryManager:
             return False
 
         with open(path, "w", encoding="utf-8") as f:
-            yaml.dump(raw_runs, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            json.dump(raw_runs, f, indent=2)
 
         return True
 
     def delete_all_runs(self, doc_name: str, shape_name: str) -> None:
-        """Deletes the entire history file for a document/shape pair."""
         path = self._history_path(doc_name, shape_name)
         if path.exists():
             path.unlink()
 
     def list_tracked_shapes(self) -> list[tuple[str, str]]:
-        """
-        Returns a list of (doc_name, shape_name) pairs that have history files.
-        Useful for building a history browser UI.
-        """
         results = []
-        for p in sorted(self._history_dir.glob("*.yaml")):
+        for p in sorted(self._history_dir.glob("*.json")):
             parts = p.stem.split("__", 1)
             if len(parts) == 2:
                 results.append((self._decode_name(parts[0]), self._decode_name(parts[1])))
         return results
 
     def _history_path(self, doc_name: str, shape_name: str) -> Path:
-        """
-        Returns the YAML path for a doc/shape pair.
-
-        Names are sanitised so they are safe as filenames on all platforms.
-        The separator is double-underscore to reduce collision risk with
-        single-underscore names.
-        """
         safe_doc = self._encode_name(doc_name)
         safe_shape = self._encode_name(shape_name)
-        return self._history_dir / f"{safe_doc}__{safe_shape}.yaml"
+        return self._history_dir / f"{safe_doc}__{safe_shape}.json"
 
     @staticmethod
     def _encode_name(name: str) -> str:
-        """Replaces characters that are unsafe in filenames with underscores."""
         return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
 
     @staticmethod
     def _decode_name(name: str) -> str:
-        """
-        No decoding needed — encoding is lossy by design.
-        The original names are stored inside the YAML file.
-        """
         return name
 
     @staticmethod
     def _load_raw(path: Path) -> list[dict]:
-        """Loads raw YAML list from disk, returning [] if the file doesn't exist."""
+        """Loads raw JSON list from disk, returning [] if the file doesn't exist."""
         if not path.exists():
             return []
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return data if isinstance(data, list) else []
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except json.JSONDecodeError:
+            return []
 
     @staticmethod
     def _result_to_dict(result: CheckResult) -> dict:
