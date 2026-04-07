@@ -52,11 +52,11 @@ class SharpInternalCornerCheck(BaseCheck):
         results: list[CheckResult] = []
 
         unit = rule.unit
-
         fb = feedback or RuleFeedback()
+        threshold = 1  # degree
 
         for edge, (angle_deg, is_concave) in analysis_data_map.items():
-            if not is_concave:
+            if not is_concave or angle_deg < threshold:
                 continue
 
             measured = angle_deg

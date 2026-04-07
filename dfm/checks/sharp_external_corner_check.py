@@ -48,15 +48,14 @@ class SharpExternalCornerCheck(BaseCheck):
         rule: Rulebook,
         feedback: Optional[RuleFeedback] = None,
     ) -> list[CheckResult]:
-        tolerance = 1e-4
         results: list[CheckResult] = []
 
         unit = rule.unit
-
         fb = feedback or RuleFeedback()
+        threshold = 1  # degree
 
         for edge, (angle_deg, is_concave) in analysis_data_map.items():
-            if is_concave:
+            if is_concave or angle_deg < threshold:
                 continue
 
             measured = angle_deg
