@@ -317,8 +317,11 @@ class TaskSetup:
                 App.Console.PrintMessage("DFM Analysis aborted by user.\n")
                 self.form.pbRunAnalysis.show()
             else:
-                self.form.lProgress.setText("Resolving geometry references…")
+                self.form.lProgress.setText("Mapping results to 3D model…")
+                QtWidgets.QApplication.processEvents()
                 _resolve_geometry_refs(results, self.target_object)
+                self.form.lProgress.setText("Preparing final report…")
+                QtWidgets.QApplication.processEvents()
                 history_manager = HistoryManager(Path(App.getUserAppDataDir()))
                 verdict_text, _ = DFMReportModel(results, self.process, material_name).get_verdict()
                 history_manager.save_run(
