@@ -1,0 +1,69 @@
+gui package
+===========
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   gui.results
+
+Submodules
+----------
+
+gui.process\_library module
+---------------------------
+
+.. automodule:: gui.process_library
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.task\_results module
+------------------------
+
+.. automodule:: gui.task_results
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.task\_setup module
+----------------------
+
+.. automodule:: gui.task_setup
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.task\_show\_normals module
+------------------------------
+
+.. automodule:: gui.task_show_normals
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.utils module
+----------------
+
+.. automodule:: gui.utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+gui.visuals module
+------------------
+
+.. automodule:: gui.visuals
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: gui
+   :members:
+   :show-inheritance:
+   :undoc-members:

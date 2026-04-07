@@ -1,0 +1,53 @@
+dfm.checks package
+==================
+
+Submodules
+----------
+
+dfm.checks.draft\_angle\_check module
+-------------------------------------
+
+.. automodule:: dfm.checks.draft_angle_check
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dfm.checks.sharp\_external\_corner\_check module
+------------------------------------------------
+
+.. automodule:: dfm.checks.sharp_external_corner_check
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dfm.checks.sharp\_internal\_corner\_check module
+------------------------------------------------
+
+.. automodule:: dfm.checks.sharp_internal_corner_check
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dfm.checks.thickness\_check module
+----------------------------------
+
+.. automodule:: dfm.checks.thickness_check
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dfm.checks.undercut\_check module
+---------------------------------
+
+.. automodule:: dfm.checks.undercut_check
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Module contents
+---------------
+
+.. automodule:: dfm.checks
+   :members:
+   :show-inheritance:
+   :undoc-members:
