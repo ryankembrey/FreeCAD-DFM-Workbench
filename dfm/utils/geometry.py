@@ -23,10 +23,12 @@
 # This file defines geometry functions that are often reused between analyzers
 
 from typing import Generator, Optional
-import math
 
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
+from OCC.Core.BRepTools import breptools
+from OCC.Core.BRepBndLib import brepbndlib
+from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Pnt2d
@@ -124,11 +126,6 @@ def get_point_from_uv(
     )
 
     return point
-
-
-from OCC.Core.BRepTools import breptools
-from OCC.Core.BRepBndLib import brepbndlib
-from OCC.Core.Bnd import Bnd_Box
 
 
 def get_face_uv_ratios(face: TopoDS_Face):
