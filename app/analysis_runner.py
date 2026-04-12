@@ -20,6 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+
 from typing import Any, Callable, Optional
 
 import FreeCAD as App  # type: ignore
@@ -33,6 +34,10 @@ from dfm.registries.checks_registry import get_check_class
 from dfm.registries.analyzers_registry import get_analyzer_class
 from dfm.models import CheckResult, ProcessRequirement
 from dfm.processes.process import RuleFeedback, RuleLimit
+
+from app.analysis_timer import AnalysisTiming
+
+ENABLE_TIMING = False
 
 ProgressCallback = Optional[Callable[[int, int, str], None]]
 AbortCallback = Optional[Callable[[], bool]]
@@ -71,12 +76,16 @@ class AnalysisRunner:
         num_faces = len(shape.Faces)
         active_rules, total_steps = self._calculate_total_steps(process, num_faces)
 
+        timing = AnalysisTiming() if ENABLE_TIMING else None
+        if timing:
+            timing.start_total()
+
         results: list[CheckResult] = []
         current_step = 0
 
         for rule_id in active_rules:
             if check_abort and check_abort():
-                return results
+                break
 
             check_class = get_check_class(rule_id)
             if not check_class:
@@ -86,6 +95,9 @@ class AnalysisRunner:
             analyzer_id = check_instance.required_analyzer_id
 
             if analyzer_id not in self.analyzer_cache:
+                if timing:
+                    timing.start(analyzer_id)
+
                 success = self._run_analyzer(
                     analyzer_id,
                     shape_occ,
@@ -97,23 +109,38 @@ class AnalysisRunner:
                     check_abort,
                     **kwargs,
                 )
+
+                if timing:
+                    timing.stop_analyzer(analyzer_id)
+
                 if not success:
                     continue
                 current_step += num_faces
 
             rule_config = self._resolve_rule_config(process, target_material, rule_id)
-            results.extend(
-                self._execute_check(
-                    rule_id,
-                    check_instance,
-                    process,
-                    rule_config,
-                    current_step,
-                    total_steps,
-                    progress_cb,
-                )
+
+            if timing:
+                timing.start(rule_id.name)
+
+            check_results = self._execute_check(
+                rule_id,
+                check_instance,
+                process,
+                rule_config,
+                current_step,
+                total_steps,
+                progress_cb,
             )
+
+            if timing:
+                timing.stop_check(rule_id.name)
+
+            results.extend(check_results)
             current_step += 1
+
+        if timing:
+            timing.stop_total()
+            timing.report()
 
         return results
 
