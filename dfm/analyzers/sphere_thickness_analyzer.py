@@ -63,7 +63,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         samples = kwargs.get("samples", 10)
 
         intersector = IntCurvesFace_ShapeIntersector()
-        intersector.Load(shape, 1e-6)
+        intersector.Load(shape, 1e-3)
 
         builder = BRep_Builder()
         face_compound = TopoDS_Compound()
