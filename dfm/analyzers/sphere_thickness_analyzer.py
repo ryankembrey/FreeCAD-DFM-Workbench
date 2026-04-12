@@ -79,6 +79,9 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         dist_tool.SetDeflection(1e-3)
         dist_tool.LoadS2(face_compound)
 
+        self.builder = BRep_Builder()
+        self.shared_vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Vertex()
+
         face_seeds = collections.defaultdict(list)
 
         results = {}
@@ -344,8 +347,8 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 p_exact.Z() + r * inward_norm.Z(),
             )
 
-            vertex = BRepBuilderAPI_MakeVertex(center).Vertex()
-            dist_tool.LoadS1(vertex)
+            self.builder.UpdateVertex(self.shared_vertex, center, 1e-6)
+            dist_tool.LoadS1(self.shared_vertex)
             dist_tool.Perform()
 
             if not dist_tool.IsDone() or dist_tool.NbSolution() == 0:
