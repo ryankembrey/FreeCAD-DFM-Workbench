@@ -78,7 +78,7 @@ class MinThicknessCheck(BaseCheck):
 
             effective_limit = limit if limit is not None else 0.0
             effective_target = target if target is not None else 0.0
-            threshold = effective_limit if severity == Severity.ERROR else effective_target
+            threshold = effective_target if severity == Severity.ERROR else effective_limit
 
             formatted_msg = self.format_feedback(
                 template, measured, effective_target, effective_limit, unit
