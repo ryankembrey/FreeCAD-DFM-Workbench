@@ -22,7 +22,6 @@
 
 import collections
 from typing import Any, Optional, Callable
-from scipy.spatial import KDTree
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
@@ -118,12 +117,24 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         face_area = props.Mass()
         adaptive_samples = int(max(5, min(samples, 2 + (face_area**0.5) / 10)))
 
-        # Inject seeds found by previous faces and build spatial index
-        seeds = face_seeds.get(face, [])
-        tree = KDTree([(s[0], s[1]) for s in seeds]) if seeds else None
+        visited_uvs = {}
 
+        def get_thickness(test_u: float, test_v: float, min_to_beat: float) -> Optional[float]:
+            key = (round(test_u, 5), round(test_v, 5))
+            if key in visited_uvs:
+                return visited_uvs[key]
+
+            t = self._shrink_sphere_at_uv(
+                face, test_u, test_v, intersector, dist_tool, face_seeds, min_to_beat
+            )
+            visited_uvs[key] = t
+            return t
+
+        # Inject seeds found by previous faces and pre-populate the cache
+        seeds = face_seeds.get(face, [])
         if seeds:
             for s_u, s_v, s_thick in seeds:
+                visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
                 thicknesses.append(s_thick)
                 if s_thick > max_t:
                     max_t, best_uv = s_thick, (s_u, s_v)
@@ -131,19 +142,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         # Check the center
         u_mid, v_mid = get_face_uv_center(face)
         if is_point_on_face(u_mid, v_mid, face):
-            mid_result = None
-            skip = False
-            if tree:
-                dist, idx = tree.query((u_mid, v_mid))
-                if dist < 1e-7:
-                    mid_result = seeds[idx][2]
-                    skip = True
-
-            if not skip:
-                mid_result = self._shrink_sphere_at_uv(
-                    face, u_mid, v_mid, intersector, dist_tool, face_seeds
-                )
-
+            mid_result = get_thickness(u_mid, v_mid, max_t)
             if mid_result is not None and mid_result != float("inf"):
                 thicknesses.append(mid_result)
                 if mid_result > max_t:
@@ -151,19 +150,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         # Coarse grid
         for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.01):
-            thick = None
-            skip = False
-            if tree:
-                dist, idx = tree.query((u, v))
-                if dist < 1e-7:
-                    thick = seeds[idx][2]
-                    skip = True
-
-            if not skip:
-                thick = self._shrink_sphere_at_uv(
-                    face, u, v, intersector, dist_tool, face_seeds, max_t
-                )
-
+            thick = get_thickness(u, v, max_t)
             if thick is not None and thick != float("inf"):
                 thicknesses.append(thick)
                 if thick > max_t:
@@ -197,30 +184,11 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 u_test = max(u_min, min(u_max, current_best_uv[0] + last_dir[0] * du))
                 v_test = max(v_min, min(v_max, current_best_uv[1] + last_dir[1] * dv))
 
-                if not is_point_on_face(u_test, v_test, face, classifier_2d):
-                    continue
-
-                thick = None
-                skip = False
-                if tree:
-                    dist, idx = tree.query((u_test, v_test))
-                    if dist < 1e-7:
-                        thick = seeds[idx][2]
-                        skip = True
-                if not skip:
-                    thick = self._shrink_sphere_at_uv(
-                        face,
-                        u_test,
-                        v_test,
-                        intersector,
-                        dist_tool,
-                        face_seeds,
-                        current_max_t,
-                    )
-
-                if thick is not None and thick > current_max_t and thick != float("inf"):
-                    current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
-                    thicknesses.append(thick)
+                if is_point_on_face(u_test, v_test, face, classifier_2d):
+                    thick = get_thickness(u_test, v_test, current_max_t)
+                    if thick is not None and thick > current_max_t and thick != float("inf"):
+                        current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
+                        thicknesses.append(thick)
 
             # If momentum didn't work, try Cardinals
             if not improved:
@@ -228,24 +196,10 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                     u_test = max(u_min, min(u_max, current_best_uv[0] + d_u_m * du))
                     v_test = max(v_min, min(v_max, current_best_uv[1] + d_v_m * dv))
 
-                    thick = None
-                    skip = False
-                    if tree:
-                        dist, idx = tree.query((u_test, v_test))
-                        if dist < 1e-7:
-                            thick = seeds[idx][2]
-                            skip = True
-                    if not skip:
-                        thick = self._shrink_sphere_at_uv(
-                            face,
-                            u_test,
-                            v_test,
-                            intersector,
-                            dist_tool,
-                            face_seeds,
-                            current_max_t,
-                        )
+                    if not is_point_on_face(u_test, v_test, face, classifier_2d):
+                        continue
 
+                    thick = get_thickness(u_test, v_test, current_max_t)
                     if thick is not None and thick > current_max_t and thick != float("inf"):
                         current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
                         last_dir = (d_u_m, d_v_m)
@@ -258,24 +212,10 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                     u_test = max(u_min, min(u_max, current_best_uv[0] + d_u_m * du))
                     v_test = max(v_min, min(v_max, current_best_uv[1] + d_v_m * dv))
 
-                    thick = None
-                    skip = False
-                    if tree:
-                        dist, idx = tree.query((u_test, v_test))
-                        if dist < 1e-7:
-                            thick = seeds[idx][2]
-                            skip = True
-                    if not skip:
-                        thick = self._shrink_sphere_at_uv(
-                            face,
-                            u_test,
-                            v_test,
-                            intersector,
-                            dist_tool,
-                            face_seeds,
-                            current_max_t,
-                        )
+                    if not is_point_on_face(u_test, v_test, face, classifier_2d):
+                        continue
 
+                    thick = get_thickness(u_test, v_test, current_max_t)
                     if thick is not None and thick > current_max_t and thick != float("inf"):
                         current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
                         last_dir = (d_u_m, d_v_m)
@@ -381,6 +321,9 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 return float("inf")
 
             r_new = v_sq / (2.0 * v_dot_n)
+
+            if (r_new * 2.0) <= min_to_beat:
+                return -1.0
 
             if r_new >= r or (r - r_new) < epsilon:
                 break
