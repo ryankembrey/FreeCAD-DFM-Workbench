@@ -27,7 +27,7 @@ from scipy.spatial import KDTree
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
-from OCC.Core.BRep import BRep_Builder, BRep_Tool
+from OCC.Core.BRep import BRep_Builder
 from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
@@ -35,7 +35,6 @@ from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_IsInFac
 from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
 from OCC.Core.GProp import GProp_GProps
 from OCC.Core.BRepGProp import brepgprop
-from OCC.Core.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
 
 from dfm.core.base_analyzer import BaseAnalyzer
@@ -397,14 +396,10 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                 p_contact = dist_tool.PointOnShape2(i)
                 if abs(p_contact.Distance(final_center) - r) < epsilon * 10:
                     if dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
-                        support_shape = dist_tool.SupportOnShape2(i)
-                        other_face = topods.Face(support_shape)
+                        other_face = topods.Face(dist_tool.SupportOnShape2(i))
 
                         if not other_face.IsSame(face):
-                            surf = BRep_Tool.Surface(other_face)
-                            projector = GeomAPI_ProjectPointOnSurf(p_contact, surf)
-                            if projector.IsDone() and projector.NbPoints() > 0:
-                                u_other, v_other = projector.LowerDistanceParameters()
-                                face_seeds[other_face].append((u_other, v_other, thickness))
+                            u_other, v_other = dist_tool.ParOnFaceS2(i)
+                            face_seeds[other_face].append((u_other, v_other, thickness))
 
         return thickness
