@@ -64,12 +64,12 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
-        samples = kwargs.get("samples", 10)
+        self.samples = kwargs.get("samples", 10)
         self._setup_kernel_tools(shape)
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
-            thicknesses = self._analyze_face(face, samples)
+            thicknesses = self._analyze_face(face)
             if thicknesses:
                 results[face] = thicknesses
 
@@ -97,7 +97,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         self.shared_vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Vertex()
         self.face_seeds = collections.defaultdict(list)
 
-    def _analyze_face(self, face: TopoDS_Face, samples: int) -> list[float]:
+    def _analyze_face(self, face: TopoDS_Face) -> list[float]:
         """Orchestrates sampling strategy and broad-phase caching for a face."""
         thicknesses = []
         best_uv = (0.5, 0.5)
@@ -107,7 +107,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         props = GProp_GProps()
         brepgprop.SurfaceProperties(face, props)
-        adaptive_samples = int(max(5, min(samples, 2 + (props.Mass() ** 0.5) / 10)))
+        adaptive_samples = int(max(5, min(self.samples, 2 + (props.Mass() ** 0.5) / 10)))
 
         visited_uvs = {}
 

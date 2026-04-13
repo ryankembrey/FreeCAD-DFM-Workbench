@@ -62,18 +62,18 @@ class SharpCornersAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[TopoDS_Edge, tuple[float, bool]]:
-        edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
+        self.edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
         topexp.MapShapesAndAncestors(
             shape,
             TopAbs_EDGE,  # type: ignore
             TopAbs_FACE,  # type: ignore
-            edge_face_map,
+            self.edge_face_map,
         )
 
         results: dict[TopoDS_Edge, tuple[float, bool]] = {}
 
         for edge in self.iter_edges(shape, progress_cb, check_abort):
-            result = self._analyze_edge(edge, edge_face_map)
+            result = self._analyze_edge(edge)
             if result is not None:
                 results[edge] = result
 
@@ -82,12 +82,11 @@ class SharpCornersAnalyzer(BaseAnalyzer):
     def _analyze_edge(
         self,
         edge: TopoDS_Edge,
-        edge_face_map: TopTools_IndexedDataMapOfShapeListOfShape,
     ) -> Optional[tuple[float, bool]]:
-        if not edge_face_map.Contains(edge):
+        if not self.edge_face_map.Contains(edge):
             return None
 
-        adjacent_faces = edge_face_map.FindFromKey(edge)
+        adjacent_faces = self.edge_face_map.FindFromKey(edge)
         if adjacent_faces.Size() != 2:
             return None
 
