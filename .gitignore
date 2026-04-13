@@ -5,4 +5,5 @@ pyrightconfig.json
 *.FCStd
 *.step
 *.STEP
+*.stp
 docs/build/
