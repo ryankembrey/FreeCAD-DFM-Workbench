@@ -27,10 +27,12 @@ from typing import Generator, Optional, Callable
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.BRepBndLib import brepbndlib
+from OCC.Core.BRepGProp import brepgprop
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Pnt2d
+from OCC.Core.GProp import GProp_GProps
 from OCC.Core.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
 from OCC.Core.TopoDS import TopoDS_Face
 
@@ -62,6 +64,16 @@ def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> Optional[gp_Dir
             norm.Reverse()
 
         return norm
+
+
+def get_adaptive_sample_count(face: TopoDS_Face, base_samples: int) -> int:
+    """
+    Calculates a scaled number of samples based on the physical area of the face.
+    The count is clamped between a minimum of 5 and the user-provided base_samples.
+    """
+    props = GProp_GProps()
+    brepgprop.SurfaceProperties(face, props)
+    return int(max(5, min(base_samples, 2 + (props.Mass() ** 0.5) / 10)))
 
 
 def yield_face_uv_grid(
