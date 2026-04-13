@@ -23,23 +23,28 @@
 import collections
 from typing import Any, Optional, Callable
 
+from OCC.Core.BRep import BRep_Builder
+from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_IsInFace
+from OCC.Core.BRepGProp import brepgprop
+from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
+from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec, gp_Dir
+from OCC.Core.GProp import GProp_GProps
+from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
-from OCC.Core.BRep import BRep_Builder
-from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
-from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_IsInFace
-from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
-from OCC.Core.GProp import GProp_GProps
-from OCC.Core.BRepGProp import brepgprop
-from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
-from dfm.utils import get_face_uv_normal, yield_face_uv_grid, get_point_from_uv, get_face_uv_center
-from dfm.utils.geometry import get_face_uv_ratios, is_point_on_face
+from dfm.utils.geometry import (
+    get_face_uv_center,
+    get_face_uv_normal,
+    get_point_from_uv,
+    optimize_face_uv_search,
+    is_point_on_face,
+    yield_face_uv_grid,
+)
 
 
 @register_analyzer("SPHERE_THICKNESS_ANALYZER")
@@ -60,226 +65,157 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
         samples = kwargs.get("samples", 10)
-
-        intersector = IntCurvesFace_ShapeIntersector()
-        intersector.Load(shape, 1e-3)
-
-        builder = BRep_Builder()
-        face_compound = TopoDS_Compound()
-        builder.MakeCompound(face_compound)
-
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
-        while face_explorer.More():
-            builder.Add(face_compound, face_explorer.Current())
-            face_explorer.Next()
-
-        dist_tool = BRepExtrema_DistShapeShape()
-        dist_tool.SetMultiThread(True)
-        dist_tool.SetDeflection(1e-3)
-        dist_tool.LoadS2(face_compound)
-
-        self.builder = BRep_Builder()
-        self.shared_vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Vertex()
-
-        face_seeds = collections.defaultdict(list)
+        self._setup_kernel_tools(shape)
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
-            thicknesses = self._sphere_cast_for_face(
-                face, intersector, dist_tool, samples, face_seeds
-            )
+            thicknesses = self._analyze_face(face, samples)
             if thicknesses:
                 results[face] = thicknesses
+
         return results
 
-    def _sphere_cast_for_face(
-        self,
-        face: TopoDS_Face,
-        intersector: IntCurvesFace_ShapeIntersector,
-        dist_tool: BRepExtrema_DistShapeShape,
-        samples: int,
-        face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]],
-    ) -> list[float]:
+    def _setup_kernel_tools(self, shape: TopoDS_Shape):
+        """Initializes heavy OpenCascade tools once per shape."""
+        self.intersector = IntCurvesFace_ShapeIntersector()
+        self.intersector.Load(shape, 1e-3)
+
+        self.builder = BRep_Builder()
+        face_compound = TopoDS_Compound()
+        self.builder.MakeCompound(face_compound)
+
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
+        while face_explorer.More():
+            self.builder.Add(face_compound, face_explorer.Current())
+            face_explorer.Next()
+
+        self.dist_tool = BRepExtrema_DistShapeShape()
+        self.dist_tool.SetMultiThread(False)
+        self.dist_tool.SetDeflection(1e-3)
+        self.dist_tool.LoadS2(face_compound)
+
+        self.shared_vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Vertex()
+        self.face_seeds = collections.defaultdict(list)
+
+    def _analyze_face(self, face: TopoDS_Face, samples: int) -> list[float]:
+        """Orchestrates sampling strategy and broad-phase caching for a face."""
         thicknesses = []
         best_uv = (0.5, 0.5)
         max_t = -1.0
 
-        classifier_2d = BRepTopAdaptor_FClass2d(face, 1e-6)
+        classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
 
-        u_ratio, v_ratio = get_face_uv_ratios(face)
-        adaptor = BRepAdaptor_Surface(face)
-        u_min, u_max = adaptor.FirstUParameter(), adaptor.LastUParameter()
-        v_min, v_max = adaptor.FirstVParameter(), adaptor.LastVParameter()
-
-        # Adaptive sampling based on face area
         props = GProp_GProps()
         brepgprop.SurfaceProperties(face, props)
-        face_area = props.Mass()
-        adaptive_samples = int(max(5, min(samples, 2 + (face_area**0.5) / 10)))
+        adaptive_samples = int(max(5, min(samples, 2 + (props.Mass() ** 0.5) / 10)))
 
         visited_uvs = {}
 
-        def get_thickness(test_u: float, test_v: float, min_to_beat: float) -> Optional[float]:
+        def eval_thickness(test_u: float, test_v: float, min_to_beat: float) -> Optional[float]:
             key = (round(test_u, 5), round(test_v, 5))
             if key in visited_uvs:
                 return visited_uvs[key]
 
-            t = self._shrink_sphere_at_uv(
-                face, test_u, test_v, intersector, dist_tool, face_seeds, min_to_beat
-            )
+            t = self._calculate_sphere_thickness(face, test_u, test_v, min_to_beat)
             visited_uvs[key] = t
             return t
 
-        # Inject seeds found by previous faces and pre-populate the cache
-        seeds = face_seeds.get(face, [])
-        if seeds:
-            for s_u, s_v, s_thick in seeds:
-                visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
-                thicknesses.append(s_thick)
-                if s_thick > max_t:
-                    max_t, best_uv = s_thick, (s_u, s_v)
+        # Inject seeds from neighbors
+        for s_u, s_v, s_thick in self.face_seeds.get(face, []):
+            visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
+            thicknesses.append(s_thick)
+            if s_thick > max_t:
+                max_t, best_uv = s_thick, (s_u, s_v)
 
-        # Check the center
+        # Check center
         u_mid, v_mid = get_face_uv_center(face)
-        if is_point_on_face(u_mid, v_mid, face):
-            mid_result = get_thickness(u_mid, v_mid, max_t)
-            if mid_result is not None and mid_result != float("inf"):
-                thicknesses.append(mid_result)
-                if mid_result > max_t:
-                    max_t, best_uv = mid_result, (u_mid, v_mid)
+        if is_point_on_face(u_mid, v_mid, face, classifier):
+            t = eval_thickness(u_mid, v_mid, max_t)
+            if t is not None and t != float("inf"):
+                thicknesses.append(t)
+                if t > max_t:
+                    max_t, best_uv = t, (u_mid, v_mid)
 
-        # Coarse grid
+        # Check coarse grid
         for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.01):
-            thick = get_thickness(u, v, max_t)
-            if thick is not None and thick != float("inf"):
-                thicknesses.append(thick)
-                if thick > max_t:
-                    max_t, best_uv = thick, (u, v)
+            t = eval_thickness(u, v, max_t)
+            if t is not None and t != float("inf"):
+                thicknesses.append(t)
+                if t > max_t:
+                    max_t, best_uv = t, (u, v)
 
         # Iterative hill climb
-        face_width_mm = (u_max - u_min) / u_ratio
-        max_step_limit = 5.0
-        step_size = max(0.1, min(face_width_mm * 0.02, max_step_limit))
-        min_step = min(0.01, step_size * 0.001)
-
-        plateau_patience = 3
-        plateau_hits = 0
-        gain_threshold = 0.0001
-
-        current_best_uv, current_max_t = best_uv, max_t
-        last_dir = None  # Stores the direction multiplier
-
-        for _ in range(50):
-            improved = False
-            prev_t = current_max_t
-
-            du = step_size * u_ratio
-            dv = step_size * v_ratio
-
-            cardinals = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-            diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
-
-            # Try the last successful direction first
-            if last_dir:
-                u_test = max(u_min, min(u_max, current_best_uv[0] + last_dir[0] * du))
-                v_test = max(v_min, min(v_max, current_best_uv[1] + last_dir[1] * dv))
-
-                if is_point_on_face(u_test, v_test, face, classifier_2d):
-                    thick = get_thickness(u_test, v_test, current_max_t)
-                    if thick is not None and thick > current_max_t and thick != float("inf"):
-                        current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
-                        thicknesses.append(thick)
-
-            # If momentum didn't work, try Cardinals
-            if not improved:
-                for d_u_m, d_v_m in cardinals:
-                    u_test = max(u_min, min(u_max, current_best_uv[0] + d_u_m * du))
-                    v_test = max(v_min, min(v_max, current_best_uv[1] + d_v_m * dv))
-
-                    if not is_point_on_face(u_test, v_test, face, classifier_2d):
-                        continue
-
-                    thick = get_thickness(u_test, v_test, current_max_t)
-                    if thick is not None and thick > current_max_t and thick != float("inf"):
-                        current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
-                        last_dir = (d_u_m, d_v_m)
-                        thicknesses.append(thick)
-                        break  # Short-circuit
-
-            # If cardinals didn't work, try Diagonals
-            if not improved:
-                for d_u_m, d_v_m in diagonals:
-                    u_test = max(u_min, min(u_max, current_best_uv[0] + d_u_m * du))
-                    v_test = max(v_min, min(v_max, current_best_uv[1] + d_v_m * dv))
-
-                    if not is_point_on_face(u_test, v_test, face, classifier_2d):
-                        continue
-
-                    thick = get_thickness(u_test, v_test, current_max_t)
-                    if thick is not None and thick > current_max_t and thick != float("inf"):
-                        current_max_t, current_best_uv, improved = thick, (u_test, v_test), True
-                        last_dir = (d_u_m, d_v_m)
-                        thicknesses.append(thick)
-                        break  # Short-circuit
-
-            if improved:
-                relative_gain = (current_max_t - prev_t) / max(prev_t, 1e-6)
-                if relative_gain < gain_threshold:
-                    plateau_hits += 1
-                else:
-                    plateau_hits = 0
-
-                if plateau_hits >= plateau_patience:
-                    break
-            else:
-                last_dir = None  # Reset direction
-                step_size /= 2.0
-                if step_size < min_step:
-                    break
+        best_uv, max_t, climb_results = optimize_face_uv_search(
+            face=face,
+            start_uv=best_uv,
+            start_val=max_t,
+            eval_func=eval_thickness,
+            classifier=classifier,
+        )
+        thicknesses.extend(climb_results)
 
         return thicknesses
 
-    def _shrink_sphere_at_uv(
-        self,
-        face: TopoDS_Face,
-        u: float,
-        v: float,
-        intersector: IntCurvesFace_ShapeIntersector,
-        dist_tool: BRepExtrema_DistShapeShape,
-        face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]],
-        min_to_beat: float = 0.0,
+    def _calculate_sphere_thickness(
+        self, face: TopoDS_Face, u: float, v: float, min_to_beat: float
     ) -> Optional[float]:
+        """Calculates exact thickness at a point in 2 phases: Raycast & Extrema."""
         outward_norm = get_face_uv_normal(face, u, v)
         if not outward_norm:
             return None
 
         inward_norm = outward_norm.Reversed()
-
-        epsilon = 1e-4
         p_exact = get_point_from_uv(face, inward_norm, u, v, 0.0)
-        p_offset = get_point_from_uv(face, inward_norm, u, v, epsilon)
 
-        # Initial candidate sphere
-        ray = gp_Lin(p_offset, inward_norm)
-        intersector.Perform(ray, 0, float("inf"))
+        # Bounding raycast
+        r_init = self._raycast_max_radius(p_exact, inward_norm)
+        if r_init == float("inf"):
+            return float("inf")
 
-        if not intersector.IsDone() or intersector.NbPnt() == 0:
+        if (r_init * 2.0) <= min_to_beat:
+            return r_init * 2.0
+
+        # Extrema shrink loop
+        return self._shrink_to_fit(face, p_exact, inward_norm, r_init, min_to_beat)
+
+    def _raycast_max_radius(
+        self, p_exact: gp_Pnt, inward_norm: gp_Dir, epsilon: float = 1e-4
+    ) -> float:
+        """Fires a ray to find the opposite side of the solid, returning initial max radius."""
+        p_offset = gp_Pnt(
+            p_exact.X() + inward_norm.X() * epsilon,
+            p_exact.Y() + inward_norm.Y() * epsilon,
+            p_exact.Z() + inward_norm.Z() * epsilon,
+        )
+
+        self.intersector.Perform(gp_Lin(p_offset, inward_norm), 0, float("inf"))
+
+        if not self.intersector.IsDone() or self.intersector.NbPnt() == 0:
             return float("inf")
 
         min_dist = float("inf")
-        for i in range(1, intersector.NbPnt() + 1):
-            w_dist = intersector.WParameter(i)
+        for i in range(1, self.intersector.NbPnt() + 1):
+            w_dist = self.intersector.WParameter(i)
             if w_dist > epsilon * 10 and w_dist < min_dist:
                 min_dist = w_dist
 
         if min_dist == float("inf"):
             return float("inf")
 
-        r = (min_dist - epsilon) / 2.0
-        if (r * 2.0) <= min_to_beat:
-            return r * 2.0
+        return (min_dist - epsilon) / 2.0
 
-        # Shrinking loop
+    def _shrink_to_fit(
+        self,
+        origin_face: TopoDS_Face,
+        p_exact: gp_Pnt,
+        inward_norm: gp_Dir,
+        r_init: float,
+        min_to_beat: float,
+    ) -> float:
+        """Iteratively shrinks the sphere radius."""
+        r = r_init
+        epsilon = 1e-4
+
         for _ in range(10):
             center = gp_Pnt(
                 p_exact.X() + r * inward_norm.X(),
@@ -288,24 +224,23 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             )
 
             self.builder.UpdateVertex(self.shared_vertex, center, 1e-6)
-            dist_tool.LoadS1(self.shared_vertex)
-            dist_tool.Perform()
+            self.dist_tool.LoadS1(self.shared_vertex)
+            self.dist_tool.Perform()
 
-            if not dist_tool.IsDone() or dist_tool.NbSolution() == 0:
+            if not self.dist_tool.IsDone() or self.dist_tool.NbSolution() == 0:
+                break
+            if self.dist_tool.InnerSolution():
                 break
 
-            if dist_tool.InnerSolution():
-                break
-
-            d_min = dist_tool.Value()
+            d_min = self.dist_tool.Value()
             if d_min >= r - epsilon:
                 break
 
-            p_closest = dist_tool.PointOnShape2(1)
+            p_closest = self.dist_tool.PointOnShape2(1)
             best_d_sq = p_closest.SquareDistance(center)
 
-            for i in range(2, dist_tool.NbSolution() + 1):
-                p_cand = dist_tool.PointOnShape2(i)
+            for i in range(2, self.dist_tool.NbSolution() + 1):
+                p_cand = self.dist_tool.PointOnShape2(i)
                 d_sq = p_cand.SquareDistance(center)
                 if d_sq < best_d_sq:
                     best_d_sq, p_closest = d_sq, p_cand
@@ -316,7 +251,6 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
             if v_sq < epsilon**2:
                 break
-
             if v_dot_n <= 0:
                 return float("inf")
 
@@ -327,25 +261,23 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
             if r_new >= r or (r - r_new) < epsilon:
                 break
-
             r = r_new
 
         thickness = r * 2.0
-        final_center = gp_Pnt(
-            p_exact.X() + r * inward_norm.X(),
-            p_exact.Y() + r * inward_norm.Y(),
-            p_exact.Z() + r * inward_norm.Z(),
-        )
 
-        if dist_tool.IsDone() and dist_tool.NbSolution() > 0:
-            for i in range(1, dist_tool.NbSolution() + 1):
-                p_contact = dist_tool.PointOnShape2(i)
-                if abs(p_contact.Distance(final_center) - r) < epsilon * 10:
-                    if dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
-                        other_face = topods.Face(dist_tool.SupportOnShape2(i))
-
-                        if not other_face.IsSame(face):
-                            u_other, v_other = dist_tool.ParOnFaceS2(i)
-                            face_seeds[other_face].append((u_other, v_other, thickness))
+        # Inject seed points to touching faces
+        if self.dist_tool.IsDone() and self.dist_tool.NbSolution() > 0:
+            final_c = gp_Pnt(
+                p_exact.X() + r * inward_norm.X(),
+                p_exact.Y() + r * inward_norm.Y(),
+                p_exact.Z() + r * inward_norm.Z(),
+            )
+            for i in range(1, self.dist_tool.NbSolution() + 1):
+                if abs(self.dist_tool.PointOnShape2(i).Distance(final_c) - r) < epsilon * 10:
+                    if self.dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
+                        other_face = topods.Face(self.dist_tool.SupportOnShape2(i))
+                        if not other_face.IsSame(origin_face):
+                            u_other, v_other = self.dist_tool.ParOnFaceS2(i)
+                            self.face_seeds[other_face].append((u_other, v_other, thickness))
 
         return thickness

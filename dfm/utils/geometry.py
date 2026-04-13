@@ -22,11 +22,10 @@
 
 # This file defines geometry functions that are often reused between analyzers
 
-from typing import Generator, Optional
+from typing import Generator, Optional, Callable
 
 from OCC.Core.BRepTools import breptools
 from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRepTools import breptools
 from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
@@ -168,3 +167,105 @@ def is_point_on_face(
         return True
 
     return False
+
+
+def optimize_face_uv_search(
+    face: TopoDS_Face,
+    start_uv: tuple[float, float],
+    start_val: float,
+    eval_func: Callable[[float, float, float], Optional[float]],
+    classifier: BRepTopAdaptor_FClass2d,
+    max_iterations: int = 50,
+    max_step_mm: float = 5.0,
+) -> tuple[tuple[float, float], float, list[float]]:
+    """
+    A generic Hill-Climbing algorithm that searches a face's UV space to find the
+    local maximum of a given scalar field (e.g. thickness, clearance).
+
+    Args:
+        face: The topological face to search.
+        start_uv: The initial (u, v) parameter coordinates.
+        start_val: The initial scalar value at start_uv.
+        eval_func: A callable `fn(u, v, current_max)` that returns the scalar value.
+        classifier: Boundary classifier for the face.
+        max_iterations: Maximum steps before aborting.
+        max_step_mm: Maximum physical step size in millimeters.
+
+    Returns:
+        Tuple containing (best_uv, max_val, list_of_improvements).
+    """
+    u_ratio, v_ratio = get_face_uv_ratios(face)
+    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+
+    face_width_mm = (u_max - u_min) / u_ratio
+    step_size = max(0.1, min(face_width_mm * 0.02, max_step_mm))
+    min_step = min(0.01, step_size * 0.001)
+
+    plateau_patience = 3
+    plateau_hits = 0
+    gain_threshold = 0.0001
+
+    current_best_uv, current_max_val = start_uv, start_val
+    last_dir: Optional[tuple[int, int]] = None
+    improvements: list[float] = []
+
+    cardinals = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
+
+    for _ in range(max_iterations):
+        improved = False
+        prev_val = current_max_val
+
+        du = step_size * u_ratio
+        dv = step_size * v_ratio
+
+        def try_dir(d_u, d_v):
+            nonlocal current_max_val, current_best_uv, improved, last_dir
+            u_test = max(u_min, min(u_max, current_best_uv[0] + d_u * du))
+            v_test = max(v_min, min(v_max, current_best_uv[1] + d_v * dv))
+
+            if not is_point_on_face(u_test, v_test, face, classifier):
+                return False
+
+            val = eval_func(u_test, v_test, current_max_val)
+            if val is not None and val > current_max_val and val != float("inf"):
+                current_max_val = val
+                current_best_uv = (u_test, v_test)
+                improved = True
+                last_dir = (d_u, d_v)
+                improvements.append(val)
+                return True
+            return False
+
+        # Try momentum first
+        if last_dir and try_dir(*last_dir):
+            pass
+
+        # Try cardinals
+        if not improved:
+            for d_u_m, d_v_m in cardinals:
+                if try_dir(d_u_m, d_v_m):
+                    break
+
+        # Try diagonals
+        if not improved:
+            for d_u_m, d_v_m in diagonals:
+                if try_dir(d_u_m, d_v_m):
+                    break
+
+        if improved:
+            relative_gain = (current_max_val - prev_val) / max(prev_val, 1e-6)
+            if relative_gain < gain_threshold:
+                plateau_hits += 1
+            else:
+                plateau_hits = 0
+
+            if plateau_hits >= plateau_patience:
+                break
+        else:
+            last_dir = None
+            step_size /= 2.0
+            if step_size < min_step:
+                break
+
+    return current_best_uv, current_max_val, improvements
