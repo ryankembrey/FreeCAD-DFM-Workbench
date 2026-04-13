@@ -55,7 +55,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
         samples = kwargs.get("samples", 10)
         intersector = IntCurvesFace_ShapeIntersector()
-        intersector.Load(shape, 1e-6)
+        intersector.Load(shape, 1e-3)
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
             thicknesses = self._ray_cast_for_face(face, intersector, samples)
