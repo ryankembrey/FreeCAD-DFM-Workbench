@@ -32,7 +32,12 @@ from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
-from dfm.utils import get_face_uv_normal, yield_face_uv_grid, get_point_from_uv
+from dfm.utils import (
+    get_adaptive_sample_count,
+    get_face_uv_normal,
+    yield_face_uv_grid,
+    get_point_from_uv,
+)
 
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
@@ -70,8 +75,9 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         Returns the thicknesses found at each point UV for a given face.
         """
         thicknesses = []
+        adaptive_samples = get_adaptive_sample_count(face, samples)
 
-        for u, v in yield_face_uv_grid(face, samples):
+        for u, v in yield_face_uv_grid(face, adaptive_samples):
             thick = self.ray_cast_at_uv(face, u, v, intersector)
 
             if thick is not None and thick != float("inf"):
