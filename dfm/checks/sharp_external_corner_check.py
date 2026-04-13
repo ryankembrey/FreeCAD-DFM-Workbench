@@ -67,7 +67,7 @@ class SharpExternalCornerCheck(BaseCheck):
             results.append(
                 CheckResult(
                     rule_id=rule,
-                    overview=f"{measured}{unit}",
+                    overview=f"{measured:.2f}{unit}",
                     message=formatted_msg,
                     severity=severity,
                     failing_geometry=[edge],
