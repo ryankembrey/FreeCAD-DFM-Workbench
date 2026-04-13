@@ -56,18 +56,18 @@ class RayThicknessAnalyzer(BaseAnalyzer):
     ) -> dict[TopoDS_Face, list[float]]:
         """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
         samples = kwargs.get("samples", 10)
-        intersector = IntCurvesFace_ShapeIntersector()
-        intersector.Load(shape, 1e-3)
+
+        self.intersector = IntCurvesFace_ShapeIntersector()
+        self.intersector.Load(shape, 1e-3)
+
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
-            thicknesses = self._ray_cast_for_face(face, intersector, samples)
+            thicknesses = self._ray_cast_for_face(face, samples)
             if thicknesses:
                 results[face] = thicknesses
         return results
 
-    def _ray_cast_for_face(
-        self, face: TopoDS_Face, intersector: IntCurvesFace_ShapeIntersector, samples: int
-    ) -> list[float]:
+    def _ray_cast_for_face(self, face: TopoDS_Face, samples: int) -> list[float]:
         """
         Returns the thicknesses found at each point UV for a given face.
         """
@@ -75,7 +75,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         adaptive_samples = get_adaptive_sample_count(face, samples)
 
         for u, v in yield_face_uv_grid(face, adaptive_samples):
-            thick = self.ray_cast_at_uv(face, u, v, intersector)
+            thick = self.ray_cast_at_uv(face, u, v)
 
             if thick is not None and thick != float("inf"):
                 thicknesses.append(thick)
@@ -87,7 +87,6 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         face: TopoDS_Face,
         u: float,
         v: float,
-        intersector: IntCurvesFace_ShapeIntersector,
     ) -> Optional[float]:
         """
         Returns the thickness at UV. Returns float('inf') if no wall is hit.
@@ -102,7 +101,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         point = get_point_from_uv(face, inward_norm, u, v, epsilon)
         ray = gp_Lin(point, inward_norm)
 
-        intersector.Perform(ray, 0, float("inf"))
+        self.intersector.Perform(ray, 0, float("inf"))
 
         # At acute corners, thickness is reported as zero. This is intuitively incorrect for
         # a DFM analysis. So we compare the normal directions of the origin face and the hit
@@ -113,13 +112,13 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         threshold_rad = math.radians(180 - acute_filter_angle)
         acute_filter = math.cos(threshold_rad)
 
-        if intersector.IsDone() and intersector.NbPnt() > 0:
-            p_hit = intersector.Pnt(1)
+        if self.intersector.IsDone() and self.intersector.NbPnt() > 0:
+            p_hit = self.intersector.Pnt(1)
             dist = point.Distance(p_hit)
 
-            hit_face = intersector.Face(1)
-            hit_u = intersector.UParameter(1)
-            hit_v = intersector.VParameter(1)
+            hit_face = self.intersector.Face(1)
+            hit_u = self.intersector.UParameter(1)
+            hit_v = self.intersector.VParameter(1)
 
             hit_normal = get_face_uv_normal(hit_face, hit_u, hit_v)
 
