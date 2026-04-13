@@ -32,10 +32,14 @@ from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
 from dfm.utils import (
     get_adaptive_sample_count,
+    get_face_uv_center,
     get_face_uv_normal,
     yield_face_uv_grid,
     get_point_from_uv,
 )
+
+_NORMAL_CONE_DEG = 5.0
+_NORMAL_CONE_COS = math.cos(math.radians(180.0 - _NORMAL_CONE_DEG))  # cos(135°) ≈ -0.707
 
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
@@ -55,12 +59,18 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
-        """Calculates the minimum thickness for all faces of a given TopoDS_Shape."""
+        """
+        Calculates the minimum thickness for all faces of a given TopoDS_Shape.
+        """
         samples = kwargs.get("samples", 10)
 
         self.intersector = IntCurvesFace_ShapeIntersector()
         self.intersector.Load(shape, 1e-3)
-        self.face_seeds = collections.defaultdict(list)
+
+        self.face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]] = (
+            collections.defaultdict(list)
+        )
+        self.measured_faces: set[TopoDS_Face] = set()
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
@@ -71,33 +81,44 @@ class RayThicknessAnalyzer(BaseAnalyzer):
 
     def _ray_cast_for_face(self, face: TopoDS_Face, samples: int) -> list[float]:
         """
-        Returns the thicknesses found at each point UV for a given face.
+        Ray cast the given face and return a list of thickness values.
         """
-        thicknesses = []
         adaptive_samples = get_adaptive_sample_count(face, samples)
+        coverage_threshold = max(1, int((adaptive_samples**2) * 0.5))
 
-        visited_uvs = {}
+        seeds = self.face_seeds.get(face, [])
 
-        def get_thickness(test_u: float, test_v: float) -> Optional[float]:
-            key = (round(test_u, 5), round(test_v, 5))
-            if key in visited_uvs:
-                return visited_uvs[key]
+        if len(seeds) >= coverage_threshold:
+            self.measured_faces.add(face)
+            print("Skipped face")
+            return [s[2] for s in seeds]
 
-            t = self.ray_cast_at_uv(face, test_u, test_v)
-            visited_uvs[key] = t
-            return t
+        thicknesses = [s[2] for s in seeds]
 
-        # Inject seeds from previous faces
-        for s_u, s_v, s_thick in self.face_seeds.get(face, []):
-            visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
-            thicknesses.append(s_thick)
+        _R = 3  # round value
+        visited_uvs: dict[tuple[float, float], float] = {
+            (round(s_u, _R), round(s_v, _R)): s_thick for s_u, s_v, s_thick in seeds
+        }
 
-        # Grid search
+        # Always sample the face centre
+        u_mid, v_mid = get_face_uv_center(face)
+        key_mid = (round(u_mid, _R), round(v_mid, _R))
+        if key_mid not in visited_uvs:
+            for t in self.ray_cast_at_uv(face, u_mid, v_mid):
+                if t > 0:
+                    thicknesses.append(t)
+                    visited_uvs[key_mid] = t
+
         for u, v in yield_face_uv_grid(face, adaptive_samples):
-            thick = get_thickness(u, v)
-            if thick is not None and thick != float("inf") and thick > 0:
-                thicknesses.append(thick)
+            key = (round(u, _R), round(v, _R))
+            if key in visited_uvs:
+                continue
+            for t in self.ray_cast_at_uv(face, u, v):
+                if t > 0:
+                    thicknesses.append(t)
+            visited_uvs[key] = 0.0
 
+        self.measured_faces.add(face)
         return thicknesses
 
     def ray_cast_at_uv(
@@ -105,51 +126,92 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         face: TopoDS_Face,
         u: float,
         v: float,
-    ) -> Optional[float]:
+    ) -> list[float]:
         """
-        Returns the thickness at UV. Returns float('inf') if no wall is hit.
+        Returns all wall thicknesses measured along the inward ray from (u, v).
+
+        A hit is only used for seeding if the ray is within _NORMAL_CONE_DEG of
+        normal to the hit face, ensuring seeds land at meaningful UV locations.
         """
         outward_norm = get_face_uv_normal(face, u, v)
         if not outward_norm:
-            return None
+            return []
 
         inward_norm = outward_norm.Reversed()
-
         epsilon = 1e-4
         point = get_point_from_uv(face, inward_norm, u, v, epsilon)
         ray = gp_Lin(point, inward_norm)
 
-        self.intersector.Perform(ray, 0, float("inf"))
+        self.intersector.Perform(ray, -1e30, 1e30)
 
-        # At acute corners, thickness is reported as zero. This is intuitively incorrect for
-        # a DFM analysis. So we compare the normal directions of the origin face and the hit
-        # face, and filter out any faces whose angle between them is more than 60° away
-        # from being parallel, and return inf
-        # 180 - 60 = 120 -> cos(120) = -0.5
-        acute_filter_angle = 60
-        threshold_rad = math.radians(180 - acute_filter_angle)
-        acute_filter = math.cos(threshold_rad)
+        if not self.intersector.IsDone() or self.intersector.NbPnt() == 0:
+            return []
 
-        if self.intersector.IsDone() and self.intersector.NbPnt() > 0:
-            p_hit = self.intersector.Pnt(1)
-            dist = point.Distance(p_hit)
+        # Collect and sort all valid forward hits by W parameter
+        hits: list[tuple[float, TopoDS_Face, float, float]] = []
+        for i in range(1, self.intersector.NbPnt() + 1):
+            w = self.intersector.WParameter(i)
+            if w > epsilon * 10:
+                hits.append(
+                    (
+                        w,
+                        self.intersector.Face(i),
+                        self.intersector.UParameter(i),
+                        self.intersector.VParameter(i),
+                    )
+                )
+        hits.sort(key=lambda h: h[0])
 
-            hit_face = self.intersector.Face(1)
-            hit_u = self.intersector.UParameter(1)
-            hit_v = self.intersector.VParameter(1)
+        if not hits:
+            return []
 
-            hit_normal = get_face_uv_normal(hit_face, hit_u, hit_v)
+        thicknesses: list[float] = []
 
-            if hit_normal:
-                dot_prod = outward_norm.Dot(hit_normal)
+        exit_w, exit_face, exit_u, exit_v = hits[0]
+        exit_normal = get_face_uv_normal(exit_face, exit_u, exit_v)
 
-                if dot_prod < acute_filter:
-                    thickness = dist
+        if exit_normal:
+            ray_dot_exit = outward_norm.Dot(exit_normal)
 
-                    # Record seed
-                    if not hit_face.IsSame(face):
-                        self.face_seeds[hit_face].append((hit_u, hit_v, thickness))
+            if ray_dot_exit < _NORMAL_CONE_COS:
+                thicknesses.append(exit_w)
 
-                    return thickness
+                if not exit_face.IsSame(face) and exit_face not in self.measured_faces:
+                    self.face_seeds[exit_face].append((exit_u, exit_v, exit_w))
 
-        return float("inf")
+        i = 1
+        while i + 1 < len(hits):
+            entry_w, entry_face, entry_u, entry_v = hits[i]
+            exit_w, exit_face, exit_u, exit_v = hits[i + 1]
+
+            wall_thickness = exit_w - entry_w
+
+            if wall_thickness <= epsilon:
+                i += 2
+                continue
+
+            entry_normal = get_face_uv_normal(entry_face, entry_u, entry_v)
+            exit_normal = get_face_uv_normal(exit_face, exit_u, exit_v)
+
+            # At least one face must be roughly normal to the ray for a valid wall.
+            entry_ok = (
+                entry_normal is not None and outward_norm.Dot(entry_normal) > -_NORMAL_CONE_COS
+            )
+            exit_ok = exit_normal is not None and outward_norm.Dot(exit_normal) < _NORMAL_CONE_COS
+
+            if entry_ok or exit_ok:
+                thicknesses.append(wall_thickness)
+
+                if (
+                    entry_ok
+                    and not entry_face.IsSame(face)
+                    and entry_face not in self.measured_faces
+                ):
+                    self.face_seeds[entry_face].append((entry_u, entry_v, wall_thickness))
+
+                if exit_ok and not exit_face.IsSame(face) and exit_face not in self.measured_faces:
+                    self.face_seeds[exit_face].append((exit_u, exit_v, wall_thickness))
+
+            i += 2
+
+        return thicknesses
