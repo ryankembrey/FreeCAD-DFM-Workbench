@@ -65,7 +65,7 @@ class DraftAnalyzer(BaseAnalyzer):
 
     def execute(self, shape, progress_cb=None, check_abort=None, **kwargs):
         """Runs a full draft analysis on an inputted shape."""
-        self.pull_direction = kwargs.get("pull_direction", gp_Dir(0, 0, 1))
+        self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         self.samples = kwargs.get("samples", 20)
 
         self.core_cavity_mapping = self.classify_moldside(shape)
