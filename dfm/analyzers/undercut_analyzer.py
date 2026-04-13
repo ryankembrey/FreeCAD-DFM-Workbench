@@ -23,7 +23,6 @@
 from typing import Any, Optional, Callable
 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
-from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Dir
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
@@ -55,29 +54,29 @@ class UndercutAnalyzer(BaseAnalyzer):
         **kwargs: Any,
     ) -> dict[TopoDS_Face, Any]:
         pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
+
         samples = kwargs.get("samples", 10)
-        intersector = IntCurvesFace_ShapeIntersector()
-        intersector.Load(shape, 1e-6)
+
+        self.intersector = IntCurvesFace_ShapeIntersector()
+        self.intersector.Load(shape, 1e-6)
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
-            ratio = self._analyze_face(face, intersector, pull_direction, samples)
+            ratio = self._analyze_face(face, pull_direction, samples)
             if ratio > 0.0:
                 results[face] = ratio
         return results
 
-    def _analyze_face(self, face: TopoDS_Face, intersector, pull_direction, samples):
+    def _analyze_face(self, face: TopoDS_Face, pull_direction, samples):
         """
         Returns a score from 0.0 (Safe) to 1.0 (Completely Trapped).
         """
         total_points = 0
         trapped_points = 0
 
-        surface = BRepAdaptor_Surface(face, True)
-
         for u, v in yield_face_uv_grid(face, samples, 0.01):
             total_points += 1
 
-            if self._is_point_trapped(face, u, v, intersector, pull_direction):
+            if self._is_point_trapped(face, u, v, pull_direction):
                 trapped_points += 1
 
         if total_points == 0:
@@ -90,7 +89,6 @@ class UndercutAnalyzer(BaseAnalyzer):
         face: TopoDS_Face,
         u: float,
         v: float,
-        intersector: IntCurvesFace_ShapeIntersector,
         pull_direction: gp_Dir,
     ):
         normal = get_face_uv_normal(face, u, v)
@@ -102,32 +100,30 @@ class UndercutAnalyzer(BaseAnalyzer):
         point = get_point_from_uv(face, normal, u, v, epsilon)
 
         ray_up = gp_Lin(point, pull_direction)
-        intersector.Perform(ray_up, 0, float("inf"))
+        self.intersector.Perform(ray_up, 0, float("inf"))
 
-        blocked_top = self._has_blocking_hit(intersector, point)
+        blocked_top = self._has_blocking_hit(point)
 
         if not blocked_top:
             return False
 
         ray_down = gp_Lin(point, pull_direction.Reversed())
-        intersector.Perform(ray_down, 0, float("inf"))
+        self.intersector.Perform(ray_down, 0, float("inf"))
 
-        blocked_bottom = self._has_blocking_hit(intersector, point)
+        blocked_bottom = self._has_blocking_hit(point)
         return blocked_top and blocked_bottom
 
-    def _has_blocking_hit(
-        self, intersector: IntCurvesFace_ShapeIntersector, start_point: gp_Pnt
-    ) -> bool:
+    def _has_blocking_hit(self, start_point: gp_Pnt) -> bool:
         """
         Check whether the ray has blocked hit.
         """
-        if not intersector.IsDone():
+        if not self.intersector.IsDone():
             return False
 
         self_hit_threshold = 0.05  ## mm
 
-        for i in range(1, intersector.NbPnt() + 1):
-            hit_pnt = intersector.Pnt(i)
+        for i in range(1, self.intersector.NbPnt() + 1):
+            hit_pnt = self.intersector.Pnt(i)
             if start_point.Distance(hit_pnt) > self_hit_threshold:
                 return True
 
