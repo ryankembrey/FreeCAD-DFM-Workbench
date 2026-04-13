@@ -20,6 +20,7 @@
 #  *                                                                         *
 #  ***************************************************************************
 
+import collections
 from typing import Any, Optional, Callable
 import math
 
@@ -59,6 +60,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
 
         self.intersector = IntCurvesFace_ShapeIntersector()
         self.intersector.Load(shape, 1e-3)
+        self.face_seeds = collections.defaultdict(list)
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
@@ -74,10 +76,26 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         thicknesses = []
         adaptive_samples = get_adaptive_sample_count(face, samples)
 
-        for u, v in yield_face_uv_grid(face, adaptive_samples):
-            thick = self.ray_cast_at_uv(face, u, v)
+        visited_uvs = {}
 
-            if thick is not None and thick != float("inf"):
+        def get_thickness(test_u: float, test_v: float) -> Optional[float]:
+            key = (round(test_u, 5), round(test_v, 5))
+            if key in visited_uvs:
+                return visited_uvs[key]
+
+            t = self.ray_cast_at_uv(face, test_u, test_v)
+            visited_uvs[key] = t
+            return t
+
+        # Inject seeds from previous faces
+        for s_u, s_v, s_thick in self.face_seeds.get(face, []):
+            visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
+            thicknesses.append(s_thick)
+
+        # Grid search
+        for u, v in yield_face_uv_grid(face, adaptive_samples):
+            thick = get_thickness(u, v)
+            if thick is not None and thick != float("inf") and thick > 0:
                 thicknesses.append(thick)
 
         return thicknesses
@@ -126,7 +144,12 @@ class RayThicknessAnalyzer(BaseAnalyzer):
                 dot_prod = outward_norm.Dot(hit_normal)
 
                 if dot_prod < acute_filter:
-                    return dist
+                    thickness = dist
 
-                return float("inf")
+                    # Record seed
+                    if not hit_face.IsSame(face):
+                        self.face_seeds[hit_face].append((hit_u, hit_v, thickness))
+
+                    return thickness
+
         return float("inf")
