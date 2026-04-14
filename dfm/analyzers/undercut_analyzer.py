@@ -46,6 +46,9 @@ class UndercutAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Undercut Analyzer"
 
+    def resolve_prefs(self, prefs: dict) -> None:
+        pass
+
     def execute(
         self,
         shape: TopoDS_Shape,

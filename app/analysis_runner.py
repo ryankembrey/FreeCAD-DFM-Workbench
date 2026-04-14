@@ -60,6 +60,7 @@ class AnalysisRunner:
     ) -> list[CheckResult]:
         """Run all active checks for the given process and material against a shape."""
         self.analyzer_cache.clear()
+        kwargs["prefs"] = self._load_prefs()
 
         process = ProcessRegistry.get_instance().get_process_by_name(process_name)
         if not process:
@@ -143,6 +144,10 @@ class AnalysisRunner:
             timing.report()
 
         return results
+
+    def _load_prefs(self) -> dict:
+        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        return {key: value for _, key, value in params.GetContents()}
 
     def _calculate_total_steps(self, process: Any, num_faces: int) -> tuple[list, int]:
         """Return the ordered list of active rule IDs and the total progress step count."""

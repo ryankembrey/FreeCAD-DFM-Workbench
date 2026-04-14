@@ -55,6 +55,9 @@ class SharpCornersAnalyzer(BaseAnalyzer):
     def requirements(self) -> set[ProcessRequirement]:
         return set()
 
+    def resolve_prefs(self, prefs: dict) -> None:
+        pass
+
     def execute(
         self,
         shape: TopoDS_Shape,

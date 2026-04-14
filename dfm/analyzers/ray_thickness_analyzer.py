@@ -52,6 +52,9 @@ class RayThicknessAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Ray Thickness Analyzer"
 
+    def resolve_prefs(self, prefs: dict) -> None:
+        pass
+
     def execute(
         self,
         shape: TopoDS_Shape,

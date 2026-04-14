@@ -63,6 +63,9 @@ class DraftAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Draft Analyzer"
 
+    def resolve_prefs(self, prefs: dict) -> None:
+        pass
+
     def execute(self, shape, progress_cb=None, check_abort=None, **kwargs):
         """Runs a full draft analysis on an inputted shape."""
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))

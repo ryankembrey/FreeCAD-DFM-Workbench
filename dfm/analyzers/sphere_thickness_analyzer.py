@@ -57,6 +57,14 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "Sphere Thickness Analyzer"
 
+    def resolve_prefs(self, prefs: dict) -> None:
+        self.min_samples = prefs.get("SphereMinSamples", 5)
+        self.max_samples = prefs.get("SphereMaxSamples", 10)
+        self.margin = prefs.get("SphereMargin", 0.01)
+        self.enable_multithread = prefs.get("SphereMultiThreaded", False)
+        self.max_shrink_iters = prefs.get("SphereMaxShrinkIters", 10)
+        self.intersector_tol = prefs.get("SphereIntersectorTol", 1e-3)
+
     def execute(
         self,
         shape: TopoDS_Shape,
@@ -64,7 +72,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[TopoDS_Face, list[float]]:
-        self.samples = kwargs.get("samples", 10)
+        self.resolve_prefs(kwargs.get("prefs", {}))
         self._setup_kernel_tools(shape)
 
         results = {}
@@ -78,7 +86,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
     def _setup_kernel_tools(self, shape: TopoDS_Shape):
         """Initializes heavy OpenCascade tools once per shape."""
         self.intersector = IntCurvesFace_ShapeIntersector()
-        self.intersector.Load(shape, 1e-3)
+        self.intersector.Load(shape, self.intersector_tol)
 
         self.builder = BRep_Builder()
         face_compound = TopoDS_Compound()
@@ -90,7 +98,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             face_explorer.Next()
 
         self.dist_tool = BRepExtrema_DistShapeShape()
-        self.dist_tool.SetMultiThread(False)
+        self.dist_tool.SetMultiThread(self.enable_multithread)
         self.dist_tool.SetDeflection(1e-3)
         self.dist_tool.LoadS2(face_compound)
 
@@ -107,7 +115,9 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         props = GProp_GProps()
         brepgprop.SurfaceProperties(face, props)
-        adaptive_samples = int(max(5, min(self.samples, 2 + (props.Mass() ** 0.5) / 10)))
+        adaptive_samples = int(
+            max(self.min_samples, min(self.max_samples, 2 + (props.Mass() ** 0.5) / 10))
+        )
 
         visited_uvs = {}
 
@@ -137,7 +147,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                     max_t, best_uv = t, (u_mid, v_mid)
 
         # Check coarse grid
-        for u, v in yield_face_uv_grid(face, adaptive_samples, margin=0.01):
+        for u, v in yield_face_uv_grid(face, adaptive_samples, margin=self.margin):
             t = eval_thickness(u, v, max_t)
             if t is not None and t != float("inf"):
                 thicknesses.append(t)
@@ -216,7 +226,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         r = r_init
         epsilon = 1e-4
 
-        for _ in range(10):
+        for _ in range(self.max_shrink_iters):
             center = gp_Pnt(
                 p_exact.X() + r * inward_norm.X(),
                 p_exact.Y() + r * inward_norm.Y(),

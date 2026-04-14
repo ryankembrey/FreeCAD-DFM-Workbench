@@ -52,6 +52,15 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
+    def resolve_prefs(self, prefs: dict) -> None:
+        """
+        Resolve the preferences to `self` here from the kwargs in execute function.
+
+        Call self.resolve_prefs(kwargs.get("prefs", {})) at the start of execute.
+        """
+        pass
+
+    @abstractmethod
     def execute(
         self,
         shape: TopoDS_Shape,
