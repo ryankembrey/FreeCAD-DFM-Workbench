@@ -37,7 +37,6 @@ from dfm.processes.process import RuleFeedback, RuleLimit
 
 from app.analysis_timer import AnalysisTiming
 
-ENABLE_TIMING = False
 
 ProgressCallback = Optional[Callable[[int, int, str], None]]
 AbortCallback = Optional[Callable[[], bool]]
@@ -77,7 +76,9 @@ class AnalysisRunner:
         num_faces = len(shape.Faces)
         active_rules, total_steps = self._calculate_total_steps(process, num_faces)
 
-        timing = AnalysisTiming() if ENABLE_TIMING else None
+        prefs = kwargs.get("prefs", {})
+        enable_timing = prefs.get("GeneralPrintTimingReport", False)
+        timing = AnalysisTiming() if enable_timing else None
         if timing:
             timing.start_total()
 

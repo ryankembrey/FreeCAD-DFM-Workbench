@@ -5,6 +5,8 @@ from PySide6 import QtGui, QtWidgets, QtCore
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
+from gui.widgets import ToleranceSpinBox
+
 _PREF_PATH = "Mod/DFM"
 
 
@@ -21,16 +23,51 @@ class _AnalyzerPanel(Protocol):
 
 
 class DFMPreferencesGeneral:
+    DEFAULT_PRINT_TIMING_REPORT = False
+
     def __init__(self):
-        self.form = Gui.PySideUic.loadUi(":/ui/preferences_general.ui")  # type: ignore
+        self.form = QtWidgets.QWidget()
         self.form.setWindowTitle("General")
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
+        self.init_widgets()
+
+        self.build_ui()
+
+    def init_widgets(self) -> None:
+        self.print_timing_report: QtWidgets.QCheckBox = _pref(
+            QtWidgets.QCheckBox("Print timing report"), "GeneralPrintTimingReport"
+        )  # type: ignore
+        self.print_timing_report.setToolTip(
+            "Prints a report to the terminal after an analysis. \n"
+            "The report includes run-time for Analyzers, Checks, and total analysis run-time."
+        )
+
+    def build_ui(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self.form)
+
+        layout.addWidget(self.build_dev_group())
+
+        layout.addStretch()
+
+    def build_dev_group(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Developer Options")
+        grid = QtWidgets.QGridLayout(group)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.addWidget(self.print_timing_report, 0, 0)
+
+        return group
+
     def loadSettings(self) -> None:
-        pass
+        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        self.print_timing_report.setChecked(
+            params.GetBool("GeneralPrintTimingReport", self.DEFAULT_PRINT_TIMING_REPORT)
+        )
 
     def saveSettings(self) -> None:
-        pass
+        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        params.SetBool("GeneralPrintTimingReport", self.print_timing_report.isChecked())
 
 
 class SphereThicknessPanel(QtWidgets.QWidget):
@@ -75,11 +112,7 @@ class SphereThicknessPanel(QtWidgets.QWidget):
         self.max_shrink_iters.setToolTip(
             "Sets the maximum iterations the sphere can shrink at a tested point on a face during analysis."
         )
-        self.intersector_tol: QtWidgets.QSpinBox = _pref(
-            QtWidgets.QSpinBox(), "SphereIntersectorTol"
-        )  # type: ignore
-        self.intersector_tol.setPrefix("1e-")
-        self.intersector_tol.setRange(1, 7)
+        self.intersector_tol: ToleranceSpinBox = _pref(ToleranceSpinBox(), "SphereIntersectorTol")  # type: ignore
         self.intersector_tol.setToolTip(
             "Sets the load tolerance of the shape intersector. This affects how precisely rays detect surface intersections."
         )
@@ -130,7 +163,7 @@ class SphereThicknessPanel(QtWidgets.QWidget):
             params.GetInt("SphereMaxShrinkIters", self.DEFAULT_MAX_SHRINK_ITERS)
         )
         self.intersector_tol.setValue(
-            params.GetInt("SphereIntersectorTol", self.DEFAULT_INTERSECTOR_TOL)
+            params.GetFloat("SphereIntersectorTol", self.DEFAULT_INTERSECTOR_TOL)
         )
 
     def save(self, params) -> None:
@@ -139,7 +172,7 @@ class SphereThicknessPanel(QtWidgets.QWidget):
         params.SetFloat("SphereMargin", self.margin.value())
         params.SetBool("SphereMultiThreaded", self.multithreaded.isChecked())
         params.SetInt("SphereMaxShrinkIters", self.max_shrink_iters.value())
-        params.SetInt("SphereIntersectorTol", self.intersector_tol.value())
+        params.SetFloat("SphereIntersectorTol", self.intersector_tol.value())
 
 
 class DFMPreferencesAnalyzers:
