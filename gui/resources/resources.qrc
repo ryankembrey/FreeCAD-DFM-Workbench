@@ -3,7 +3,7 @@
     <file>ui/task_setup.ui</file>
     <file>ui/task_results.ui</file>
     <file>ui/process_library.ui</file>
-    <file>ui/preferences_general.ui</file>
+    <file>icons/preferences-dfm.svg</file>
     <file>icons/dfm_analysis.svg</file>
     <file>icons/process_library.svg</file>
     <file>icons/dfm_success.svg</file>
