@@ -23,12 +23,14 @@
 import FreeCADGui as Gui  # type: ignore
 
 from gui import task_setup, task_show_normals, process_library
+from gui import preferences
+from gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers
 
 
 class DFMWorkbench(Gui.Workbench):
     MenuText = "DFM"
     ToolTip = "Design for manufacturing workbench"
-    Icon = ""
+    Icon = ":/icons/dfm_analysis.svg"
 
     def Initialize(self):
         """This function is executed when the workbench is first activated.
@@ -65,3 +67,5 @@ class DFMWorkbench(Gui.Workbench):
 
 
 Gui.addWorkbench(DFMWorkbench())
+Gui.addPreferencePage(DFMPreferencesGeneral, "DFM")
+Gui.addPreferencePage(DFMPreferencesAnalyzers, "DFM")
