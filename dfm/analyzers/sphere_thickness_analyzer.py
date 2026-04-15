@@ -38,6 +38,7 @@ from OCC.Core.TopAbs import TopAbs_FACE
 from dfm.core.base_analyzer import BaseAnalyzer
 from dfm.registries import register_analyzer
 from dfm.utils.geometry import (
+    get_adaptive_sample_count,
     get_face_uv_center,
     get_face_uv_normal,
     get_point_from_uv,
@@ -115,10 +116,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         props = GProp_GProps()
         brepgprop.SurfaceProperties(face, props)
-        adaptive_samples = int(
-            max(self.min_samples, min(self.max_samples, 2 + (props.Mass() ** 0.5) / 10))
-        )
-
+        adaptive_samples = get_adaptive_sample_count(face, self.min_samples, self.max_samples)
         visited_uvs = {}
 
         def eval_thickness(test_u: float, test_v: float, min_to_beat: float) -> Optional[float]:

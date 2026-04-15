@@ -31,7 +31,6 @@ class DFMPreferencesGeneral:
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
         self.init_widgets()
-
         self.build_ui()
 
     def init_widgets(self) -> None:
@@ -45,18 +44,13 @@ class DFMPreferencesGeneral:
 
     def build_ui(self) -> None:
         layout = QtWidgets.QVBoxLayout(self.form)
-
         layout.addWidget(self.build_dev_group())
-
         layout.addStretch()
 
     def build_dev_group(self) -> QtWidgets.QGroupBox:
         group = QtWidgets.QGroupBox("Developer Options")
-        grid = QtWidgets.QGridLayout(group)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
-        grid.addWidget(self.print_timing_report, 0, 0)
-
+        layout = QtWidgets.QVBoxLayout(group)
+        layout.addWidget(self.print_timing_report)
         return group
 
     def loadSettings(self) -> None:
@@ -119,27 +113,33 @@ class SphereThicknessPanel(QtWidgets.QWidget):
 
     def _build_ui(self) -> None:
         layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(self._build_group())
+
+        title = QtWidgets.QLabel("Sphere Thickness")
+        font = title.font()
+        font.setPointSize(16)
+        font.setBold(True)
+        title.setFont(font)
+        layout.addWidget(title)
+
+        layout.addWidget(self._build_sampling_group())
+        layout.addWidget(self._build_algorithm_group())
+
         layout.addStretch()
 
-    def _build_group(self) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox("Sphere Thickness Analyzer")
-        grid = QtWidgets.QGridLayout(group)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
+    def _build_sampling_group(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Sampling Settings")
+        form = QtWidgets.QFormLayout(group)
+        form.addRow("Min sampling density", self.min_samples)
+        form.addRow("Max sampling density", self.max_samples)
+        form.addRow("Boundary margin", self.margin)
+        return group
 
-        grid.addWidget(QtWidgets.QLabel("Min sampling density"), 0, 0)
-        grid.addWidget(self.min_samples, 0, 1)
-        grid.addWidget(QtWidgets.QLabel("Max sampling density"), 1, 0)
-        grid.addWidget(self.max_samples, 1, 1)
-        grid.addWidget(QtWidgets.QLabel("Boundary margin"), 2, 0)
-        grid.addWidget(self.margin, 2, 1)
-        grid.addWidget(self.multithreaded, 3, 0, 1, 2)
-        grid.addWidget(QtWidgets.QLabel("Max shrink iterations"), 4, 0)
-        grid.addWidget(self.max_shrink_iters, 4, 1)
-        grid.addWidget(QtWidgets.QLabel("Ray intersector tolerance"), 5, 0)
-        grid.addWidget(self.intersector_tol, 5, 1)
-
+    def _build_algorithm_group(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Algorithm Settings")
+        form = QtWidgets.QFormLayout(group)
+        form.addRow(self.multithreaded)
+        form.addRow("Max shrink iterations", self.max_shrink_iters)
+        form.addRow("Ray intersector tolerance", self.intersector_tol)
         return group
 
     def _connect_signals(self) -> None:
@@ -175,6 +175,117 @@ class SphereThicknessPanel(QtWidgets.QWidget):
         params.SetFloat("SphereIntersectorTol", self.intersector_tol.value())
 
 
+class RayThicknessPanel(QtWidgets.QWidget):
+    DEFAULT_MIN_SAMPLES = 5
+    DEFAULT_MAX_SAMPLES = 10
+    DEFAULT_MARGIN = 0.0
+    DEFAULT_INTERSECTOR_TOL = 1e-3
+    DEFAULT_NORMAL_CONE = 5.0
+    DEFAULT_SEED_COVERAGE_THRESHOLD = 50
+
+    def __init__(self):
+        super().__init__()
+        self._init_widgets()
+        self._build_ui()
+        self._connect_signals()
+
+    def _init_widgets(self) -> None:
+        self.min_samples: QtWidgets.QSpinBox = _pref(QtWidgets.QSpinBox(), "RayMinSamples")  # type: ignore
+        self.min_samples.setRange(2, 99)
+
+        self.max_samples: QtWidgets.QSpinBox = _pref(QtWidgets.QSpinBox(), "RayMaxSamples")  # type: ignore
+        self.max_samples.setRange(3, 100)
+
+        self.margin: QtWidgets.QDoubleSpinBox = _pref(QtWidgets.QDoubleSpinBox(), "RayMargin")  # type: ignore
+        self.margin.setRange(0.0, 0.495)
+        self.margin.setSingleStep(0.005)
+        self.margin.setDecimals(3)
+        self.margin.setToolTip("UV boundary margin. Prevents sampling too close to face edges.")
+
+        self.intersector_tol: ToleranceSpinBox = _pref(ToleranceSpinBox(), "RayIntersectorTol")  # type: ignore
+        self.intersector_tol.setToolTip(
+            "Sets the load tolerance of the shape intersector. This affects how precisely rays detect surface intersections."
+        )
+        self.normal_cone: QtWidgets.QDoubleSpinBox = _pref(
+            QtWidgets.QDoubleSpinBox(), "RayNormalCone"
+        )  # type: ignore
+        self.normal_cone.setSuffix("°")
+        self.normal_cone.setRange(0.00, 30.00)
+        self.normal_cone.setDecimals(2)
+        self.normal_cone.setToolTip(
+            "Controls how strict the face must be roughly perpendicular to the ray for it to be considered a valid thickness."
+        )
+        self.seed_coverage_threshold: QtWidgets.QSpinBox = _pref(
+            QtWidgets.QSpinBox(), "RaySeedCoverageThreshold"
+        )  # type: ignore
+        self.seed_coverage_threshold.setRange(0, 100)
+        self.seed_coverage_threshold.setSuffix("%")
+        self.seed_coverage_threshold.setToolTip(
+            "Controls the percentage of seeds required before the analyzer skips a face."
+        )
+
+    def _build_ui(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self)
+
+        title = QtWidgets.QLabel("Ray Thickness")
+        font = title.font()
+        font.setPointSize(16)
+        font.setBold(True)
+        title.setFont(font)
+        layout.addWidget(title)
+
+        layout.addWidget(self._build_sampling_group())
+        layout.addWidget(self._build_algorithm_group())
+
+        layout.addStretch()
+
+    def _build_sampling_group(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Sampling Settings")
+        form = QtWidgets.QFormLayout(group)
+        form.addRow("Min sampling density", self.min_samples)
+        form.addRow("Max sampling density", self.max_samples)
+        form.addRow("Boundary margin", self.margin)
+        return group
+
+    def _build_algorithm_group(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Algorithm Settings")
+        form = QtWidgets.QFormLayout(group)
+        form.addRow("Ray intersector tolerance", self.intersector_tol)
+        form.addRow("Secondary hit normal cone", self.normal_cone)
+        form.addRow("Seed coverage threshold", self.seed_coverage_threshold)
+        return group
+
+    def _connect_signals(self) -> None:
+        self.min_samples.valueChanged.connect(self._on_min_changed)
+        self.max_samples.valueChanged.connect(self._on_max_changed)
+
+    def _on_min_changed(self, value: int) -> None:
+        self.max_samples.setMinimum(value + 1)
+
+    def _on_max_changed(self, value: int) -> None:
+        self.min_samples.setMaximum(value - 1)
+
+    def load(self, params) -> None:
+        self.min_samples.setValue(params.GetInt("RayMinSamples", self.DEFAULT_MIN_SAMPLES))
+        self.max_samples.setValue(params.GetInt("RayMaxSamples", self.DEFAULT_MAX_SAMPLES))
+        self.margin.setValue(params.GetFloat("RayMargin", self.DEFAULT_MARGIN))
+        self.intersector_tol.setValue(
+            params.GetFloat("RayIntersectorTol", self.DEFAULT_INTERSECTOR_TOL)
+        )
+        self.normal_cone.setValue(params.GetFloat("RayNormalCone", self.DEFAULT_NORMAL_CONE))
+        self.seed_coverage_threshold.setValue(
+            params.GetInt("RaySeedCoverageThreshold", self.DEFAULT_SEED_COVERAGE_THRESHOLD)
+        )
+
+    def save(self, params) -> None:
+        params.SetInt("RayMinSamples", self.min_samples.value())
+        params.SetInt("RayMaxSamples", self.max_samples.value())
+        params.SetFloat("RayMargin", self.margin.value())
+        params.SetFloat("RayIntersectorTol", self.intersector_tol.value())
+        params.SetFloat("RayNormalCone", self.normal_cone.value())
+        params.SetInt("RaySeedCoverageThreshold", self.seed_coverage_threshold)
+
+
 class DFMPreferencesAnalyzers:
     def __init__(self):
         self.form = QtWidgets.QWidget()
@@ -191,6 +302,7 @@ class DFMPreferencesAnalyzers:
         self.stack = QtWidgets.QStackedWidget()
 
         self._register_panel("Sphere Thickness", SphereThicknessPanel())
+        self._register_panel("Ray Thickness", RayThicknessPanel())
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.list_widget)

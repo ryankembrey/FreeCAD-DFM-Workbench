@@ -66,14 +66,14 @@ def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> Optional[gp_Dir
         return norm
 
 
-def get_adaptive_sample_count(face: TopoDS_Face, base_samples: int) -> int:
+def get_adaptive_sample_count(face: TopoDS_Face, min_samples: int, max_samples: int) -> int:
     """
     Calculates a scaled number of samples based on the physical area of the face.
     The count is clamped between a minimum of 5 and the user-provided base_samples.
     """
     props = GProp_GProps()
     brepgprop.SurfaceProperties(face, props)
-    return int(max(5, min(base_samples, 2 + (props.Mass() ** 0.5) / 10)))
+    return int(max(min_samples, min(max_samples, 2 + (props.Mass() ** 0.5) / 10)))
 
 
 def yield_face_uv_grid(

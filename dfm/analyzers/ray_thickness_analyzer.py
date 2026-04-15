@@ -38,9 +38,6 @@ from dfm.utils import (
     get_point_from_uv,
 )
 
-_NORMAL_CONE_DEG = 5.0
-_NORMAL_CONE_COS = math.cos(math.radians(180.0 - _NORMAL_CONE_DEG))  # cos(135°) ≈ -0.707
-
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
 class RayThicknessAnalyzer(BaseAnalyzer):
@@ -53,7 +50,13 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         return "Ray Thickness Analyzer"
 
     def resolve_prefs(self, prefs: dict) -> None:
-        pass
+        self.min_samples = prefs.get("RayMinSamples", 5)
+        self.max_samples = prefs.get("RayMaxSamples", 10)
+        self.margin = prefs.get("RayMargin", 0.0)
+        self.intersector_tol = prefs.get("RayIntersectorTol", 1e-3)
+        cone_deg = prefs.get("RayNormalCone", 5.0)
+        self.normal_cone_cos = math.cos(math.radians(180.0 - cone_deg))
+        self.seed_threshold: float = prefs.get("RaySeedCoverageThreshold", 50) / 100
 
     def execute(
         self,
@@ -65,10 +68,10 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         """
         Calculates the minimum thickness for all faces of a given TopoDS_Shape.
         """
-        self.samples = kwargs.get("samples", 10)
+        self.resolve_prefs(kwargs.get("prefs", {}))
 
         self.intersector = IntCurvesFace_ShapeIntersector()
-        self.intersector.Load(shape, 1e-3)
+        self.intersector.Load(shape, self.intersector_tol)
 
         self.face_seeds: dict[TopoDS_Face, list[tuple[float, float, float]]] = (
             collections.defaultdict(list)
@@ -86,14 +89,13 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         """
         Ray cast the given face and return a list of thickness values.
         """
-        adaptive_samples = get_adaptive_sample_count(face, self.samples)
-        coverage_threshold = max(1, int((adaptive_samples**2) * 0.5))
+        adaptive_samples = get_adaptive_sample_count(face, self.min_samples, self.max_samples)
+        coverage_threshold = max(1, int((adaptive_samples**2) * self.seed_threshold))
 
         seeds = self.face_seeds.get(face, [])
 
         if len(seeds) >= coverage_threshold:
             self.measured_faces.add(face)
-            print("Skipped face")
             return [s[2] for s in seeds]
 
         thicknesses = [s[2] for s in seeds]
@@ -112,7 +114,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
                     thicknesses.append(t)
                     visited_uvs[key_mid] = t
 
-        for u, v in yield_face_uv_grid(face, adaptive_samples):
+        for u, v in yield_face_uv_grid(face, adaptive_samples, margin=self.margin):
             key = (round(u, _R), round(v, _R))
             if key in visited_uvs:
                 continue
@@ -176,7 +178,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         if exit_normal:
             ray_dot_exit = outward_norm.Dot(exit_normal)
 
-            if ray_dot_exit < _NORMAL_CONE_COS:
+            if ray_dot_exit < self.normal_cone_cos:
                 thicknesses.append(exit_w)
 
                 if not exit_face.IsSame(face) and exit_face not in self.measured_faces:
@@ -198,9 +200,11 @@ class RayThicknessAnalyzer(BaseAnalyzer):
 
             # At least one face must be roughly normal to the ray for a valid wall.
             entry_ok = (
-                entry_normal is not None and outward_norm.Dot(entry_normal) > -_NORMAL_CONE_COS
+                entry_normal is not None and outward_norm.Dot(entry_normal) > -self.normal_cone_cos
             )
-            exit_ok = exit_normal is not None and outward_norm.Dot(exit_normal) < _NORMAL_CONE_COS
+            exit_ok = (
+                exit_normal is not None and outward_norm.Dot(exit_normal) < self.normal_cone_cos
+            )
 
             if entry_ok or exit_ok:
                 thicknesses.append(wall_thickness)
