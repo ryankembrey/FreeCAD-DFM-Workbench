@@ -10,5 +10,6 @@
     <file>icons/dfm_error.svg</file>
     <file>icons/dfm_warning.svg</file>
     <file>icons/dfm_info.svg</file>
+    <file>icons/flip_direction.svg</file>
 </qresource>
 </RCC>

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>488</width>
-    <height>590</height>
+    <width>372</width>
+    <height>497</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -129,33 +129,64 @@
      <property name="title">
       <string>Parameters</string>
      </property>
-     <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1">
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="lePullDir">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The pull direction of the design&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-       </widget>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="1,1">
+        <item>
+         <widget class="QPushButton" name="pbPullDir">
+          <property name="toolTip">
+           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Retrieves the normal as the pull direction for the currently selected face.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          </property>
+          <property name="text">
+           <string>Select Pull Direction</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <item>
+           <widget class="QLineEdit" name="lePullDir">
+            <property name="toolTip">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The pull direction of the design&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pbFlipPullDir">
+            <property name="maximumSize">
+             <size>
+              <width>30</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Flips the currently defined pull direction 180 degrees</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </item>
-      <item row="0" column="0">
-       <widget class="QPushButton" name="pbPullDir">
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Retrieves the normal as the pull direction for the currently selected face.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="1,1">
+        <property name="sizeConstraint">
+         <enum>QLayout::SizeConstraint::SetMaximumSize</enum>
         </property>
-        <property name="text">
-         <string>Select Pull Direction</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QPushButton" name="pbNPlane">
-        <property name="text">
-         <string>Select Neutral Plane</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="leNPlane"/>
+        <item>
+         <widget class="QPushButton" name="pbNPlane">
+          <property name="text">
+           <string>Select Neutral Plane</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="leNPlane"/>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
