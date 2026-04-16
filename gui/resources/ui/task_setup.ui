@@ -26,7 +26,7 @@
       <item>
        <widget class="QPushButton" name="pbSelectModel">
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Select a model in the Tree View or 3D View prior to clicking this button.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>Sets the target object for analysis</string>
         </property>
         <property name="text">
          <string>Select Model</string>
@@ -135,7 +135,7 @@
         <item>
          <widget class="QPushButton" name="pbPullDir">
           <property name="toolTip">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Retrieves the normal as the pull direction for the currently selected face.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           <string>Defines the ejection or removal direction based on a face or edge</string>
           </property>
           <property name="text">
            <string>Select Pull Direction</string>
@@ -160,7 +160,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Flips the currently defined pull direction 180 degrees</string>
+             <string>Reverses the pull direction</string>
             </property>
             <property name="text">
              <string/>
@@ -178,6 +178,9 @@
         </property>
         <item>
          <widget class="QPushButton" name="pbNPlane">
+          <property name="toolTip">
+           <string>Defines the stationary reference plane for analysis</string>
+          </property>
           <property name="text">
            <string>Select Neutral Plane</string>
           </property>
@@ -208,7 +211,7 @@
            </size>
           </property>
           <property name="toolTip">
-           <string>Cancels the running DFM analysis</string>
+           <string>Cancels the current analysis</string>
           </property>
           <property name="text">
            <string>Abort</string>
@@ -255,7 +258,7 @@
       </size>
      </property>
      <property name="toolTip">
-      <string>Executes a DFM analysis</string>
+      <string>Starts the analysis process for the selected model</string>
      </property>
      <property name="text">
       <string>Run Analysis</string>
