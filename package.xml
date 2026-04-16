@@ -6,7 +6,7 @@
   <author email="ryan.FreeCAD@gmail.com">Ryan Kembrey</author>
   <maintainer email="ryan.FreeCAD@gmail.com">Ryan Kembrey</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
-  <url type="repository" branch="master">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>
+  <url type="repository" branch="main">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>
   <url type="documentation">https://ryankembrey.github.io/FreeCAD-DFM-Workbench/</url>
 
   <content>
