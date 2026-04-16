@@ -8,6 +8,7 @@
   <license file="LICENSE">LGPL-2.1-or-later</license>
   <url type="repository" branch="main">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>
   <url type="documentation">https://ryankembrey.github.io/FreeCAD-DFM-Workbench/</url>
+  <icon>gui/resources/icons/dfm_analysis.svg</icon>
 
   <content>
     <workbench>
@@ -16,7 +17,6 @@
       <description>Design for manufacturing workbench. Evaluate designs against manufacturing processes and associated rules.</description>
       <version>0.1.0-dev</version>
       <subdirectory>./</subdirectory>
-      <icon>gui/resources/icons/dfm_analysis.svg</icon>
       <freecadmin>1.1.0</freecadmin>
       <depend></depend>
       <tag>dfm</tag>
