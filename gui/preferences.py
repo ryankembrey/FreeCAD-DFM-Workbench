@@ -283,7 +283,7 @@ class RayThicknessPanel(QtWidgets.QWidget):
         params.SetFloat("RayMargin", self.margin.value())
         params.SetFloat("RayIntersectorTol", self.intersector_tol.value())
         params.SetFloat("RayNormalCone", self.normal_cone.value())
-        params.SetInt("RaySeedCoverageThreshold", self.seed_coverage_threshold)
+        params.SetInt("RaySeedCoverageThreshold", self.seed_coverage_threshold.value())
 
 
 class DFMPreferencesAnalyzers:
