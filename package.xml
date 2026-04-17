@@ -2,7 +2,7 @@
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>DFM Workbench</name>
   <description>Design for manufacturing workbench</description>
-  <version>0.1.0-dev</version>
+  <version>0.1.1</version>
   <author email="ryan.FreeCAD@gmail.com">Ryan Kembrey</author>
   <maintainer email="ryan.FreeCAD@gmail.com">Ryan Kembrey</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
@@ -15,7 +15,7 @@
       <name>DFM Workbench</name>
       <classname>DFMWorkbench</classname>
       <description>Design for manufacturing workbench. Evaluate designs against manufacturing processes and associated rules.</description>
-      <version>0.1.0-dev</version>
+      <version>0.1.1</version>
       <subdirectory>./</subdirectory>
       <freecadmin>1.1.0</freecadmin>
       <depend></depend>
