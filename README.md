@@ -22,7 +22,7 @@ materials are fully configurable to support any manufacturing workflow.
 **DFM Rules:**
 - [x] **Draft angle analysis:** detects faces with insufficient taper for mold ejection
 - [x] **Wall thickness analysis:** finds sections too thin or thick for the process and material
-- [x] **Undercut detection:** identifies geometry that prevents mould separation
+- [x] **Undercut detection:** identifies geometry that prevents mold separation
 - [x] **Sharp corner detection:** finds sharp internal and external corners within the design
 
 **Workflow:**
