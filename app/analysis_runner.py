@@ -148,7 +148,10 @@ class AnalysisRunner:
 
     def _load_prefs(self) -> dict:
         params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
-        return {key: value for _, key, value in params.GetContents()}
+        contents = params.GetContents()
+        if not contents:
+            return {}
+        return {key: value for _, key, value in contents}
 
     def _calculate_total_steps(self, process: Any, num_faces: int) -> tuple[list, int]:
         """Return the ordered list of active rule IDs and the total progress step count."""
