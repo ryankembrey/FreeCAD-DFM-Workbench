@@ -23,41 +23,24 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import sys
-import os
+from typing import Type
 
-WORKBENCH = os.path.expanduser("~/documents/git/FreeCAD-DFM-Workbench")
-FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
+from ...dfm.core.base_analyzer import BaseAnalyzer
 
-for p in [WORKBENCH, FC_LIB]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+_analyzer_registry: dict[str, Type[BaseAnalyzer]] = {}
 
 
-def run_wrapper():
-    print("\n--DFM-TESTS-----------------------------------------------------------")
-    print("Initializing CAD environment…")
+def register_analyzer(analyzer_id: str):
+    """A decorator that registers an Analyzer class in the registry."""
 
-    try:
-        # import FreeCAD  # type: ignore
-        # import Part  # type: ignore
-        import OCC.Core.TopoDS
+    def decorator(cls: Type[BaseAnalyzer]):
+        # print(f"Registering Analyzer: '{cls.__name__}' with ID '{analyzer_id}'")
+        _analyzer_registry[analyzer_id] = cls
+        return cls
 
-        print(f"OCC found.")
-    except ImportError as e:
-        print(f"Environment Failure: {e}")
-        return
-
-    print("----------------------------------------------------------------------\n")
-    import unittest
-
-    loader = unittest.TestLoader()
-    test_dir = os.path.join(WORKBENCH, "tests")
-    suite = loader.discover(start_dir=test_dir, pattern="test_*.py")
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    runner.run(suite)
+    return decorator
 
 
-if __name__ == "__main__":
-    run_wrapper()
+def get_analyzer_class(analyzer_id: str) -> Type[BaseAnalyzer] | None:
+    """Retrieves an Analyzer class from the registry by its ID."""
+    return _analyzer_registry.get(analyzer_id)

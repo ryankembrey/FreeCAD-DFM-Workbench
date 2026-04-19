@@ -17,47 +17,53 @@
 #  *   GNU Library General Public License for more details.                  *
 #  *                                                                         *
 #  *   You should have received a copy of the GNU Library General Public     *
-#  *   License along with this library; see the file COPYING.LIB. If not,   *
+#  *   License along with this library; see the file COPYING.LIB. If not,    *
 #  *   write to the Free Software Foundation, Inc., 59 Temple Place,         *
 #  *   Suite 330, Boston, MA  02111-1307, USA                                *
 #  *                                                                         *
 #  ***************************************************************************
 
-import sys
-import os
-
-WORKBENCH = os.path.expanduser("~/documents/git/FreeCAD-DFM-Workbench")
-FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
-
-for p in [WORKBENCH, FC_LIB]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+from enum import Enum
+from dataclasses import dataclass
+from typing import Optional
 
 
-def run_wrapper():
-    print("\n--DFM-TESTS-----------------------------------------------------------")
-    print("Initializing CAD environment…")
-
-    try:
-        # import FreeCAD  # type: ignore
-        # import Part  # type: ignore
-        import OCC.Core.TopoDS
-
-        print(f"OCC found.")
-    except ImportError as e:
-        print(f"Environment Failure: {e}")
-        return
-
-    print("----------------------------------------------------------------------\n")
-    import unittest
-
-    loader = unittest.TestLoader()
-    test_dir = os.path.join(WORKBENCH, "tests")
-    suite = loader.discover(start_dir=test_dir, pattern="test_*.py")
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    runner.run(suite)
+@dataclass
+class RuleType:
+    label: str
+    unit: Optional[str] = "mm"
+    is_binary: bool = False  # If True, Target/Limit columns are irrelevant
+    comparison: str = "min"  # "min" or "max"
 
 
-if __name__ == "__main__":
-    run_wrapper()
+class Rulebook(Enum):
+    MIN_DRAFT_ANGLE = RuleType("Minimum Draft Angle", unit="°", comparison="min")
+    MIN_WALL_THICKNESS = RuleType("Minimum Wall Thickness", unit="mm", comparison="min")
+    MAX_WALL_THICKNESS = RuleType("Maximum Wall Thickness", unit="mm", comparison="max")
+    NO_UNDERCUTS = RuleType("Undercut", unit=None, is_binary=True)
+    SHARP_INTERNAL_CORNERS = RuleType(
+        "Sharp Internal Corners", unit="°", comparison="max", is_binary=True
+    )
+    SHARP_EXTERNAL_CORNERS = RuleType(
+        "Sharp External Corners", unit="°", comparison="max", is_binary=True
+    )
+
+    @property
+    def id(self) -> str:
+        return self.name
+
+    @property
+    def label(self) -> str:
+        return self.value.label
+
+    @property
+    def unit(self) -> str:
+        return self.value.unit or ""
+
+    @property
+    def is_binary(self) -> bool:
+        return self.value.is_binary
+
+    @property
+    def comparison(self) -> str:
+        return self.value.comparison

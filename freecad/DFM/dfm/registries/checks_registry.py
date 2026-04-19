@@ -23,41 +23,33 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import sys
-import os
+from typing import Type
 
-WORKBENCH = os.path.expanduser("~/documents/git/FreeCAD-DFM-Workbench")
-FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
+from ...dfm.rules import Rulebook
+from ...dfm.core.base_check import BaseCheck
 
-for p in [WORKBENCH, FC_LIB]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+_check_registry: dict[Rulebook, Type[BaseCheck]] = {}
 
 
-def run_wrapper():
-    print("\n--DFM-TESTS-----------------------------------------------------------")
-    print("Initializing CAD environment…")
+def register_check(*rule_ids: Rulebook):
+    """
+    A decorator that registers a Check class against one or more Rulebook IDs.
+    """
 
-    try:
-        # import FreeCAD  # type: ignore
-        # import Part  # type: ignore
-        import OCC.Core.TopoDS
+    def decorator(cls: Type[BaseCheck]):
+        for rule_id in rule_ids:
+            if not isinstance(rule_id, Rulebook):
+                raise TypeError(
+                    f"Invalid type passed to register_check. Expected a Rulebook member, got {type(rule_id)}."
+                )
 
-        print(f"OCC found.")
-    except ImportError as e:
-        print(f"Environment Failure: {e}")
-        return
+            # print(f"Registering Check: '{cls.__name__}' for rule '{rule_id.name}'")
+            _check_registry[rule_id] = cls
+        return cls
 
-    print("----------------------------------------------------------------------\n")
-    import unittest
-
-    loader = unittest.TestLoader()
-    test_dir = os.path.join(WORKBENCH, "tests")
-    suite = loader.discover(start_dir=test_dir, pattern="test_*.py")
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    runner.run(suite)
+    return decorator
 
 
-if __name__ == "__main__":
-    run_wrapper()
+def get_check_class(rule_id: Rulebook) -> Type[BaseCheck] | None:
+    """Retrieves a Check class from the registry by its Rulebook ID."""
+    return _check_registry.get(rule_id)

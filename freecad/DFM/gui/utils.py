@@ -23,41 +23,21 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import sys
-import os
-
-WORKBENCH = os.path.expanduser("~/documents/git/FreeCAD-DFM-Workbench")
-FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
-
-for p in [WORKBENCH, FC_LIB]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+import Part  # type: ignore
 
 
-def run_wrapper():
-    print("\n--DFM-TESTS-----------------------------------------------------------")
-    print("Initializing CAD environment…")
+def get_face_index(target_obj, occ_face) -> int:
+    """Finds the index of an OCC face in the target object's shape."""
+    if not target_obj or not hasattr(target_obj, "Shape"):
+        return -1
 
-    try:
-        # import FreeCAD  # type: ignore
-        # import Part  # type: ignore
-        import OCC.Core.TopoDS
-
-        print(f"OCC found.")
-    except ImportError as e:
-        print(f"Environment Failure: {e}")
-        return
-
-    print("----------------------------------------------------------------------\n")
-    import unittest
-
-    loader = unittest.TestLoader()
-    test_dir = os.path.join(WORKBENCH, "tests")
-    suite = loader.discover(start_dir=test_dir, pattern="test_*.py")
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    runner.run(suite)
+    for i, f in enumerate(target_obj.Shape.Faces):
+        if Part.__toPythonOCC__(f).IsSame(occ_face):
+            return i
+    return -1
 
 
-if __name__ == "__main__":
-    run_wrapper()
+def get_face_name(target_obj, occ_face) -> str:
+    """Returns the internal FreeCAD Face name (e.g., 'Face1')."""
+    idx = get_face_index(target_obj, occ_face)
+    return f"Face{idx + 1}" if idx != -1 else "Unknown Face"

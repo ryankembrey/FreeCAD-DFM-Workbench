@@ -23,41 +23,30 @@
 #  *                                                                         *
 #  ***************************************************************************
 
-import sys
-import os
-
-WORKBENCH = os.path.expanduser("~/documents/git/FreeCAD-DFM-Workbench")
-FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
-
-for p in [WORKBENCH, FC_LIB]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
+from PySide6 import QtWidgets
 
 
-def run_wrapper():
-    print("\n--DFM-TESTS-----------------------------------------------------------")
-    print("Initializing CAD environment…")
+class ToleranceSpinBox(QtWidgets.QDoubleSpinBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDecimals(7)
+        self.setRange(1e-7, 1e-1)
 
-    try:
-        # import FreeCAD  # type: ignore
-        # import Part  # type: ignore
-        import OCC.Core.TopoDS
+    def textFromValue(self, value: float) -> str:
+        return f"{value:.0e}".replace("e-0", "e-")
 
-        print(f"OCC found.")
-    except ImportError as e:
-        print(f"Environment Failure: {e}")
-        return
+    def valueFromText(self, text: str) -> float:
+        try:
+            return float(text)
+        except ValueError:
+            return self.value()
 
-    print("----------------------------------------------------------------------\n")
-    import unittest
+    def stepBy(self, steps: int) -> None:
+        val = self.value()
+        if steps > 0:
+            val *= 10
+        elif steps < 0:
+            val /= 10
 
-    loader = unittest.TestLoader()
-    test_dir = os.path.join(WORKBENCH, "tests")
-    suite = loader.discover(start_dir=test_dir, pattern="test_*.py")
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    runner.run(suite)
-
-
-if __name__ == "__main__":
-    run_wrapper()
+        val = max(self.minimum(), min(self.maximum(), val))
+        self.setValue(val)

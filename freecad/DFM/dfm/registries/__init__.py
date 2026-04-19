@@ -17,47 +17,12 @@
 #  *   GNU Library General Public License for more details.                  *
 #  *                                                                         *
 #  *   You should have received a copy of the GNU Library General Public     *
-#  *   License along with this library; see the file COPYING.LIB. If not,   *
+#  *   License along with this library; see the file COPYING.LIB. If not,    *
 #  *   write to the Free Software Foundation, Inc., 59 Temple Place,         *
 #  *   Suite 330, Boston, MA  02111-1307, USA                                *
 #  *                                                                         *
 #  ***************************************************************************
 
-import sys
-import os
-
-WORKBENCH = os.path.expanduser("~/documents/git/FreeCAD-DFM-Workbench")
-FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
-
-for p in [WORKBENCH, FC_LIB]:
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-
-def run_wrapper():
-    print("\n--DFM-TESTS-----------------------------------------------------------")
-    print("Initializing CAD environment…")
-
-    try:
-        # import FreeCAD  # type: ignore
-        # import Part  # type: ignore
-        import OCC.Core.TopoDS
-
-        print(f"OCC found.")
-    except ImportError as e:
-        print(f"Environment Failure: {e}")
-        return
-
-    print("----------------------------------------------------------------------\n")
-    import unittest
-
-    loader = unittest.TestLoader()
-    test_dir = os.path.join(WORKBENCH, "tests")
-    suite = loader.discover(start_dir=test_dir, pattern="test_*.py")
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    runner.run(suite)
-
-
-if __name__ == "__main__":
-    run_wrapper()
+from .analyzers_registry import register_analyzer, get_analyzer_class
+from .checks_registry import register_check, get_check_class
+from .process_registry import ProcessRegistry
