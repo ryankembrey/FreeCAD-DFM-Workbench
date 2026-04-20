@@ -24,9 +24,9 @@ jobs:
 
       - name: Build HTML
         run: |
-          touch Documentation/source/.nojekyll 
-          sphinx-apidoc -f -o  Documentation/source/ . freecad/DFM/gui/DFM_rc.py freecad/DFM/__init__.py freecad/DFM/init_gui.py
-          cd Documentation
+          touch docs/source/.nojekyll 
+          sphinx-apidoc -f -o  docs/source/ . freecad/DFM/gui/DFM_rc.py freecad/DFM/__init__.py freecad/DFM/init_gui.py
+          cd docs
           export PYTHONPATH=$PYTHONPATH:$(pwd)/..
           make clean
           make html
@@ -35,5 +35,5 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: Documentation/build/html
+          publish_dir: docs/build/html
           force_orphan: true

@@ -28,13 +28,13 @@
     <license file="LICENSE">LGPL-2.1-or-later</license>
 
     <!-- Icon -->
-    <icon>freecad/DFM/Resources/Icons/Logo.svg</icon>
+    <icon>freecad/DFM/resources/icons/logo.svg</icon>
 
     <!-- Urls -->
     <url type="repository" branch="main">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>
     <url type="documentation">https://ryankembrey.github.io/FreeCAD-DFM-Workbench/</url>
     <url type="bugtracker">https://github.com/ryankembrey/FreeCAD-DFM-Workbench/issues</url>
-    <url type="readme">https://raw.githubusercontent.com/ryankembrey/FreeCAD-DFM-Workbench/refs/heads/main/Resources/Documents/Overview.md</url>
+    <url type="readme">https://raw.githubusercontent.com/ryankembrey/FreeCAD-DFM-Workbench/refs/heads/main/resources/documents/overview.md</url>
 
     <!-- Content -->
     <content>
