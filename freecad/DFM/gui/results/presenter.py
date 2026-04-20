@@ -302,7 +302,7 @@ class TaskResultsPresenter:
         self.render_diff()
 
     def render_diff(self):
-        from app.history import diff_runs
+        from ...app.history import diff_runs
 
         a_idx = self.view.form.cbRun1.currentData()
         b_idx = self.view.form.cbRun2.currentData()
