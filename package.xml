@@ -39,13 +39,8 @@
     <!-- Content -->
     <content>
         <workbench>
-            <name>DFM</name>
             <classname>DFMWorkbench</classname>
-            <description>Design for manufacturing workbench. Evaluate designs against manufacturing processes and associated rules.</description>
-            <version>0.1.1</version>
-            <subdirectory>freecad/DFM</subdirectory>
-            <freecadmin>1.1.0</freecadmin>
-            <tag>dfm</tag>
+            <subdirectory>.</subdirectory>
         </workbench>
     </content>
 
