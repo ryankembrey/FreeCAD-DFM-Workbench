@@ -704,6 +704,8 @@ class MaterialEditView(QtCore.QObject):
         self.table.setItemDelegate(self.delegate)
 
     def populate(self, material: Material, default_material: Material, active_rules: list):
+        self._default_material = default_material
+        self._current_material = material
         self.table.blockSignals(True)
         self.table.setRowCount(0)
 
@@ -784,25 +786,61 @@ class MaterialEditView(QtCore.QObject):
         if getattr(rule, "is_binary", False):
             if col != 1:
                 return
-            attr = "binary_severity"
-        else:
-            if col not in [1, 2]:
-                return
-            attr = "target" if col == 1 else "limit"
 
+            self.limit_changed.emit(rule, "binary_severity", cleaned_val)
+
+            def_limit = (
+                self._default_material.rule_limits.get(rule)
+                if hasattr(self, "_default_material")
+                else None
+            )
+            def_val = getattr(def_limit, "binary_severity", "ERROR") if def_limit else "ERROR"
+            is_custom = (
+                bool(cleaned_val)
+                and cleaned_val != def_val
+                and hasattr(self, "_current_material")
+                and self._current_material.name != "Default"
+            )
+            self.table.blockSignals(True)
+            item.setForeground(
+                QtGui.QColor("#D4900A")
+                if is_custom
+                else QtGui.QColor(self.table.palette().color(QtGui.QPalette.ColorRole.Text))
+            )
+            self.table.blockSignals(False)
+            self._on_selection_changed()
+            return
+
+        if col not in [1, 2]:
+            return
+
+        attr = "target" if col == 1 else "limit"
         self.limit_changed.emit(rule, attr, cleaned_val)
 
         self.table.blockSignals(True)
-        if not getattr(rule, "is_binary", False):
-            if cleaned_val and cleaned_val.upper() != "N/A" and getattr(rule, "unit", ""):
-                item.setText(f"{cleaned_val}{rule.unit}")
+        if cleaned_val and cleaned_val.upper() != "N/A" and getattr(rule, "unit", ""):
+            item.setText(f"{cleaned_val}{rule.unit}")
 
-        item.setForeground(QtGui.QColor("#ffaa00"))
+        def_limit = (
+            self._default_material.rule_limits.get(rule)
+            if hasattr(self, "_default_material")
+            else None
+        )
+        def_val = getattr(def_limit, attr, "") if def_limit else ""
+        is_custom = bool(
+            cleaned_val
+            and cleaned_val != str(def_val)
+            and hasattr(self, "_current_material")
+            and self._current_material.name != "Default"
+        )
+        item.setForeground(
+            QtGui.QColor("#D4900A")
+            if is_custom
+            else QtGui.QColor(self.table.palette().color(QtGui.QPalette.ColorRole.Text))
+        )
         self.table.blockSignals(False)
 
-        if not getattr(rule, "is_binary", False):
-            self._validate_row_values(row, rule)
-
+        self._validate_row_values(row, rule)
         self._on_selection_changed()
 
     def _get_numeric_val(self, row, col, rule) -> Optional[float]:
