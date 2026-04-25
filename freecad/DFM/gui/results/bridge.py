@@ -194,18 +194,19 @@ class DFMViewProvider:
             hex_to_rgba(face_color_map[i]) if i in face_color_map else self.OVERLAY_INACTIVE_COLOR
             for i in range(num_faces)
         ]
-        vo.DiffuseColor = face_colors
 
         num_edges = len(self.target_object.Shape.Edges)
         edge_colors = [
             hex_to_rgba(edge_color_map[i]) if i in edge_color_map else self.OVERLAY_INACTIVE_COLOR
             for i in range(num_edges)
         ]
+
+        doc.recompute()  # type: ignore
+
+        vo.DiffuseColor = face_colors
         vo.LineColorArray = edge_colors
         vo.LineWidth = self.OVERLAY_EDGE_WIDTH if edge_color_map else 0
-
         vo.Transparency = self.OVERLAY_TRANSPARENCY
-        doc.recompute()  # type: ignore
 
     def _find_on_surface_point(self, face) -> App.Vector:
         """Returns a point guaranteed to lie on the face surface."""
