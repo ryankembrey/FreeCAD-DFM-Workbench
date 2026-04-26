@@ -9,8 +9,8 @@ from OCC.Core.BRepAlgoAPI import BRepAlgoAPI_Cut
 from OCC.Core.gp import gp_Pnt, gp_Ax2, gp_Dir, gp_Vec
 from OCC.Core.TopoDS import TopoDS_Shape
 
-from freecad.DFM.dfm.analyzers.sphere_thickness_analyzer import SphereThicknessAnalyzer
-from freecad.DFM.dfm.analyzers.ray_thickness_analyzer import RayThicknessAnalyzer
+from freecad.DFM.core.analyzers.sphere_thickness_analyzer import SphereThicknessAnalyzer
+from freecad.DFM.core.analyzers.ray_thickness_analyzer import RayThicknessAnalyzer
 
 
 class TestSphereThicknessAnalyzer(unittest.TestCase):

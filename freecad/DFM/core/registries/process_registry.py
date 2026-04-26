@@ -9,8 +9,8 @@ from dataclasses import asdict
 
 import FreeCAD as App  # type: ignore
 
-from ...dfm.processes.process import Process
-from ...dfm.rules import Rulebook
+from ...core.processes.process import Process
+from ...core.rules import Rulebook
 
 
 class ProcessRegistry:

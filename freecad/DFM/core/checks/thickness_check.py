@@ -4,12 +4,12 @@
 
 from typing import Any, Optional
 
-from ...dfm.models import CheckResult, Severity
-from ...dfm.rules import Rulebook
+from ...core.models import CheckResult, Severity
+from ...core.rules import Rulebook
 
-from ...dfm.base.base_check import BaseCheck
-from ...dfm.processes.process import RuleLimit, RuleFeedback
-from ...dfm.registries import register_check
+from ...core.base.base_check import BaseCheck
+from ...core.processes.process import RuleLimit, RuleFeedback
+from ...core.registries import register_check
 
 
 @register_check(Rulebook.MIN_WALL_THICKNESS)

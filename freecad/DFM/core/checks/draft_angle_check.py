@@ -5,11 +5,11 @@
 import math
 from typing import Any, Optional
 
-from ...dfm.models import CheckResult, Severity
-from ...dfm.base.base_check import BaseCheck
-from ...dfm.processes.process import RuleLimit, RuleFeedback
-from ...dfm.rules import Rulebook
-from ...dfm.registries import register_check
+from ...core.models import CheckResult, Severity
+from ...core.base.base_check import BaseCheck
+from ...core.processes.process import RuleLimit, RuleFeedback
+from ...core.rules import Rulebook
+from ...core.registries import register_check
 
 
 @register_check(Rulebook.MIN_DRAFT_ANGLE)

@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional, Iterator
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods, TopoDS_Edge
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
-from ...dfm.models import ProcessRequirement
+from ...core.models import ProcessRequirement
 
 
 class BaseAnalyzer(ABC):

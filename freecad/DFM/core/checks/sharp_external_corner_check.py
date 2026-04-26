@@ -6,18 +6,18 @@ from typing import Optional
 
 from OCC.Core.TopoDS import TopoDS_Edge
 
-from ...dfm.models import CheckResult, Severity
-from ...dfm.base.base_check import BaseCheck
-from ...dfm.processes.process import RuleLimit, RuleFeedback
-from ...dfm.rules import Rulebook
-from ...dfm.registries import register_check
+from ...core.models import CheckResult, Severity
+from ...core.base.base_check import BaseCheck
+from ...core.processes.process import RuleLimit, RuleFeedback
+from ...core.rules import Rulebook
+from ...core.registries import register_check
 
 
-@register_check(Rulebook.SHARP_INTERNAL_CORNERS)
-class SharpInternalCornerCheck(BaseCheck):
+@register_check(Rulebook.SHARP_EXTERNAL_CORNERS)
+class SharpExternalCornerCheck(BaseCheck):
     @property
     def name(self) -> str:
-        return "Sharp Internal Corners Check"
+        return "Sharp External Corners Check"
 
     @property
     def required_analyzer_id(self) -> str:
@@ -30,7 +30,6 @@ class SharpInternalCornerCheck(BaseCheck):
         rule: Rulebook,
         feedback: Optional[RuleFeedback] = None,
     ) -> list[CheckResult]:
-        tolerance = 1e-4
         results: list[CheckResult] = []
 
         unit = rule.unit
@@ -38,7 +37,7 @@ class SharpInternalCornerCheck(BaseCheck):
         threshold = 1  # degree
 
         for edge, (angle_deg, is_concave) in analysis_data_map.items():
-            if not is_concave or angle_deg < threshold:
+            if is_concave or angle_deg < threshold:
                 continue
 
             measured = angle_deg
@@ -56,7 +55,7 @@ class SharpInternalCornerCheck(BaseCheck):
                     failing_geometry=[edge],
                     ignore=False,
                     value=round(float(measured), 4),
-                    limit=float(),
+                    limit=0.0,
                     comparison="<",
                     unit=unit,
                 )

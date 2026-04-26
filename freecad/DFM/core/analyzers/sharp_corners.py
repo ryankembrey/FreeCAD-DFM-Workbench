@@ -17,10 +17,10 @@ from OCC.Core.TopExp import TopExp_Explorer
 
 
 from OCC.Core.gp import gp_Dir
-from ...dfm.base.base_analyzer import BaseAnalyzer
-from ...dfm.models import ProcessRequirement
-from ...dfm.registries.analyzers_registry import register_analyzer
-from ...dfm.utils.geometry import get_face_uv_normal
+from ...core.base.base_analyzer import BaseAnalyzer
+from ...core.models import ProcessRequirement
+from ...core.registries.analyzers_registry import register_analyzer
+from ...core.utils.geometry import get_face_uv_normal
 
 
 @register_analyzer("SHARP_CORNER_ANALYZER")

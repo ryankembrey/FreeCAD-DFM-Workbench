@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from ..dfm.models import CheckResult, GeometryRef, Severity
-from ..dfm.rules import Rulebook
+from ..core.models import CheckResult, GeometryRef, Severity
+from ..core.rules import Rulebook
 
 
 @dataclass

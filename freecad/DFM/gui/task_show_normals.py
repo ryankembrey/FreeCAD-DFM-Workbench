@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-import FreeCAD
-import FreeCADGui as Gui
-import Part
+import FreeCAD  # type: ignore
+import FreeCADGui as Gui  # type: ignore
+import Part  # type: ignore
 
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_REVERSED
 from OCC.Core.BRep import BRep_Tool
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.TopoDS import topods
-from ..dfm.utils.geometry import get_face_uv_center
+from ..core.utils.geometry import get_face_uv_center
 
 
 class TaskShowNormals:

@@ -8,10 +8,10 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Dir
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
-from ...dfm.base import BaseAnalyzer
-from ...dfm.models import ProcessRequirement
-from ...dfm.utils import yield_face_uv_grid, get_face_uv_normal, get_point_from_uv
-from ...dfm.registries import register_analyzer
+from ...core.base import BaseAnalyzer
+from ...core.models import ProcessRequirement
+from ...core.utils import yield_face_uv_grid, get_face_uv_normal, get_point_from_uv
+from ...core.registries import register_analyzer
 
 
 @register_analyzer("UNDERCUT_ANALYZER")

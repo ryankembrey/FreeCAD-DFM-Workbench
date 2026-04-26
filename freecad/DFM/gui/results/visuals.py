@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-from ...dfm.models import Severity
+from ...core.models import Severity
 
 
 def severity_color(severity: Severity) -> str:

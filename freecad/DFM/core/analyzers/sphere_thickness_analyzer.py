@@ -17,9 +17,9 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
 
-from ...dfm.base.base_analyzer import BaseAnalyzer
-from ...dfm.registries import register_analyzer
-from ...dfm.utils.geometry import (
+from ...core.base.base_analyzer import BaseAnalyzer
+from ...core.registries import register_analyzer
+from ...core.utils.geometry import (
     get_adaptive_sample_count,
     get_face_uv_center,
     get_face_uv_normal,

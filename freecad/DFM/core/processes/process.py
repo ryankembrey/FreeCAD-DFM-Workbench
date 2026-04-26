@@ -5,7 +5,7 @@
 from dataclasses import dataclass, field, fields
 from typing import Optional
 
-from ...dfm.rules import Rulebook
+from ...core.rules import Rulebook
 
 
 @dataclass

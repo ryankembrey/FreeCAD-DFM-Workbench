@@ -10,11 +10,11 @@ import Part  # type: ignore
 from OCC.Core.TopoDS import TopoDS_Shape
 from OCC.Core.gp import gp_Dir
 
-from ..dfm.registries.process_registry import ProcessRegistry
-from ..dfm.registries.checks_registry import get_check_class
-from ..dfm.registries.analyzers_registry import get_analyzer_class
-from ..dfm.models import CheckResult, ProcessRequirement
-from ..dfm.processes.process import RuleFeedback, RuleLimit
+from ..core.registries.process_registry import ProcessRegistry
+from ..core.registries.checks_registry import get_check_class
+from ..core.registries.analyzers_registry import get_analyzer_class
+from ..core.models import CheckResult, ProcessRequirement
+from ..core.processes.process import RuleFeedback, RuleLimit
 
 from ..app.analysis_timer import AnalysisTiming
 

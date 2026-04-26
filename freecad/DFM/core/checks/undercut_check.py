@@ -5,11 +5,11 @@
 from typing import Optional
 from OCC.Core.TopoDS import TopoDS_Face
 
-from ...dfm.models import CheckResult, Severity
-from ...dfm.rules import Rulebook
-from ...dfm.base.base_check import BaseCheck
-from ...dfm.processes.process import RuleLimit, RuleFeedback
-from ...dfm.registries import register_check
+from ...core.models import CheckResult, Severity
+from ...core.rules import Rulebook
+from ...core.base.base_check import BaseCheck
+from ...core.processes.process import RuleLimit, RuleFeedback
+from ...core.registries import register_check
 
 
 @register_check(Rulebook.NO_UNDERCUTS)

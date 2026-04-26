@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from ...app.history import HistoryManager
 
-from ...dfm.models import CheckResult, Severity
+from ...core.models import CheckResult, Severity
 from ...gui.results.bridge import DFMViewProvider
 from ...gui.results.delegates import HistoryRowDelegate
 from ...gui.results.models import DFMReportModel

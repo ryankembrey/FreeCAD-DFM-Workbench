@@ -12,11 +12,11 @@ import Part  # type: ignore
 
 from OCC.Core.gp import gp_Dir
 
-from ..dfm.registries.analyzers_registry import get_analyzer_class
-from ..dfm.registries.checks_registry import get_check_class
-from ..dfm.registries.process_registry import ProcessRegistry
+from ..core.registries.analyzers_registry import get_analyzer_class
+from ..core.registries.checks_registry import get_check_class
+from ..core.registries.process_registry import ProcessRegistry
 from ..app.analysis_runner import AnalysisRunner
-from ..dfm.models import CheckResult, GeometryRef, ProcessRequirement
+from ..core.models import CheckResult, GeometryRef, ProcessRequirement
 
 from ..app.history import HistoryManager
 

@@ -9,7 +9,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 import FreeCADGui as Gui  # type: ignore
 
-from ..dfm.models import CheckResult, Severity
+from ..core.models import CheckResult, Severity
 
 from ..gui.results.delegates import DFMTreeDelegate
 from ..gui.results.visuals import severity_color

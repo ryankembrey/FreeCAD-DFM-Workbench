@@ -4,8 +4,8 @@
 
 from collections import defaultdict
 
-from ...dfm.processes.process import Process
-from ...dfm.models import CheckResult, Severity
+from ...core.processes.process import Process
+from ...core.models import CheckResult, Severity
 
 
 class DFMReportModel:

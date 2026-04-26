@@ -9,9 +9,9 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from ..dfm.processes.process import Material, Process, RuleLimit, RuleFeedback
-from ..dfm.registries.process_registry import ProcessRegistry
-from ..dfm.rules import Rulebook
+from ..core.processes.process import Material, Process, RuleLimit, RuleFeedback
+from ..core.registries.process_registry import ProcessRegistry
+from ..core.rules import Rulebook
 
 from . import DFM_rc
 

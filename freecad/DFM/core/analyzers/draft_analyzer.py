@@ -15,15 +15,15 @@ from OCC.Core.gp import gp_Dir
 from OCC.Core.GeomAbs import GeomAbs_Plane
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
-from ...dfm.base.base_analyzer import BaseAnalyzer
-from ...dfm.models import ProcessRequirement
-from ...dfm.registries import register_analyzer
-from ...dfm.utils.geometry import (
+from ...core.base.base_analyzer import BaseAnalyzer
+from ...core.models import ProcessRequirement
+from ...core.registries import register_analyzer
+from ...core.utils.geometry import (
     get_face_uv_center,
     get_face_uv_normal,
     yield_face_uv_grid,
 )
-from ...dfm.utils.mold import MoldSide, moldside_of_face
+from ...core.utils.mold import MoldSide, moldside_of_face
 
 
 @register_analyzer("DRAFT_ANALYZER")

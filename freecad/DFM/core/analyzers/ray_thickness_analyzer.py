@@ -10,9 +10,9 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 from OCC.Core.gp import gp_Lin
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
-from ...dfm.base.base_analyzer import BaseAnalyzer
-from ...dfm.registries import register_analyzer
-from ...dfm.utils import (
+from ...core.base.base_analyzer import BaseAnalyzer
+from ...core.registries import register_analyzer
+from ...core.utils import (
     get_adaptive_sample_count,
     get_face_uv_center,
     get_face_uv_normal,

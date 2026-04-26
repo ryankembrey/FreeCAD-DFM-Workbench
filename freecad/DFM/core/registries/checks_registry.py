@@ -4,8 +4,8 @@
 
 from typing import Type
 
-from ...dfm.rules import Rulebook
-from ...dfm.base.base_check import BaseCheck
+from ...core.rules import Rulebook
+from ...core.base.base_check import BaseCheck
 
 _check_registry: dict[Rulebook, Type[BaseCheck]] = {}
 

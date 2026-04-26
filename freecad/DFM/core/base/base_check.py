@@ -5,10 +5,10 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from ...dfm.models import CheckResult
-from ...dfm.processes.process import RuleFeedback, RuleLimit
-from ...dfm.rules import Rulebook
-from ...dfm.models import Severity
+from ...core.models import CheckResult
+from ...core.processes.process import RuleFeedback, RuleLimit
+from ...core.rules import Rulebook
+from ...core.models import Severity
 
 
 class BaseCheck(ABC):
