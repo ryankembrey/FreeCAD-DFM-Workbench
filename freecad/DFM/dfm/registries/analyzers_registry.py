@@ -4,7 +4,7 @@
 
 from typing import Type
 
-from ...dfm.core.base_analyzer import BaseAnalyzer
+from ...dfm.base.base_analyzer import BaseAnalyzer
 
 _analyzer_registry: dict[str, Type[BaseAnalyzer]] = {}
 

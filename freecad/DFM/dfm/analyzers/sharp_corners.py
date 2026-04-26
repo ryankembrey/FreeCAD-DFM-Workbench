@@ -17,7 +17,7 @@ from OCC.Core.TopExp import TopExp_Explorer
 
 
 from OCC.Core.gp import gp_Dir
-from ...dfm.core.base_analyzer import BaseAnalyzer
+from ...dfm.base.base_analyzer import BaseAnalyzer
 from ...dfm.models import ProcessRequirement
 from ...dfm.registries.analyzers_registry import register_analyzer
 from ...dfm.utils.geometry import get_face_uv_normal

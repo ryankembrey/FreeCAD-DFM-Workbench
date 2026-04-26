@@ -7,7 +7,7 @@ from typing import Optional
 from OCC.Core.TopoDS import TopoDS_Edge
 
 from ...dfm.models import CheckResult, Severity
-from ...dfm.core.base_check import BaseCheck
+from ...dfm.base.base_check import BaseCheck
 from ...dfm.processes.process import RuleLimit, RuleFeedback
 from ...dfm.rules import Rulebook
 from ...dfm.registries import register_check

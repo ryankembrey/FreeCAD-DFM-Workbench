@@ -15,7 +15,7 @@ from OCC.Core.gp import gp_Dir
 from OCC.Core.GeomAbs import GeomAbs_Plane
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
-from ...dfm.core.base_analyzer import BaseAnalyzer
+from ...dfm.base.base_analyzer import BaseAnalyzer
 from ...dfm.models import ProcessRequirement
 from ...dfm.registries import register_analyzer
 from ...dfm.utils.geometry import (

@@ -5,7 +5,7 @@
 from typing import Type
 
 from ...dfm.rules import Rulebook
-from ...dfm.core.base_check import BaseCheck
+from ...dfm.base.base_check import BaseCheck
 
 _check_registry: dict[Rulebook, Type[BaseCheck]] = {}
 

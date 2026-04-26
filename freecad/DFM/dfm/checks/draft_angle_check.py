@@ -6,7 +6,7 @@ import math
 from typing import Any, Optional
 
 from ...dfm.models import CheckResult, Severity
-from ...dfm.core.base_check import BaseCheck
+from ...dfm.base.base_check import BaseCheck
 from ...dfm.processes.process import RuleLimit, RuleFeedback
 from ...dfm.rules import Rulebook
 from ...dfm.registries import register_check

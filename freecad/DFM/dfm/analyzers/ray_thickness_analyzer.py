@@ -10,7 +10,7 @@ from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
 from OCC.Core.gp import gp_Lin
 from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
-from ...dfm.core.base_analyzer import BaseAnalyzer
+from ...dfm.base.base_analyzer import BaseAnalyzer
 from ...dfm.registries import register_analyzer
 from ...dfm.utils import (
     get_adaptive_sample_count,
