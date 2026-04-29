@@ -96,8 +96,6 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
 
-        props = GProp_GProps()
-        brepgprop.SurfaceProperties(face, props)
         adaptive_samples = get_adaptive_sample_count(face, self.min_samples, self.max_samples)
         visited_uvs = {}
 
