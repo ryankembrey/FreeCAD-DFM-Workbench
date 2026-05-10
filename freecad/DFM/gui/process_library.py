@@ -124,6 +124,37 @@ class ProcessLibraryModel:
             self.active_process.active_rules = rules
             self.mark_dirty()
 
+    def is_builtin(self, process_name: str) -> bool:
+        return self.registry.is_builtin(process_name)
+
+    def has_user_override(self, process_name: str) -> bool:
+        return self.registry.has_user_override(process_name)
+
+    def restore_default(self, process_name: str) -> bool:
+        """Strips user override and reloads. Resets active state."""
+        success = self.registry.restore_default(process_name)
+        if success:
+            self.active_process = self.registry.get_process_by_name(process_name)
+            self.active_material = None
+            self.is_dirty = False
+        return success
+
+    def delete_process(self, process_name: str) -> bool:
+        """Deletes a custom process. Clears active state if it was selected."""
+        success = self.registry.delete_custom_process(process_name)
+        if success and self.active_process and self.active_process.name == process_name:
+            self.active_process = None
+            self.active_material = None
+        return success
+
+    def import_process(self, filepath) -> tuple[bool, str]:
+        from pathlib import Path
+
+        success, result = self.registry.import_process_from_file(Path(filepath))
+        if success:
+            self.mark_dirty()
+        return success, result
+
 
 # =============================================================================
 
@@ -986,6 +1017,9 @@ class ProcessLibraryController(QtCore.QObject):
         self.view.save_requested.connect(self.on_save)
         self.view.reject_requested.connect(self.on_reject)
         self.view.add_process_requested.connect(self.on_add_process)
+        self.view.restore_default_requested.connect(self.on_restore_default)
+        self.view.delete_process_requested.connect(self.on_delete_process)
+        self.view.import_process_requested.connect(self.on_import_process)
         self.view.add_material_requested.connect(self.on_add_material)
         self.view.delete_material_requested.connect(self.on_delete_material)
 
@@ -1049,6 +1083,120 @@ class ProcessLibraryController(QtCore.QObject):
         self.view.material_edit_view.populate(
             material, default_material, self.model.active_process.active_rules
         )
+
+    def on_restore_default(self):
+        process = self.model.active_process
+        if not process:
+            QtWidgets.QMessageBox.warning(
+                self.view, "No Process Selected", "Please select a process first."
+            )
+            return
+
+        if not self.model.is_builtin(process.name):
+            QtWidgets.QMessageBox.information(
+                self.view,
+                "No Default Available",
+                f"'{process.name}' is a custom process with no built-in default.\n\n"
+                "If you want to remove it, use Delete Process instead.",
+            )
+            return
+
+        if not self.model.has_user_override(process.name):
+            QtWidgets.QMessageBox.information(
+                self.view,
+                "Already at Default",
+                f"'{process.name}' has no local overrides. It is already at its default configuration.",
+            )
+            return
+
+        confirm = QtWidgets.QMessageBox.question(
+            self.view,
+            "Restore Default",
+            f"This will discard all local changes to '{process.name}' and restore it to "
+            f"the built-in configuration.\n\nThis cannot be undone. Continue?",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
+        )
+
+        if confirm == QtWidgets.QMessageBox.StandardButton.Yes:
+            name = process.name
+            if self.model.restore_default(name):
+                self._refresh_process_tree()
+                self.view.tree_view.select_process(name)
+            else:
+                QtWidgets.QMessageBox.critical(
+                    self.view, "Error", f"Failed to restore default for '{name}'."
+                )
+
+    def on_delete_process(self):
+        process = self.model.active_process
+        if not process:
+            QtWidgets.QMessageBox.warning(
+                self.view, "No Process Selected", "Please select a process first."
+            )
+            return
+
+        name = process.name
+
+        if self.model.is_builtin(name):
+            # Offer restore-to-default as an alternative
+            result = QtWidgets.QMessageBox.warning(
+                self.view,
+                "Cannot Delete Built-in Process",
+                f"'{name}' is a built-in process and cannot be permanently deleted.\n\n"
+                f"Restore it to its default configuration instead?",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if result == QtWidgets.QMessageBox.StandardButton.Yes:
+                self.on_restore_default()
+            return
+
+        confirm = QtWidgets.QMessageBox.question(
+            self.view,
+            "Delete Process",
+            f"Permanently delete '{name}'?\n\nThis cannot be undone.",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
+        )
+
+        if confirm == QtWidgets.QMessageBox.StandardButton.Yes:
+            if self.model.delete_process(name):
+                self._refresh_process_tree()
+                self._auto_select_first()
+                self._update_dirty_state()
+            else:
+                QtWidgets.QMessageBox.critical(self.view, "Error", f"Failed to delete '{name}'.")
+
+    def on_import_process(self):
+        filepath, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.view,
+            "Import Process",
+            "",
+            "YAML Files (*.yaml *.yml);;All Files (*)",
+        )
+
+        if not filepath:
+            return
+
+        success, result = self.model.import_process(filepath)
+
+        if success:
+            process_name = result
+            self._refresh_process_tree()
+            self.view.tree_view.select_process(process_name)
+            self._update_dirty_state()
+            QtWidgets.QMessageBox.information(
+                self.view,
+                "Import Successful",
+                f"Process '{process_name}' was imported successfully.",
+            )
+        else:
+            QtWidgets.QMessageBox.critical(
+                self.view,
+                "Import Failed",
+                f"Could not import the file:\n\n{result}",
+            )
 
     def on_rules_changed(self, active_rules: list):
         self.model.update_active_rules(active_rules)
@@ -1198,6 +1346,9 @@ class ProcessLibrary(QtWidgets.QDialog):
     add_process_requested = QtCore.Signal()
     add_material_requested = QtCore.Signal()
     delete_material_requested = QtCore.Signal()
+    restore_default_requested = QtCore.Signal()
+    delete_process_requested = QtCore.Signal()
+    import_process_requested = QtCore.Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent or Gui.getMainWindow())
@@ -1227,6 +1378,9 @@ class ProcessLibrary(QtWidgets.QDialog):
         self.visualizer_view.hide()
 
         self.form.pbNewProcess.clicked.connect(self.add_process_requested.emit)
+        self.form.pbRestoreDefault.clicked.connect(self.restore_default_requested.emit)
+        self.form.pbDeleteProcess.clicked.connect(self.delete_process_requested.emit)
+        self.form.pbImport.clicked.connect(self.import_process_requested.emit)
         self.form.pbMaterialAdd.clicked.connect(self.add_material_requested.emit)
         self.form.pbMaterialDelete.clicked.connect(self.delete_material_requested.emit)
         self.form.buttonBox.accepted.connect(self.save_requested.emit)

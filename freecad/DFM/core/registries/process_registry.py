@@ -134,3 +134,68 @@ class ProcessRegistry:
             return {"binary_severity": limit.binary_severity}
         else:
             return {"target": limit.target, "limit": limit.limit}
+
+    def get_process_filename(self, process_name: str) -> str:
+        return f"{process_name.lower().replace(' ', '_')}.yaml"
+
+    def is_builtin(self, process_name: str) -> bool:
+        """Returns True if a dev-directory version exists."""
+        return (self.dev_dir / self.get_process_filename(process_name)).exists()
+
+    def has_user_override(self, process_name: str) -> bool:
+        """Returns True if a user-directory file exists for this process."""
+        return (self.user_dir / self.get_process_filename(process_name)).exists()
+
+    def delete_user_file(self, process_name: str) -> bool:
+        """Removes the user-directory YAML. Returns True if a file was deleted."""
+        path = self.user_dir / self.get_process_filename(process_name)
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+
+    def restore_default(self, process_name: str) -> bool:
+        """
+        Deletes the user override and reloads from dev_dir.
+        Returns False if no built-in default exists for this process.
+        """
+        if not self.is_builtin(process_name):
+            return False
+        self.delete_user_file(process_name)
+        self.discover_processes()
+        return True
+
+    def delete_custom_process(self, process_name: str) -> bool:
+        """
+        Permanently deletes a custom (user-only) process.
+        Returns False if the process is a built-in (cannot be fully deleted).
+        """
+        if self.is_builtin(process_name):
+            return False
+        self.delete_user_file(process_name)
+        self.processes.pop(process_name, None)
+        return True
+
+    def import_process_from_file(self, filepath: Path) -> tuple[bool, str]:
+        """
+        Loads a YAML file as a Process, adds it to the registry, and saves to user_dir.
+        Returns (True, process_name) on success, or (False, error_message) on failure.
+        """
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+
+            if not isinstance(data, dict):
+                return False, "File does not contain a valid process definition."
+
+            process = Process.from_yaml(data)
+
+            if process.name in self.processes:
+                return False, f"A process named '{process.name}' already exists."
+
+            self.processes[process.name] = process
+            self._save_to_user_dir(process)
+            return True, process.name
+
+        except Exception as e:
+            return False, str(e)
