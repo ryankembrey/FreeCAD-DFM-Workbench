@@ -15,13 +15,13 @@
      id="defs2" />
   <sodipodi:namedview
      id="namedview2"
-     pagecolor="#6a7a8a"
+     pagecolor="#204a87"
      bordercolor="#eeeeee"
      borderopacity="1"
      inkscape:showpageshadow="0"
      inkscape:pageopacity="0"
      inkscape:pagecheckerboard="0"
-     inkscape:deskcolor="#6a7a8a"
+     inkscape:deskcolor="#204a87"
      inkscape:zoom="4.9375"
      inkscape:cx="32"
      inkscape:cy="32"
@@ -33,7 +33,7 @@
      inkscape:current-layer="svg2" />
   <path
      d="M 16,12 V 50 M 6,40 16,52 26,40"
-     stroke="#6a7a8a"
+     stroke="#204a87"
      stroke-width="5"
      fill="none"
      stroke-linecap="round"
@@ -41,7 +41,7 @@
      id="path1" />
   <path
      d="M 48,52 V 14 M 38,24 48,12 58,24"
-     stroke="#6a7a8a"
+     stroke="#204a87"
      stroke-width="5"
      fill="none"
      stroke-linecap="round"

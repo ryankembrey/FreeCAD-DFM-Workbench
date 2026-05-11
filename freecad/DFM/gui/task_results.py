@@ -36,6 +36,7 @@ class TaskResults(QtCore.QObject):
         self.form.leMaterial.setReadOnly(True)
         self.form.leVerdict.setReadOnly(True)
         self.form.tbDetails.setReadOnly(True)
+        self.form.pbExportDiff.setIcon(QtGui.QIcon(":/icons/export_diff.svg"))
 
         self.form.tbDetails.setHtml(
             "Select a result in the tree to view details of the DFM issues."

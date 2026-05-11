@@ -11,5 +11,6 @@
     <file>icons/dfm_warning.svg</file>
     <file>icons/dfm_info.svg</file>
     <file>icons/flip_direction.svg</file>
+    <file>icons/export_diff.svg</file>
 </qresource>
 </RCC>

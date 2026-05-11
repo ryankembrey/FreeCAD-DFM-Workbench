@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>472</width>
-    <height>579</height>
+    <height>691</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -226,14 +226,10 @@
         </layout>
        </item>
        <item>
-        <layout class="QGridLayout" name="gridLayout_4" columnstretch="0,1,0,1">
-         <item row="0" column="0">
-          <widget class="QLabel" name="lCompare">
-           <property name="text">
-            <string>Compare</string>
-           </property>
-          </widget>
-         </item>
+        <layout class="QGridLayout" name="gridLayout_4" rowstretch="0" columnstretch="0,1,0,1,0" rowminimumheight="0">
+         <property name="verticalSpacing">
+          <number>6</number>
+         </property>
          <item row="0" column="2">
           <widget class="QLabel" name="lVs">
            <property name="text">
@@ -244,8 +240,37 @@
          <item row="0" column="1">
           <widget class="QComboBox" name="cbRun1"/>
          </item>
+         <item row="0" column="0">
+          <widget class="QLabel" name="lCompare">
+           <property name="text">
+            <string>Compare</string>
+           </property>
+          </widget>
+         </item>
          <item row="0" column="3">
           <widget class="QComboBox" name="cbRun2"/>
+         </item>
+         <item row="0" column="4">
+          <widget class="QPushButton" name="pbExportDiff">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Maximum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>25</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>Exports a CSV history diff report to the chosen file location</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
@@ -263,13 +288,6 @@
         <widget class="QGroupBox" name="gbHistoryTrend">
          <property name="title">
           <string>History Trend</string>
-         </property>
-        </widget>
-       </item>
-       <item alignment="Qt::AlignmentFlag::AlignHCenter">
-        <widget class="QPushButton" name="pbExportDiff">
-         <property name="text">
-          <string>Export Diff</string>
          </property>
         </widget>
        </item>
