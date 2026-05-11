@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Any, Optional, TypeVar
 
 from PySide6 import QtGui, QtWidgets, QtCore
 
@@ -14,16 +15,291 @@ from ..gui.widgets import ToleranceSpinBox
 _PREF_PATH = "Mod/DFM"
 
 
-def _pref(widget: QtWidgets.QWidget, entry: str) -> QtWidgets.QWidget:
+_W = TypeVar("_W", bound=QtWidgets.QWidget)
+
+
+def _pref(widget: _W, entry: str) -> _W:
     """Sets FreeCAD preference properties on a widget so reset works natively."""
     widget.setProperty("prefPath", _PREF_PATH)
     widget.setProperty("prefEntry", entry)
     return widget
 
 
-class _AnalyzerPanel(Protocol):
-    def load(self, params) -> None: ...
-    def save(self, params) -> None: ...
+@dataclass
+class IntField:
+    key: str
+    label: str
+    default: int
+    min: int = 0
+    max: int = 100
+    suffix: str = ""
+    tooltip: str = ""
+
+
+@dataclass
+class FloatField:
+    key: str
+    label: str
+    default: float
+    min: float = 0.0
+    max: float = 1.0
+    step: float = 0.01
+    decimals: int = 3
+    suffix: str = ""
+    tooltip: str = ""
+
+
+@dataclass
+class BoolField:
+    key: str
+    label: str
+    default: bool = False
+    tooltip: str = ""
+
+
+@dataclass
+class ToleranceField:
+    key: str
+    label: str
+    default: float = 1e-3
+    tooltip: str = ""
+
+
+@dataclass
+class FieldGroup:
+    title: str
+    fields: list = field(default_factory=list)
+
+
+class AnalyzerPanel(QtWidgets.QWidget):
+    """
+    Subclass and set `title` and `groups` to get a full preference panel
+    with zero widget or layout code.
+
+    Cross-field validation can be added by overriding `connect_signals`.
+    """
+
+    title: str = ""
+    groups: list[FieldGroup] = []
+
+    def __init__(self):
+        super().__init__()
+        self._widgets: dict[str, QtWidgets.QWidget] = {}
+        self._defaults: dict[str, Any] = {}
+        self._build_ui()
+        self.connect_signals()
+
+    def connect_signals(self):
+        """Override to add cross-field validation."""
+        pass
+
+    def widget(self, key: str) -> QtWidgets.QWidget:
+        return self._widgets[key]
+
+    def _build_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+
+        lbl = QtWidgets.QLabel(self.title)
+        font = lbl.font()
+        font.setPointSize(16)
+        font.setBold(True)
+        lbl.setFont(font)
+        layout.addWidget(lbl)
+
+        for group in self.groups:
+            layout.addWidget(self._build_group(group))
+
+        layout.addStretch()
+
+    def _build_group(self, group: FieldGroup) -> QtWidgets.QGroupBox:
+        box = QtWidgets.QGroupBox(group.title)
+        grid = QtWidgets.QGridLayout(box)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+
+        for row, f in enumerate(group.fields):
+            w = self._create_widget(f)
+            self._widgets[f.key] = w
+            self._defaults[f.key] = f.default
+
+            if isinstance(f, BoolField):
+                grid.addWidget(w, row, 0, 1, 2)
+            else:
+                label = QtWidgets.QLabel(f.label)
+                grid.addWidget(label, row, 0)
+                grid.addWidget(w, row, 1)
+
+        return box
+
+    def _create_widget(self, f) -> QtWidgets.QWidget:
+        if isinstance(f, IntField):
+            w = _pref(QtWidgets.QSpinBox(), f.key)
+            w.setRange(f.min, f.max)
+            if f.suffix:
+                w.setSuffix(f.suffix)
+            if f.tooltip:
+                w.setToolTip(f.tooltip)
+            return w
+
+        if isinstance(f, FloatField):
+            w = _pref(QtWidgets.QDoubleSpinBox(), f.key)
+            w.setRange(f.min, f.max)
+            w.setSingleStep(f.step)
+            w.setDecimals(f.decimals)
+            if f.suffix:
+                w.setSuffix(f.suffix)
+            if f.tooltip:
+                w.setToolTip(f.tooltip)
+            return w
+
+        if isinstance(f, BoolField):
+            w = _pref(QtWidgets.QCheckBox(f.label), f.key)
+            if f.tooltip:
+                w.setToolTip(f.tooltip)
+            return w
+
+        if isinstance(f, ToleranceField):
+            w = _pref(ToleranceSpinBox(), f.key)
+            if f.tooltip:
+                w.setToolTip(f.tooltip)
+            return w
+
+        raise TypeError(f"Unknown field type: {type(f)}")
+
+    def load(self, params):
+        for key, widget in self._widgets.items():
+            default = self._defaults[key]
+            if isinstance(widget, QtWidgets.QCheckBox):
+                widget.setChecked(params.GetBool(key, default))
+            elif isinstance(widget, QtWidgets.QDoubleSpinBox):
+                widget.setValue(params.GetFloat(key, default))
+            elif isinstance(widget, ToleranceSpinBox):
+                widget.setValue(params.GetFloat(key, default))
+            elif isinstance(widget, QtWidgets.QSpinBox):
+                widget.setValue(params.GetInt(key, default))
+
+    def save(self, params):
+        for key, widget in self._widgets.items():
+            if isinstance(widget, QtWidgets.QCheckBox):
+                params.SetBool(key, widget.isChecked())
+            elif isinstance(widget, QtWidgets.QDoubleSpinBox):
+                params.SetFloat(key, widget.value())
+            elif isinstance(widget, ToleranceSpinBox):
+                params.SetFloat(key, widget.value())
+            elif isinstance(widget, QtWidgets.QSpinBox):
+                params.SetInt(key, widget.value())
+
+
+# =============================================================================
+
+
+class SphereThicknessPanel(AnalyzerPanel):
+    title = "Sphere Thickness"
+    groups = [
+        FieldGroup(
+            "Sampling Settings",
+            [
+                IntField("SphereMinSamples", "Min sampling density", default=5, min=2, max=99),
+                IntField("SphereMaxSamples", "Max sampling density", default=10, min=3, max=100),
+                FloatField(
+                    "SphereMargin",
+                    "Boundary margin",
+                    default=0.01,
+                    max=0.495,
+                    step=0.005,
+                    tooltip="UV boundary margin. Prevents sampling too close to face edges.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Algorithm Settings",
+            [
+                BoolField(
+                    "SphereMultiThreaded",
+                    "Enable multithreading",
+                    tooltip="May improve performance on complex shapes but can cause overhead on simple ones.",
+                ),
+                IntField(
+                    "SphereMaxShrinkIters",
+                    "Max shrink iterations",
+                    default=10,
+                    min=1,
+                    max=100,
+                    tooltip="Sets the maximum iterations the sphere can shrink at a tested point on a face during analysis.",
+                ),
+                ToleranceField(
+                    "SphereIntersectorTol",
+                    "Ray intersector tolerance",
+                    tooltip="Sets the load tolerance of the shape intersector.",
+                ),
+            ],
+        ),
+    ]
+
+    def connect_signals(self):
+        min_w: QtWidgets.QSpinBox = self.widget("SphereMinSamples")  # type: ignore
+        max_w: QtWidgets.QSpinBox = self.widget("SphereMaxSamples")  # type: ignore
+        min_w.valueChanged.connect(lambda v: max_w.setMinimum(v + 1))
+        max_w.valueChanged.connect(lambda v: min_w.setMaximum(v - 1))
+
+
+class RayThicknessPanel(AnalyzerPanel):
+    title = "Ray Thickness"
+    groups = [
+        FieldGroup(
+            "Sampling Settings",
+            [
+                IntField("RayMinSamples", "Min sampling density", default=5, min=2, max=99),
+                IntField("RayMaxSamples", "Max sampling density", default=10, min=3, max=100),
+                FloatField(
+                    "RayMargin",
+                    "Boundary margin",
+                    default=0.0,
+                    max=0.495,
+                    step=0.005,
+                    tooltip="UV boundary margin. Prevents sampling too close to face edges.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Algorithm Settings",
+            [
+                ToleranceField(
+                    "RayIntersectorTol",
+                    "Ray intersector tolerance",
+                    tooltip="Sets the load tolerance of the shape intersector.",
+                ),
+                FloatField(
+                    "RayNormalCone",
+                    "Secondary hit normal cone",
+                    default=5.0,
+                    max=30.0,
+                    step=0.01,
+                    decimals=2,
+                    suffix="°",
+                    tooltip="Controls how strict the face must be roughly perpendicular to the ray for it to be considered a valid thickness.",
+                ),
+                IntField(
+                    "RaySeedCoverageThreshold",
+                    "Seed coverage threshold",
+                    default=50,
+                    min=0,
+                    max=100,
+                    suffix="%",
+                    tooltip="Controls the percentage of seeds required before the analyzer skips a face.",
+                ),
+            ],
+        ),
+    ]
+
+    def connect_signals(self):
+        min_w: QtWidgets.QSpinBox = self.widget("RayMinSamples")  # type: ignore
+        max_w: QtWidgets.QSpinBox = self.widget("RayMaxSamples")  # type: ignore
+        min_w.valueChanged.connect(lambda v: max_w.setMinimum(v + 1))
+        max_w.valueChanged.connect(lambda v: min_w.setMaximum(v - 1))
+
+
+# =============================================================================
 
 
 class DFMPreferencesGeneral:
@@ -34,260 +310,29 @@ class DFMPreferencesGeneral:
         self.form.setWindowTitle("General")
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
-        self.init_widgets()
-        self.build_ui()
-
-    def init_widgets(self) -> None:
-        self.print_timing_report: QtWidgets.QCheckBox = _pref(
+        self.print_timing_report = _pref(
             QtWidgets.QCheckBox("Print timing report"), "GeneralPrintTimingReport"
-        )  # type: ignore
+        )
         self.print_timing_report.setToolTip(
-            "Prints a report to the terminal after an analysis. \n"
+            "Prints a report to the terminal after an analysis.\n"
             "The report includes run-time for Analyzers, Checks, and total analysis run-time."
         )
 
-    def build_ui(self) -> None:
         layout = QtWidgets.QVBoxLayout(self.form)
-        layout.addWidget(self.build_dev_group())
+        group = QtWidgets.QGroupBox("Developer Options")
+        QtWidgets.QVBoxLayout(group).addWidget(self.print_timing_report)
+        layout.addWidget(group)
         layout.addStretch()
 
-    def build_dev_group(self) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox("Developer Options")
-        layout = QtWidgets.QVBoxLayout(group)
-        layout.addWidget(self.print_timing_report)
-        return group
-
-    def loadSettings(self) -> None:
+    def loadSettings(self):
         params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
         self.print_timing_report.setChecked(
             params.GetBool("GeneralPrintTimingReport", self.DEFAULT_PRINT_TIMING_REPORT)
         )
 
-    def saveSettings(self) -> None:
+    def saveSettings(self):
         params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
         params.SetBool("GeneralPrintTimingReport", self.print_timing_report.isChecked())
-
-
-class SphereThicknessPanel(QtWidgets.QWidget):
-    DEFAULT_MIN_SAMPLES = 5
-    DEFAULT_MAX_SAMPLES = 10
-    DEFAULT_MARGIN = 0.01
-    DEFAULT_MULTITHREADED = False
-    DEFAULT_MAX_SHRINK_ITERS = 10
-    DEFAULT_INTERSECTOR_TOL = 1e-3
-
-    def __init__(self):
-        super().__init__()
-        self._init_widgets()
-        self._build_ui()
-        self._connect_signals()
-
-    def _init_widgets(self) -> None:
-        self.min_samples: QtWidgets.QSpinBox = _pref(QtWidgets.QSpinBox(), "SphereMinSamples")  # type: ignore
-        self.min_samples.setRange(2, 99)
-
-        self.max_samples: QtWidgets.QSpinBox = _pref(QtWidgets.QSpinBox(), "SphereMaxSamples")  # type: ignore
-        self.max_samples.setRange(3, 100)
-
-        self.margin: QtWidgets.QDoubleSpinBox = _pref(QtWidgets.QDoubleSpinBox(), "SphereMargin")  # type: ignore
-        self.margin.setRange(0.0, 0.495)
-        self.margin.setSingleStep(0.005)
-        self.margin.setDecimals(3)
-        self.margin.setToolTip("UV boundary margin. Prevents sampling too close to face edges.")
-
-        self.multithreaded: QtWidgets.QCheckBox = _pref(  # type: ignore
-            QtWidgets.QCheckBox("Enable multithreading"), "SphereMultiThreaded"
-        )
-        self.multithreaded.setToolTip(
-            "May improve performance on complex shapes but can cause overhead on simple ones.\n"
-            "\n"
-            "For experts: sets SetMultiThread(True) on BRepExtrema_DistShapeShape."
-        )
-        self.max_shrink_iters: QtWidgets.QSpinBox = _pref(
-            QtWidgets.QSpinBox(), "SphereMaxShrinkIters"
-        )  # type: ignore
-        self.max_shrink_iters.setRange(1, 100)
-        self.max_shrink_iters.setToolTip(
-            "Sets the maximum iterations the sphere can shrink at a tested point on a face during analysis."
-        )
-        self.intersector_tol: ToleranceSpinBox = _pref(ToleranceSpinBox(), "SphereIntersectorTol")  # type: ignore
-        self.intersector_tol.setToolTip(
-            "Sets the load tolerance of the shape intersector. This affects how precisely rays detect surface intersections."
-        )
-
-    def _build_ui(self) -> None:
-        layout = QtWidgets.QVBoxLayout(self)
-
-        title = QtWidgets.QLabel("Sphere Thickness")
-        font = title.font()
-        font.setPointSize(16)
-        font.setBold(True)
-        title.setFont(font)
-        layout.addWidget(title)
-
-        layout.addWidget(self._build_sampling_group())
-        layout.addWidget(self._build_algorithm_group())
-
-        layout.addStretch()
-
-    def _build_sampling_group(self) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox("Sampling Settings")
-        form = QtWidgets.QFormLayout(group)
-        form.addRow("Min sampling density", self.min_samples)
-        form.addRow("Max sampling density", self.max_samples)
-        form.addRow("Boundary margin", self.margin)
-        return group
-
-    def _build_algorithm_group(self) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox("Algorithm Settings")
-        form = QtWidgets.QFormLayout(group)
-        form.addRow(self.multithreaded)
-        form.addRow("Max shrink iterations", self.max_shrink_iters)
-        form.addRow("Ray intersector tolerance", self.intersector_tol)
-        return group
-
-    def _connect_signals(self) -> None:
-        self.min_samples.valueChanged.connect(self._on_min_changed)
-        self.max_samples.valueChanged.connect(self._on_max_changed)
-
-    def _on_min_changed(self, value: int) -> None:
-        self.max_samples.setMinimum(value + 1)
-
-    def _on_max_changed(self, value: int) -> None:
-        self.min_samples.setMaximum(value - 1)
-
-    def load(self, params) -> None:
-        self.min_samples.setValue(params.GetInt("SphereMinSamples", self.DEFAULT_MIN_SAMPLES))
-        self.max_samples.setValue(params.GetInt("SphereMaxSamples", self.DEFAULT_MAX_SAMPLES))
-        self.margin.setValue(params.GetFloat("SphereMargin", self.DEFAULT_MARGIN))
-        self.multithreaded.setChecked(
-            params.GetBool("SphereMultiThreaded", self.DEFAULT_MULTITHREADED)
-        )
-        self.max_shrink_iters.setValue(
-            params.GetInt("SphereMaxShrinkIters", self.DEFAULT_MAX_SHRINK_ITERS)
-        )
-        self.intersector_tol.setValue(
-            params.GetFloat("SphereIntersectorTol", self.DEFAULT_INTERSECTOR_TOL)
-        )
-
-    def save(self, params) -> None:
-        params.SetInt("SphereMinSamples", self.min_samples.value())
-        params.SetInt("SphereMaxSamples", self.max_samples.value())
-        params.SetFloat("SphereMargin", self.margin.value())
-        params.SetBool("SphereMultiThreaded", self.multithreaded.isChecked())
-        params.SetInt("SphereMaxShrinkIters", self.max_shrink_iters.value())
-        params.SetFloat("SphereIntersectorTol", self.intersector_tol.value())
-
-
-class RayThicknessPanel(QtWidgets.QWidget):
-    DEFAULT_MIN_SAMPLES = 5
-    DEFAULT_MAX_SAMPLES = 10
-    DEFAULT_MARGIN = 0.0
-    DEFAULT_INTERSECTOR_TOL = 1e-3
-    DEFAULT_NORMAL_CONE = 5.0
-    DEFAULT_SEED_COVERAGE_THRESHOLD = 50
-
-    def __init__(self):
-        super().__init__()
-        self._init_widgets()
-        self._build_ui()
-        self._connect_signals()
-
-    def _init_widgets(self) -> None:
-        self.min_samples: QtWidgets.QSpinBox = _pref(QtWidgets.QSpinBox(), "RayMinSamples")  # type: ignore
-        self.min_samples.setRange(2, 99)
-
-        self.max_samples: QtWidgets.QSpinBox = _pref(QtWidgets.QSpinBox(), "RayMaxSamples")  # type: ignore
-        self.max_samples.setRange(3, 100)
-
-        self.margin: QtWidgets.QDoubleSpinBox = _pref(QtWidgets.QDoubleSpinBox(), "RayMargin")  # type: ignore
-        self.margin.setRange(0.0, 0.495)
-        self.margin.setSingleStep(0.005)
-        self.margin.setDecimals(3)
-        self.margin.setToolTip("UV boundary margin. Prevents sampling too close to face edges.")
-
-        self.intersector_tol: ToleranceSpinBox = _pref(ToleranceSpinBox(), "RayIntersectorTol")  # type: ignore
-        self.intersector_tol.setToolTip(
-            "Sets the load tolerance of the shape intersector. This affects how precisely rays detect surface intersections."
-        )
-        self.normal_cone: QtWidgets.QDoubleSpinBox = _pref(
-            QtWidgets.QDoubleSpinBox(), "RayNormalCone"
-        )  # type: ignore
-        self.normal_cone.setSuffix("°")
-        self.normal_cone.setRange(0.00, 30.00)
-        self.normal_cone.setDecimals(2)
-        self.normal_cone.setToolTip(
-            "Controls how strict the face must be roughly perpendicular to the ray for it to be considered a valid thickness."
-        )
-        self.seed_coverage_threshold: QtWidgets.QSpinBox = _pref(
-            QtWidgets.QSpinBox(), "RaySeedCoverageThreshold"
-        )  # type: ignore
-        self.seed_coverage_threshold.setRange(0, 100)
-        self.seed_coverage_threshold.setSuffix("%")
-        self.seed_coverage_threshold.setToolTip(
-            "Controls the percentage of seeds required before the analyzer skips a face."
-        )
-
-    def _build_ui(self) -> None:
-        layout = QtWidgets.QVBoxLayout(self)
-
-        title = QtWidgets.QLabel("Ray Thickness")
-        font = title.font()
-        font.setPointSize(16)
-        font.setBold(True)
-        title.setFont(font)
-        layout.addWidget(title)
-
-        layout.addWidget(self._build_sampling_group())
-        layout.addWidget(self._build_algorithm_group())
-
-        layout.addStretch()
-
-    def _build_sampling_group(self) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox("Sampling Settings")
-        form = QtWidgets.QFormLayout(group)
-        form.addRow("Min sampling density", self.min_samples)
-        form.addRow("Max sampling density", self.max_samples)
-        form.addRow("Boundary margin", self.margin)
-        return group
-
-    def _build_algorithm_group(self) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox("Algorithm Settings")
-        form = QtWidgets.QFormLayout(group)
-        form.addRow("Ray intersector tolerance", self.intersector_tol)
-        form.addRow("Secondary hit normal cone", self.normal_cone)
-        form.addRow("Seed coverage threshold", self.seed_coverage_threshold)
-        return group
-
-    def _connect_signals(self) -> None:
-        self.min_samples.valueChanged.connect(self._on_min_changed)
-        self.max_samples.valueChanged.connect(self._on_max_changed)
-
-    def _on_min_changed(self, value: int) -> None:
-        self.max_samples.setMinimum(value + 1)
-
-    def _on_max_changed(self, value: int) -> None:
-        self.min_samples.setMaximum(value - 1)
-
-    def load(self, params) -> None:
-        self.min_samples.setValue(params.GetInt("RayMinSamples", self.DEFAULT_MIN_SAMPLES))
-        self.max_samples.setValue(params.GetInt("RayMaxSamples", self.DEFAULT_MAX_SAMPLES))
-        self.margin.setValue(params.GetFloat("RayMargin", self.DEFAULT_MARGIN))
-        self.intersector_tol.setValue(
-            params.GetFloat("RayIntersectorTol", self.DEFAULT_INTERSECTOR_TOL)
-        )
-        self.normal_cone.setValue(params.GetFloat("RayNormalCone", self.DEFAULT_NORMAL_CONE))
-        self.seed_coverage_threshold.setValue(
-            params.GetInt("RaySeedCoverageThreshold", self.DEFAULT_SEED_COVERAGE_THRESHOLD)
-        )
-
-    def save(self, params) -> None:
-        params.SetInt("RayMinSamples", self.min_samples.value())
-        params.SetInt("RayMaxSamples", self.max_samples.value())
-        params.SetFloat("RayMargin", self.margin.value())
-        params.SetFloat("RayIntersectorTol", self.intersector_tol.value())
-        params.SetFloat("RayNormalCone", self.normal_cone.value())
-        params.SetInt("RaySeedCoverageThreshold", self.seed_coverage_threshold.value())
 
 
 class DFMPreferencesAnalyzers:
@@ -296,17 +341,12 @@ class DFMPreferencesAnalyzers:
         self.form.setWindowTitle("Analyzers")
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
-        self.panels: list[_AnalyzerPanel] = []
-        self._build_ui()
-
-    def _build_ui(self) -> None:
-        layout = QtWidgets.QHBoxLayout(self.form)
-
+        self.panels: list[AnalyzerPanel] = []
         self.list_widget = QtWidgets.QListWidget()
         self.stack = QtWidgets.QStackedWidget()
 
-        self._register_panel("Sphere Thickness", SphereThicknessPanel())
-        self._register_panel("Ray Thickness", RayThicknessPanel())
+        self._register(SphereThicknessPanel())
+        self._register(RayThicknessPanel())
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.list_widget)
@@ -314,21 +354,21 @@ class DFMPreferencesAnalyzers:
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([150, 450])
 
-        layout.addWidget(splitter)
+        QtWidgets.QHBoxLayout(self.form).addWidget(splitter)
         self.list_widget.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.list_widget.setCurrentRow(0)
 
-    def _register_panel(self, label: str, panel: _AnalyzerPanel) -> None:
-        self.list_widget.addItem(label)
-        self.stack.addWidget(panel)  # type: ignore
+    def _register(self, panel: AnalyzerPanel):
+        self.list_widget.addItem(panel.title)
+        self.stack.addWidget(panel)
         self.panels.append(panel)
 
-    def loadSettings(self) -> None:
+    def loadSettings(self):
         params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
-        for panel in self.panels:
-            panel.load(params)
+        for p in self.panels:
+            p.load(params)
 
-    def saveSettings(self) -> None:
+    def saveSettings(self):
         params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
-        for panel in self.panels:
-            panel.save(params)
+        for p in self.panels:
+            p.save(params)
