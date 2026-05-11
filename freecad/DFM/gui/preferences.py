@@ -342,24 +342,22 @@ class DFMPreferencesAnalyzers:
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
         self.panels: list[AnalyzerPanel] = []
-        self.list_widget = QtWidgets.QListWidget()
+
+        layout = QtWidgets.QVBoxLayout(self.form)
+
+        self.combo = QtWidgets.QComboBox()
         self.stack = QtWidgets.QStackedWidget()
 
         self._register(SphereThicknessPanel())
         self._register(RayThicknessPanel())
 
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.addWidget(self.list_widget)
-        splitter.addWidget(self.stack)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([150, 450])
+        self.combo.currentIndexChanged.connect(self.stack.setCurrentIndex)
 
-        QtWidgets.QHBoxLayout(self.form).addWidget(splitter)
-        self.list_widget.currentRowChanged.connect(self.stack.setCurrentIndex)
-        self.list_widget.setCurrentRow(0)
+        layout.addWidget(self.combo)
+        layout.addWidget(self.stack)
 
     def _register(self, panel: AnalyzerPanel):
-        self.list_widget.addItem(panel.title)
+        self.combo.addItem(panel.title)
         self.stack.addWidget(panel)
         self.panels.append(panel)
 
