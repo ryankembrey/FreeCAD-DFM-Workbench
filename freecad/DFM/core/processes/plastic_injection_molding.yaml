@@ -68,6 +68,13 @@ rule_feedback:
             an external fillet of radius at least 0.5mm is recommended to reduce tooling
             cost and lead time.'
         error_msg: ''
+rule_criticality:
+    MIN_DRAFT_ANGLE: CRITICAL
+    NO_UNDERCUTS: CRITICAL
+    SHARP_INTERNAL_CORNERS: HIGH
+    MIN_WALL_THICKNESS: HIGH
+    MAX_WALL_THICKNESS: MEDIUM
+    SHARP_EXTERNAL_CORNERS: LOW
 materials:
     Default:
         category: Default

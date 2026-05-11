@@ -26,6 +26,8 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
 
         icon = index.data(QtCore.Qt.ItemDataRole.DecorationRole)
         icon_rect = QtCore.QRect(option.rect.left() + 4, option.rect.top() + 4, 16, 16)
+
+        text_left = icon_rect.right() + 6
         if icon and not icon.isNull():
             icon.paint(painter, icon_rect)
 
@@ -45,7 +47,7 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
         ignored_color = QtGui.QColor(base_text)
         ignored_color.setAlphaF(0.35)
 
-        if item_type == "rule":
+        if item_type in ("rule", "all", "criticality"):
             error_count = index.data(QtCore.Qt.ItemDataRole.UserRole + 6) or 0
             warning_count = index.data(QtCore.Qt.ItemDataRole.UserRole + 7) or 0
 

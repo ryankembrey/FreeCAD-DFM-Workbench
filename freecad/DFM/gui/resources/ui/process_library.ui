@@ -262,10 +262,7 @@
       <property name="lineWidth">
        <number>0</number>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_4" stretch="0,0">
-       <property name="sizeConstraint">
-        <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
-       </property>
+      <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>
         <widget class="QGroupBox" name="gbMaterial">
          <property name="sizePolicy">
@@ -286,19 +283,9 @@
            </widget>
           </item>
           <item>
-           <layout class="QGridLayout" name="gridLayout">
-            <item row="0" column="2">
-             <widget class="QPushButton" name="pbMaterialDelete">
-              <property name="toolTip">
-               <string>Removes the selected material from the active process</string>
-              </property>
-              <property name="text">
-               <string>Delete</string>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="3">
-             <spacer name="horizontalSpacer_2">
+           <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,0,0,1">
+            <item>
+             <spacer name="horizontalSpacer">
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>
               </property>
@@ -310,7 +297,7 @@
               </property>
              </spacer>
             </item>
-            <item row="0" column="1">
+            <item>
              <widget class="QPushButton" name="pbMaterialAdd">
               <property name="toolTip">
                <string>Adds a new material to the active process</string>
@@ -320,8 +307,18 @@
               </property>
              </widget>
             </item>
-            <item row="0" column="0">
-             <spacer name="horizontalSpacer">
+            <item>
+             <widget class="QPushButton" name="pbMaterialDelete">
+              <property name="toolTip">
+               <string>Removes the selected material from the active process</string>
+              </property>
+              <property name="text">
+               <string>Delete</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_2">
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>
               </property>

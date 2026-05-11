@@ -5,7 +5,7 @@
 from dataclasses import dataclass, field, fields
 from typing import Optional
 
-from ...core.rules import Rulebook
+from ...core.rules import Criticality, Rulebook
 
 
 @dataclass
@@ -65,12 +65,14 @@ class Process:
     active_rules: list[Rulebook] = field(default_factory=list)
     materials: dict[str, Material] = field(default_factory=dict)
     rule_feedback: dict[Rulebook, RuleFeedback] = field(default_factory=dict)
+    rule_criticality: dict[Rulebook, Criticality] = field(default_factory=dict)
 
     @classmethod
     def from_yaml(cls, data: dict):
         raw_materials = data.pop("materials", {})
         raw_active_rules = data.pop("active_rules", [])
         raw_feedback = data.pop("rule_feedback", {})
+        raw_criticality = data.pop("rule_criticality", {})
 
         valid_field_names = {f.name for f in fields(cls)}
         clean_data = {k: v for k, v in data.items() if k in valid_field_names}
@@ -86,12 +88,21 @@ class Process:
 
         for r_id, f_data in raw_feedback.items():
             try:
-                rule_member = Rulebook[r_id]
-                process.rule_feedback[rule_member] = RuleFeedback(**f_data)
+                process.rule_feedback[Rulebook[r_id]] = RuleFeedback(**f_data)
             except (KeyError, TypeError) as e:
                 print(f"Warning: Could not parse feedback for '{r_id}': {e}")
+
+        for r_id, crit_name in raw_criticality.items():
+            try:
+                process.rule_criticality[Rulebook[r_id]] = Criticality[crit_name.upper()]
+            except KeyError:
+                print(f"Warning: Invalid criticality '{crit_name}' for rule '{r_id}'.")
 
         for mat_name, mat_data in raw_materials.items():
             process.materials[mat_name] = Material.from_dict(mat_name, mat_data)
 
         return process
+
+    def get_criticality(self, rule: Rulebook) -> Criticality:
+        """Returns the process-defined criticality, defaulting to MEDIUM."""
+        return self.rule_criticality.get(rule, Criticality.MEDIUM)

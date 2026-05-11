@@ -17,7 +17,7 @@ from ...core.models import CheckResult, Severity
 from ...gui.results.bridge import DFMViewProvider
 from ...gui.results.delegates import HistoryRowDelegate
 from ...gui.results.models import DFMReportModel
-from ...gui.results.utils import CSVResultExporter, icon_to_html
+from ...gui.results.utils import CSVResultExporter, CSVExportConfig, icon_to_html
 from ...gui.results.visuals import severity_color
 from ...gui.results.widgets import DFMSparkline
 from ...gui.task_results import TaskResults
@@ -74,6 +74,7 @@ class TaskResultsPresenter:
         self.view.render_tree(
             self.model.get_grouped_results(),
             self.model.process.active_rules,
+            self.model.process.get_criticality,
         )
 
         if not self.model.active_results:
@@ -101,7 +102,12 @@ class TaskResultsPresenter:
             self.view.adjust_details_height()
             return
         elif isinstance(data, list):
-            rule_name = data[0].rule_id.label if data else "Rule"
+            unique_rules = set(f.rule_id for f in data)
+            rule_name = (
+                "All findings"
+                if len(unique_rules) > 1
+                else (data[0].rule_id.label if data else "Rule")
+            )
             active = [r for r in data if not r.ignore]
             worst_severity = max(
                 (r.severity for r in active), key=lambda s: s.value, default=Severity.SUCCESS
@@ -195,14 +201,20 @@ class TaskResultsPresenter:
         path, _ = QFileDialog.getSaveFileName(
             self.view.form, "Export CSV", "", "CSV Files (*.csv);;All Files (*)"
         )
-
         if not path:
             return
-
         if not path.lower().endswith(".csv"):
             path += ".csv"
 
-        if CSVResultExporter.export(path, self.bridge.target_object.Label, self.model):
+        config = self.view.get_export_config()
+
+        if CSVResultExporter.export(
+            path,
+            self.bridge.target_object.Label,
+            self.model,
+            config,
+            self.model.process.get_criticality,
+        ):
             QMessageBox.information(self.view.form, "Done", "Export Successful")
 
     def handle_cleanup(self):

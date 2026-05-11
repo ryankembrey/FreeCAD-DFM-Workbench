@@ -7,6 +7,17 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+class Criticality(Enum):
+    CRITICAL = 0
+    HIGH = 1
+    MEDIUM = 2
+    LOW = 3
+
+    @property
+    def label(self) -> str:
+        return self.name.capitalize()
+
+
 @dataclass
 class RuleType:
     label: str

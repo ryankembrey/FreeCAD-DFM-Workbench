@@ -11,7 +11,7 @@ import FreeCADGui as Gui  # type: ignore
 
 from ..core.processes.process import Material, Process, RuleLimit, RuleFeedback
 from ..core.registries.process_registry import ProcessRegistry
-from ..core.rules import Rulebook
+from ..core.rules import Rulebook, Criticality
 
 from . import DFM_rc
 
@@ -122,6 +122,11 @@ class ProcessLibraryModel:
     def update_active_rules(self, rules: list):
         if self.active_process:
             self.active_process.active_rules = rules
+            self.mark_dirty()
+
+    def update_rule_criticality(self, rule: Rulebook, criticality: "Criticality"):
+        if self.active_process:
+            self.active_process.rule_criticality[rule] = criticality
             self.mark_dirty()
 
     def is_builtin(self, process_name: str) -> bool:
@@ -393,14 +398,20 @@ class ParameterEdit(QtWidgets.QPlainTextEdit):
 class EditFeedbackDialog(QtWidgets.QDialog):
     """Dialog to input custom Warning and Error messages with internal titles."""
 
-    def __init__(self, process_name: str, rule_name: str, feedback: RuleFeedback, parent=None):
+    def __init__(
+        self,
+        process_name: str,
+        rule_name: str,
+        feedback: RuleFeedback,
+        criticality: "Criticality",
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle(f"Edit Feedback: {rule_name}")
         self.setMinimumWidth(480)
         self.setMinimumHeight(450)
 
         layout = QtWidgets.QVBoxLayout(self)
-        style = self.style()
 
         header_container = QtWidgets.QWidget()
         header_layout = QtWidgets.QVBoxLayout(header_container)
@@ -409,13 +420,23 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         context_text = f"{rule_name} ({process_name})"
         process_lbl = QtWidgets.QLabel(context_text)
         process_lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
-
         header_layout.addWidget(process_lbl)
+
+        crit_row = QtWidgets.QHBoxLayout()
+        crit_label = QtWidgets.QLabel("Criticality")
+        self.crit_combo = QtWidgets.QComboBox()
+        for c in Criticality:
+            self.crit_combo.addItem(c.label, c)
+        self.crit_combo.setCurrentIndex(criticality.value)
+        self.crit_combo.setFixedWidth(110)
+        crit_row.addWidget(crit_label)
+        crit_row.addWidget(self.crit_combo)
+        crit_row.addStretch()
+        header_layout.addLayout(crit_row)
 
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
         line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        line.setStyleSheet("")
 
         layout.addWidget(header_container)
         layout.addWidget(line)
@@ -499,11 +520,15 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
 
-    def get_data(self) -> tuple[str, str]:
-        return self.warn_edit.toPlainText().strip(), self.err_edit.toPlainText().strip()
+    def get_data(self) -> tuple[str, str, Criticality]:
+        return (
+            self.warn_edit.toPlainText().strip(),
+            self.err_edit.toPlainText().strip(),
+            self.crit_combo.currentData(),
+        )
 
     def accept(self):
-        warn, err = self.get_data()
+        warn, err, _ = self.get_data()
         allowed = {"measured", "limit", "target"}
         import re
 
@@ -1212,24 +1237,25 @@ class ProcessLibraryController(QtCore.QObject):
             return
 
         current_feedback = process.rule_feedback.get(rule_enum)
-
         if not current_feedback:
             current_feedback = RuleFeedback()
             process.rule_feedback[rule_enum] = current_feedback
+
+        current_criticality = process.get_criticality(rule_enum)
 
         dlg = EditFeedbackDialog(
             process.name,
             rule_enum.label,
             current_feedback,
+            current_criticality,
             self.view,
         )
 
         if dlg.exec():
-            warn, err = dlg.get_data()
-
+            warn, err, criticality = dlg.get_data()
             current_feedback.warning_msg = warn
             current_feedback.error_msg = err
-
+            self.model.update_rule_criticality(rule_enum, criticality)
             self._update_dirty_state()
 
     def on_material_category_changed(self, mat_name: str, new_category: str):
