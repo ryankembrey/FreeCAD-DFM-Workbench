@@ -62,6 +62,7 @@ class ToleranceField:
     key: str
     label: str
     default: float = 1e-3
+    suffix: str = ""
     tooltip: str = ""
 
 
@@ -199,14 +200,29 @@ class SphereThicknessPanel(AnalyzerPanel):
         FieldGroup(
             "Sampling Settings",
             [
-                IntField("SphereMinSamples", "Min sampling density", default=5, min=2, max=99),
-                IntField("SphereMaxSamples", "Max sampling density", default=10, min=3, max=100),
+                IntField(
+                    "SphereMinSamples",
+                    "Min sampling density",
+                    default=5,
+                    min=2,
+                    max=99,
+                    suffix="²",
+                ),
+                IntField(
+                    "SphereMaxSamples",
+                    "Max sampling density",
+                    default=10,
+                    min=3,
+                    max=100,
+                    suffix="²",
+                ),
                 FloatField(
                     "SphereMargin",
                     "Boundary margin",
                     default=0.01,
                     max=0.495,
                     step=0.005,
+                    suffix="%",
                     tooltip="UV boundary margin. Prevents sampling too close to face edges.",
                 ),
             ],
@@ -249,14 +265,29 @@ class RayThicknessPanel(AnalyzerPanel):
         FieldGroup(
             "Sampling Settings",
             [
-                IntField("RayMinSamples", "Min sampling density", default=5, min=2, max=99),
-                IntField("RayMaxSamples", "Max sampling density", default=10, min=3, max=100),
+                IntField(
+                    "RayMinSamples",
+                    "Min sampling density",
+                    default=5,
+                    min=2,
+                    max=99,
+                    suffix="²",
+                ),
+                IntField(
+                    "RayMaxSamples",
+                    "Max sampling density",
+                    default=10,
+                    min=3,
+                    max=100,
+                    suffix="²",
+                ),
                 FloatField(
                     "RayMargin",
                     "Boundary margin",
                     default=0.0,
                     max=0.495,
                     step=0.005,
+                    suffix="%",
                     tooltip="UV boundary margin. Prevents sampling too close to face edges.",
                 ),
             ],
