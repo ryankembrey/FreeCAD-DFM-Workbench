@@ -95,6 +95,7 @@ class ProcessRegistry:
             "description": process.description,
             "active_rules": [r.name for r in process.active_rules],
             "rule_feedback": {r.name: asdict(f) for r, f in process.rule_feedback.items()},
+            "rule_criticality": {r.name: c.name for r, c in process.rule_criticality.items()},
             "materials": {},
         }
 
