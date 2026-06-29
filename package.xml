@@ -30,6 +30,9 @@
     <!-- Icon -->
     <icon>resources/icons/logo.svg</icon>
 
+    <!-- Dependencies -->
+    <depend type="python">pythonocc-core</depend>
+
     <!-- Urls -->
     <url type="repository" branch="main">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>
     <url type="documentation">https://ryankembrey.github.io/FreeCAD-DFM-Workbench/</url>
