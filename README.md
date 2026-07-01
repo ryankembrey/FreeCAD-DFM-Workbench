@@ -3,12 +3,6 @@
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![License](https://img.shields.io/badge/license-LGPL--2.1-blue)
 
-> [!NOTE]
-> This workbench is in early development and your feedback shapes it. If
-> something looks wrong, behaves unexpectedly, or a feature would help your
-> workflow, **please open an issue!**
----
-
 A FreeCAD workbench that analyses 3D models for Design for Manufacturing (DFM)
 issues, helping designers catch problems before they reach the factory.
 
@@ -57,9 +51,12 @@ Install directly from the **FreeCAD Addon Manager**.
 
 ## Contributing
 
-The best way to help right now is to use it and break it. Testing the workbench 
-on real parts and opening issues for bugs, unexpected behaviour, or feature ideas is 
-genuinely valuable. Every piece of feedback helps.
+If you'd like to help out, here are some ways you might consider contributing:
 
-This is a single-student university project. Code contributions are not
-currently accepted, until the end of the project (June 2026). 
+- Creating bug reports
+- Suggesting new features 
+- Submitting code to fix bugs or add new features
+- Creating user documentation on FreeCAD Wiki
+- Sharing DFM knowledge for any manufacturing process (through submitting an issue would be great!)
+- Creating example models for manufacturing processes that can be bundled with the workbench
+- Creating tutorials either through a website or a video
