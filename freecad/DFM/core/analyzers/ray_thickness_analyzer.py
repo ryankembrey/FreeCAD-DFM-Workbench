@@ -196,16 +196,15 @@ class RayThicknessAnalyzer(BaseAnalyzer):
             if entry_ok or exit_ok:
                 thicknesses.append(wall_thickness)
 
-                if (
-                    entry_ok
-                    and not entry_face.IsSame(face)
-                    and entry_idx not in self.measured_faces
-                ):
+                if entry_ok and not entry_face.IsSame(face):
                     entry_idx = self.face_index.index_of(entry_face)
-                    self.face_seeds[entry_idx].append((entry_u, entry_v, wall_thickness))
+                    if entry_idx not in self.measured_faces:
+                        self.face_seeds[entry_idx].append((entry_u, entry_v, wall_thickness))
 
-                if exit_ok and not exit_face.IsSame(face) and exit_idx not in self.measured_faces:
-                    self.face_seeds[exit_idx].append((exit_u, exit_v, wall_thickness))
+                if exit_ok and not exit_face.IsSame(face):
+                    exit_idx = self.face_index.index_of(exit_face)
+                    if exit_idx not in self.measured_faces:
+                        self.face_seeds[exit_idx].append((exit_u, exit_v, wall_thickness))
 
             i += 2
 
