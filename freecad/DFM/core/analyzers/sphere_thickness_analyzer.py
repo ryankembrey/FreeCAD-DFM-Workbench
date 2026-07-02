@@ -59,6 +59,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
     ) -> dict[tuple[str, int], list[float]]:
         self.resolve_prefs(kwargs.get("prefs", {}))
         self._setup_kernel_tools(shape)
+        self.face_index = face_index
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
@@ -111,7 +112,8 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             return t
 
         # Inject seeds from neighbors
-        for s_u, s_v, s_thick in self.face_seeds.get(face, []):
+        face_idx = self.face_index.index_of(face)
+        for s_u, s_v, s_thick in self.face_seeds.get(face_idx, []):
             visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
             thicknesses.append(s_thick)
             if s_thick > max_t:
@@ -268,6 +270,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                         other_face = TopoDS.Face_s(self.dist_tool.SupportOnShape2(i))
                         if not other_face.IsSame(origin_face):
                             u_other, v_other = self.dist_tool.ParOnFaceS2(i)
-                            self.face_seeds[other_face].append((u_other, v_other, thickness))
+                            other_idx = self.face_index.index_of(origin_face)
+                            self.face_seeds[other_idx].append((u_other, v_other, thickness))
 
         return thickness
