@@ -5,21 +5,21 @@
 import collections
 from typing import Any, Optional, Callable
 
-from OCC.Core.BRep import BRep_Builder
-from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
-from OCC.Core.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_IsInFace
-from OCC.Core.BRepGProp import brepgprop
-from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
-from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Vec, gp_Dir
-from OCC.Core.GProp import GProp_GProps
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, topods
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
+from OCP.BRep import BRep_Builder
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+from OCP.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_IsInFace
+from OCP.BRepTopAdaptor import BRepTopAdaptor_FClass2d
+from OCP.gp import gp_Pnt, gp_Lin, gp_Vec, gp_Dir
+from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCP.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS_Compound, TopoDS
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopAbs import TopAbs_FACE
 
 from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.registries import register_analyzer
 from ...core.utils.geometry import (
+    EdgeIndex,
+    FaceIndex,
     get_adaptive_sample_count,
     get_face_uv_center,
     get_face_uv_normal,
@@ -51,10 +51,12 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
     def execute(
         self,
         shape: TopoDS_Shape,
+        face_index: FaceIndex,
+        edge_index: EdgeIndex,
         progress_cb: Optional[Callable[[int], None]] = None,
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[TopoDS_Face, list[float]]:
+    ) -> dict[tuple[str, int], list[float]]:
         self.resolve_prefs(kwargs.get("prefs", {}))
         self._setup_kernel_tools(shape)
 
@@ -62,7 +64,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         for face in self.iter_faces(shape, progress_cb, check_abort):
             thicknesses = self._analyze_face(face)
             if thicknesses:
-                results[face] = thicknesses
+                results[("Face", face_index.index_of(face))] = thicknesses
 
         return results
 
@@ -75,7 +77,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         face_compound = TopoDS_Compound()
         self.builder.MakeCompound(face_compound)
 
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
+        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
         while face_explorer.More():
             self.builder.Add(face_compound, face_explorer.Current())
             face_explorer.Next()
@@ -263,7 +265,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             for i in range(1, self.dist_tool.NbSolution() + 1):
                 if abs(self.dist_tool.PointOnShape2(i).Distance(final_c) - r) < epsilon * 10:
                     if self.dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
-                        other_face = topods.Face(self.dist_tool.SupportOnShape2(i))
+                        other_face = TopoDS.Face_s(self.dist_tool.SupportOnShape2(i))
                         if not other_face.IsSame(origin_face):
                             u_other, v_other = self.dist_tool.ParOnFaceS2(i)
                             self.face_seeds[other_face].append((u_other, v_other, thickness))

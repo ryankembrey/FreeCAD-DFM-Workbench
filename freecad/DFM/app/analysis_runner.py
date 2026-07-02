@@ -7,14 +7,16 @@ from typing import Any, Callable, Optional
 import FreeCAD as App  # type: ignore
 import Part  # type: ignore
 
-from OCC.Core.TopoDS import TopoDS_Shape
-from OCC.Core.gp import gp_Dir
+from OCP.TopoDS import TopoDS_Shape
+from OCP.gp import gp_Dir
 
 from ..core.registries.process_registry import ProcessRegistry
 from ..core.registries.checks_registry import get_check_class
 from ..core.registries.analyzers_registry import get_analyzer_class
 from ..core.models import CheckResult, ProcessRequirement
 from ..core.processes.process import RuleFeedback, RuleLimit
+from ..core.utils.conversion import freecad_to_ocp
+from ..core.utils.geometry import EdgeIndex, FaceIndex
 
 from ..app.analysis_timer import AnalysisTiming
 
@@ -52,10 +54,13 @@ class AnalysisRunner:
             App.Console.PrintDeveloperError(f"Material '{material_name}' not found.\n")
             return []
 
-        shape_occ: TopoDS_Shape = Part.__toPythonOCC__(shape)
+        shape_occ: TopoDS_Shape = freecad_to_ocp(shape)
         pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         num_faces = len(shape.Faces)
         active_rules, total_steps = self._calculate_total_steps(process, num_faces)
+
+        self.face_index = FaceIndex(shape_occ)
+        self.edge_index = EdgeIndex(shape_occ)
 
         prefs = kwargs.get("prefs", {})
         enable_timing = prefs.get("GeneralPrintTimingReport", False)
@@ -198,7 +203,8 @@ class AnalysisRunner:
 
         self.analyzer_cache[analyzer_id] = analyzer_instance.execute(
             shape_occ,
-            pull_direction=pull_direction,
+            self.face_index,
+            self.edge_index,
             progress_cb=on_progress,
             check_abort=check_abort,
             **kwargs,

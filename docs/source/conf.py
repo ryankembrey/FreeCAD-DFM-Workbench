@@ -34,7 +34,7 @@ autodoc_mock_imports = [
     "Part",
     "Mesh",
     "PySide6",
-    "OCC",
+    "OCP",
     "numpy",
     "pandas",
     "yaml",

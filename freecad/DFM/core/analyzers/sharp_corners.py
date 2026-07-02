@@ -5,22 +5,22 @@
 from typing import Any, Callable, Optional
 import math
 
-from OCC.Core.TopoDS import TopoDS_Edge, TopoDS_Face, TopoDS_Shape, topods
-from OCC.Core.TopExp import topexp
-from OCC.Core.TopAbs import TopAbs_EDGE, TopAbs_FACE
-from OCC.Core.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.GeomLProp import GeomLProp_CLProps
-from OCC.Core.TopAbs import TopAbs_REVERSED
-from OCC.Core.TopExp import TopExp_Explorer
+from OCP.BRepAdaptor import BRepAdaptor_Curve
+from OCP.TopoDS import TopoDS_Edge, TopoDS_Face, TopoDS_Shape, TopoDS
+from OCP.TopExp import TopExp
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+from OCP.BRep import BRep_Tool
+from OCP.BRep import BRep_Tool
+from OCP.GeomLProp import GeomLProp_CLProps
+from OCP.TopAbs import TopAbs_REVERSED
+from OCP.TopExp import TopExp_Explorer
+from OCP.gp import gp_Dir
 
-
-from OCC.Core.gp import gp_Dir
 from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.models import ProcessRequirement
 from ...core.registries.analyzers_registry import register_analyzer
-from ...core.utils.geometry import get_face_uv_normal
+from ...core.utils.geometry import EdgeIndex, FaceIndex, get_face_uv_normal
 
 
 @register_analyzer("SHARP_CORNER_ANALYZER")
@@ -43,24 +43,26 @@ class SharpCornersAnalyzer(BaseAnalyzer):
     def execute(
         self,
         shape: TopoDS_Shape,
+        face_index: FaceIndex,
+        edge_index: EdgeIndex,
         progress_cb: Optional[Callable[[int], None]] = None,
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[TopoDS_Edge, tuple[float, bool]]:
+    ) -> dict[tuple[str, int], tuple[float, bool]]:
         self.edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
-        topexp.MapShapesAndAncestors(
+        TopExp.MapShapesAndAncestors_s(
             shape,
-            TopAbs_EDGE,  # type: ignore
-            TopAbs_FACE,  # type: ignore
+            TopAbs_EDGE,
+            TopAbs_FACE,
             self.edge_face_map,
         )
 
-        results: dict[TopoDS_Edge, tuple[float, bool]] = {}
+        results: dict[tuple[str, int], tuple[float, bool]] = {}
 
         for edge in self.iter_edges(shape, progress_cb, check_abort):
             result = self._analyze_edge(edge)
             if result is not None:
-                results[edge] = result
+                results[("Edge", edge_index.index_of(edge))] = result
 
         return results
 
@@ -75,14 +77,14 @@ class SharpCornersAnalyzer(BaseAnalyzer):
         if adjacent_faces.Size() != 2:
             return None
 
-        if BRep_Tool.Degenerated(edge):
+        if BRep_Tool.Degenerated_s(edge):
             return None
 
-        face1 = topods.Face(adjacent_faces.First())
-        face2 = topods.Face(adjacent_faces.Last())
+        face1 = TopoDS.Face_s(adjacent_faces.First())
+        face2 = TopoDS.Face_s(adjacent_faces.Last())
 
         try:
-            first, last = BRep_Tool.Range(edge)
+            first, last = BRep_Tool.Range_s(edge)
             mid_param = (first + last) / 2.0
         except Exception:
             return None
@@ -103,7 +105,7 @@ class SharpCornersAnalyzer(BaseAnalyzer):
 
     def _get_normal_at_edge(
         self,
-        face,
+        face: TopoDS_Face,
         edge: TopoDS_Edge,
         param: float,
     ) -> Optional[Any]:
@@ -112,11 +114,11 @@ class SharpCornersAnalyzer(BaseAnalyzer):
         onto the face's UV space.
         """
         try:
-            curve_on_surf = BRep_Tool.CurveOnSurface(edge, face)
-            if not curve_on_surf or curve_on_surf[0] is None:
+            pcurve = BRep_Tool.CurveOnSurface_s(edge, face, 0.0, 0.0)
+
+            if pcurve is None:
                 return None
 
-            pcurve = curve_on_surf[0]
             uv = pcurve.Value(param)
 
             return get_face_uv_normal(face, uv.X(), uv.Y())
@@ -129,7 +131,9 @@ class SharpCornersAnalyzer(BaseAnalyzer):
     ) -> Optional[bool]:
         """Determines if a shared edge is concave (internal corner) using cross products."""
         try:
-            curve_handle, first, last = BRep_Tool.Curve(edge)
+            adaptor = BRepAdaptor_Curve(edge)
+            first = adaptor.FirstParameter()
+            last = adaptor.LastParameter()
             mid_param = (first + last) / 2.0
 
             n1 = self._get_normal_at_edge(face1, edge, mid_param)
@@ -140,6 +144,8 @@ class SharpCornersAnalyzer(BaseAnalyzer):
             if n1.IsParallel(n2, 1e-4):
                 return False
 
+            curve_handle = BRep_Tool.Curve_s(edge, 0.0, 0.0)
+
             props = GeomLProp_CLProps(curve_handle, 1, 1e-6)
             props.SetParameter(mid_param)
             if not props.IsTangentDefined():
@@ -148,10 +154,10 @@ class SharpCornersAnalyzer(BaseAnalyzer):
             tangent = gp_Dir(1, 0, 0)
             props.Tangent(tangent)
 
-            exp = TopExp_Explorer(face1, TopAbs_EDGE)  # type: ignore
+            exp = TopExp_Explorer(face1, TopAbs_EDGE)
             edge_in_face1 = None
             while exp.More():
-                e = topods.Edge(exp.Current())
+                e = TopoDS.Edge_s(exp.Current())  # type: ignore
                 if e.IsSame(edge):
                     edge_in_face1 = e
                     break

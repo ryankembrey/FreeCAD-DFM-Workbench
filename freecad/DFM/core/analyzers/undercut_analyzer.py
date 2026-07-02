@@ -4,9 +4,10 @@
 
 from typing import Any, Optional, Callable
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
-from OCC.Core.gp import gp_Pnt, gp_Lin, gp_Dir
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCP.TopoDS import TopoDS_Shape, TopoDS_Face
+from OCP.gp import gp_Pnt, gp_Lin, gp_Dir
+from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from freecad.DFM.core.utils.geometry import EdgeIndex, FaceIndex
 
 from ...core.base import BaseAnalyzer
 from ...core.models import ProcessRequirement
@@ -34,10 +35,12 @@ class UndercutAnalyzer(BaseAnalyzer):
     def execute(
         self,
         shape: TopoDS_Shape,
+        face_index: FaceIndex,
+        edge_index: EdgeIndex,
         progress_cb: Optional[Callable[[int], None]] = None,
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[TopoDS_Face, Any]:
+    ) -> dict[tuple[str, int], list[float]]:
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         self.samples = kwargs.get("samples", 10)
 
@@ -47,7 +50,7 @@ class UndercutAnalyzer(BaseAnalyzer):
         for face in self.iter_faces(shape, progress_cb, check_abort):
             ratio = self._analyze_face(face)
             if ratio > 0.0:
-                results[face] = ratio
+                results[("Face", face_index.index_of(face))] = ratio
         return results
 
     def _analyze_face(self, face: TopoDS_Face):

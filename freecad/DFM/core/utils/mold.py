@@ -4,9 +4,9 @@
 
 from enum import Enum, auto
 
-from OCC.Core.TopoDS import TopoDS_Face
-from OCC.Core.gp import gp_Dir, gp_Lin, gp_Vec
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCP.TopoDS import TopoDS_Face
+from OCP.gp import gp_Dir, gp_Lin, gp_Vec
+from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from ...core.utils import get_face_uv_normal, get_face_uv_center, get_point_from_uv
 

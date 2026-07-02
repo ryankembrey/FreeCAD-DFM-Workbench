@@ -3,7 +3,7 @@
 # SPDX-FileNotice: Part of the DFM addon.
 
 from typing import Optional
-from OCC.Core.TopoDS import TopoDS_Face
+from OCP.TopoDS import TopoDS_Face
 
 from ...core.models import CheckResult, Severity
 from ...core.rules import Rulebook

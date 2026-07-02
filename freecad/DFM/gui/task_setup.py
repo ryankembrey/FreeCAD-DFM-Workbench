@@ -10,13 +10,15 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 import Part  # type: ignore
 
-from OCC.Core.gp import gp_Dir
+from OCP.gp import gp_Dir
+from OCP.TopoDS import TopoDS, TopoDS_Vertex
 
 from ..core.registries.analyzers_registry import get_analyzer_class
 from ..core.registries.checks_registry import get_check_class
 from ..core.registries.process_registry import ProcessRegistry
 from ..app.analysis_runner import AnalysisRunner
 from ..core.models import CheckResult, GeometryRef, ProcessRequirement
+from ..core.utils.conversion import freecad_to_ocp
 
 from ..app.history import HistoryManager
 
@@ -193,7 +195,7 @@ class TaskSetup:
                 App.Console.PrintError(f"Selected element '{face_name}' is not a face.\n")
                 return False
 
-            self.neutral_plane_face = Part.__toPythonOCC__(face_obj)
+            self.neutral_plane_face = freecad_to_ocp(face_obj)
             self.form.leNPlane.setText(face_name)
             self.form.leNPlane.setReadOnly(True)
             return True
@@ -410,7 +412,7 @@ class TaskSetup:
             else:
                 self.form.lProgress.setText("Mapping results to 3D model…")
                 QtWidgets.QApplication.processEvents()
-                _resolve_geometry_refs(results, self.target_object)
+                _resolve_geometry_refs(results)
                 self.form.lProgress.setText("Preparing final report…")
                 QtWidgets.QApplication.processEvents()
                 history_manager = HistoryManager(Path(App.getUserAppDataDir()))
@@ -480,51 +482,13 @@ class TaskSetup:
         Gui.Control.closeDialog()
 
 
-def _resolve_geometry_refs(
-    results: list[CheckResult],
-    target_object,
-) -> None:
-    """
-    Converts raw OCC objects in CheckResult.failing_geometry into serialisable
-    GeometryRef instances stored in CheckResult.refs.
-
-    After this call, failing_geometry is cleared — the GUI layer must use .refs.
-
-    Supports: Face, Edge, Vertex.
-    """
-    shape = target_object.Shape
-
-    occ_faces = [Part.__toPythonOCC__(f) for f in shape.Faces]
-    occ_edges = [Part.__toPythonOCC__(e) for e in shape.Edges]
-    occ_vertices = [Part.__toPythonOCC__(v) for v in shape.Vertexes]
-
-    def resolve_one(occ_obj) -> Optional[GeometryRef]:
-        # Try Face
-        for i, occ_face in enumerate(occ_faces):
-            if occ_face.IsSame(occ_obj):
-                return GeometryRef(type="Face", index=i, label=f"Face{i + 1}")
-        # Try Edge
-        for i, occ_edge in enumerate(occ_edges):
-            if occ_edge.IsSame(occ_obj):
-                return GeometryRef(type="Edge", index=i, label=f"Edge{i + 1}")
-        # Try Vertex
-        for i, occ_vertex in enumerate(occ_vertices):
-            if occ_vertex.IsSame(occ_obj):
-                return GeometryRef(type="Vertex", index=i, label=f"Vertex{i + 1}")
-        return None
-
+def _resolve_geometry_refs(results: list[CheckResult]) -> None:
     for result in results:
         resolved = []
-        for occ_obj in result.failing_geometry:
-            ref = resolve_one(occ_obj)
-            if ref is not None:
-                resolved.append(ref)
-            else:
-                App.Console.PrintWarning(
-                    f"Could not resolve geometry ref for {result.rule_id.label}\n"
-                )
+        for kind, index in result.failing_geometry:
+            resolved.append(GeometryRef(type=kind, index=index - 1, label=f"{kind}{index}"))
         result.refs = resolved
-        result.failing_geometry = []  # clear as OCC objects are no longer needed
+        result.failing_geometry = []
 
 
 class DfmAnalysisCommand:

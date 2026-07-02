@@ -7,18 +7,20 @@ from typing import Any, Callable, Optional
 
 import FreeCAD  # type: ignore
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE
-from OCC.Core.BRepAdaptor import BRepAdaptor_Surface
-from OCC.Core.gp import gp_Dir
-from OCC.Core.GeomAbs import GeomAbs_Plane
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCP.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopAbs import TopAbs_FACE
+from OCP.BRepAdaptor import BRepAdaptor_Surface
+from OCP.gp import gp_Dir
+from OCP.GeomAbs import GeomAbs_Plane
+from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
 
 from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.models import ProcessRequirement
 from ...core.registries import register_analyzer
 from ...core.utils.geometry import (
+    EdgeIndex,
+    FaceIndex,
     get_face_uv_center,
     get_face_uv_normal,
     yield_face_uv_grid,
@@ -48,11 +50,20 @@ class DraftAnalyzer(BaseAnalyzer):
     def resolve_prefs(self, prefs: dict) -> None:
         pass
 
-    def execute(self, shape, progress_cb=None, check_abort=None, **kwargs):
+    def execute(
+        self,
+        shape,
+        face_index: FaceIndex,
+        edge_index: EdgeIndex,
+        progress_cb=None,
+        check_abort=None,
+        **kwargs,
+    ):
         """Runs a full draft analysis on an inputted shape."""
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         self.samples = kwargs.get("samples", 20)
 
+        self.face_index = face_index
         self.core_cavity_mapping = self.classify_moldside(shape)
 
         results = {}
@@ -60,7 +71,7 @@ class DraftAnalyzer(BaseAnalyzer):
         for face in self.iter_faces(shape, progress_cb, check_abort):
             result = self.get_draft_for_face(face)
             if result is not None:
-                results[face] = result
+                results[("Face", self.face_index.index_of(face))] = result
 
         return results
 
@@ -93,7 +104,7 @@ class DraftAnalyzer(BaseAnalyzer):
             draft_angle = self.get_draft_for_dir(normal_dir)
 
             # Check if face belongs to the core, and flip the sign if True
-            moldside = self.core_cavity_mapping[face]
+            moldside = self.core_cavity_mapping[self.face_index.index_of(face)]
             if moldside == MoldSide.CORE:
                 draft_angle = -draft_angle
 
@@ -115,7 +126,7 @@ class DraftAnalyzer(BaseAnalyzer):
         draft_angle = self.get_draft_for_dir(normal_dir)
 
         # Check if face belongs to the core, and flip the sign if True
-        moldside = self.core_cavity_mapping[face]
+        moldside = self.core_cavity_mapping[self.face_index.index_of(face)]
         if moldside == MoldSide.CORE:
             draft_angle = -draft_angle
 
@@ -135,21 +146,12 @@ class DraftAnalyzer(BaseAnalyzer):
 
         return angle_deg - 90
 
-    def classify_moldside(self, shape: TopoDS_Shape) -> dict[TopoDS_Face, MoldSide]:
+    def classify_moldside(self, shape: TopoDS_Shape) -> dict[int, MoldSide]:
         """Returns a mapping of TopoDS_Face to MoldSide"""
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
-
-        face_mapping: dict[TopoDS_Face, MoldSide] = {}
-
         intersector = IntCurvesFace_ShapeIntersector()
         intersector.Load(shape, 1e-6)
 
-        while face_explorer.More():
-            current_face = topods.Face(face_explorer.Current())
-
-            face_mapping[current_face] = moldside_of_face(
-                current_face, intersector, self.pull_direction
-            )
-
-            face_explorer.Next()
-        return face_mapping
+        return {
+            i: moldside_of_face(face, intersector, self.pull_direction)
+            for i, face in enumerate(self.face_index, start=1)
+        }

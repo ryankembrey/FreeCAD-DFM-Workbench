@@ -4,7 +4,7 @@
 
 from typing import Optional
 
-from OCC.Core.TopoDS import TopoDS_Edge
+from OCP.TopoDS import TopoDS_Edge
 
 from ...core.models import CheckResult, Severity
 from ...core.base.base_check import BaseCheck

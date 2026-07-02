@@ -20,9 +20,9 @@ def run_wrapper():
     try:
         # import FreeCAD  # type: ignore
         # import Part  # type: ignore
-        import OCC.Core.TopoDS
+        import OCP.TopoDS
 
-        print(f"OCC found.")
+        print(f"OCP found.")
     except ImportError as e:
         print(f"Environment Failure: {e}")
         return

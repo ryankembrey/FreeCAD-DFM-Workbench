@@ -6,9 +6,10 @@ import collections
 from typing import Any, Optional, Callable
 import math
 
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face
-from OCC.Core.gp import gp_Lin
-from OCC.Core.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from OCP.TopoDS import TopoDS_Shape, TopoDS_Face
+from OCP.gp import gp_Lin
+from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
+from freecad.DFM.core.utils.geometry import EdgeIndex, FaceIndex
 
 from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.registries import register_analyzer
@@ -43,10 +44,12 @@ class RayThicknessAnalyzer(BaseAnalyzer):
     def execute(
         self,
         shape: TopoDS_Shape,
+        face_index: FaceIndex,
+        edge_index: EdgeIndex,
         progress_cb: Optional[Callable[[int], None]] = None,
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[TopoDS_Face, list[float]]:
+    ) -> dict[tuple[str, int], list[float]]:
         """
         Calculates the minimum thickness for all faces of a given TopoDS_Shape.
         """
@@ -64,7 +67,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         for face in self.iter_faces(shape, progress_cb, check_abort):
             thicknesses = self._ray_cast_for_face(face)
             if thicknesses:
-                results[face] = thicknesses
+                results[("Face", face_index.index_of(face))] = thicknesses
         return results
 
     def _ray_cast_for_face(self, face: TopoDS_Face) -> list[float]:

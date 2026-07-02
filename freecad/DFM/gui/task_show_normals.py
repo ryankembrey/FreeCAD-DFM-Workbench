@@ -6,12 +6,14 @@ import FreeCAD  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 import Part  # type: ignore
 
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_REVERSED
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.GeomLProp import GeomLProp_SLProps
-from OCC.Core.TopoDS import topods
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
+from OCP.BRep import BRep_Tool
+from OCP.GeomLProp import GeomLProp_SLProps
+from OCP.TopoDS import TopoDS
+
 from ..core.utils.geometry import get_face_uv_center
+from ..core.utils.conversion import freecad_to_ocp
 
 
 class TaskShowNormals:
@@ -23,17 +25,17 @@ class TaskShowNormals:
         Creates an object in the tree showing the
         calculated normal for every face on the target object.
         """
-        shape = Part.__toPythonOCC__(doc_object.Shape)
+        shape = freecad_to_ocp(doc_object.Shape)
         explorer = TopExp_Explorer(shape, TopAbs_FACE)  # type: ignore
 
         debug_lines = []
 
         while explorer.More():
-            face = topods.Face(explorer.Current())
+            face = TopoDS.Face_s(explorer.Current())
 
             u, v = get_face_uv_center(face)
 
-            surface = BRep_Tool.Surface(face)
+            surface = BRep_Tool.Surface_s(face)
             props = GeomLProp_SLProps(surface, u, v, 1, 1e-6)
 
             if props.IsNormalDefined():

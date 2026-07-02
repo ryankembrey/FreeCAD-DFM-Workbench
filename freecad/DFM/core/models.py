@@ -4,7 +4,6 @@
 
 from dataclasses import dataclass, field
 from typing import Any
-from OCC.Core.TopoDS import TopoDS_Face
 from .rules import Rulebook
 
 from enum import Enum, auto
@@ -19,11 +18,6 @@ class Severity(Enum):
 
 @dataclass
 class GeometryRef:
-    """
-    A serialisable reference to a sub-element of a FreeCAD shape.
-    The GUI layer works exclusively with GeometryRef — never raw OCC objects.
-    """
-
     type: str  # "Face", "Edge", "Vertex"
     index: int  # 0-based index into the shape's sub-element list
     label: str  # "Face1", "Edge3", 1-based

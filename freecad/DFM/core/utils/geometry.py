@@ -4,22 +4,63 @@
 
 from typing import Generator, Optional, Callable
 
-from OCC.Core.BRepTools import breptools
-from OCC.Core.BRep import BRep_Tool
-from OCC.Core.BRepBndLib import brepbndlib
-from OCC.Core.BRepGProp import brepgprop
-from OCC.Core.Bnd import Bnd_Box
-from OCC.Core.BRepTopAdaptor import BRepTopAdaptor_FClass2d
-from OCC.Core.GeomLProp import GeomLProp_SLProps
-from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Pnt2d
-from OCC.Core.GProp import GProp_GProps
-from OCC.Core.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
-from OCC.Core.TopoDS import TopoDS_Face
+from OCP.BRepTools import BRepTools
+from OCP.BRep import BRep_Tool
+from OCP.BRepBndLib import BRepBndLib
+from OCP.BRepGProp import BRepGProp
+from OCP.Bnd import Bnd_Box
+from OCP.BRepTopAdaptor import BRepTopAdaptor_FClass2d
+from OCP.GeomLProp import GeomLProp_SLProps
+from OCP.gp import gp_Dir, gp_Pnt, gp_Pnt2d
+from OCP.GProp import GProp_GProps
+from OCP.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
+from OCP.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS, TopoDS_Edge
+from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE
+from OCP.TopTools import TopTools_IndexedMapOfShape
+from OCP.TopExp import TopExp
+
+
+class FaceIndex:
+    def __init__(self, shape: TopoDS_Shape):
+        self._map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(shape, TopAbs_FACE, self._map)
+
+    def index_of(self, face: TopoDS_Face) -> int:
+        return self._map.FindIndex(face)
+
+    def face_at(self, index: int) -> TopoDS_Face:
+        return TopoDS.Face_s(self._map.FindKey(index))  # type: ignore
+
+    def __len__(self) -> int:
+        return self._map.Extent()
+
+    def __iter__(self):
+        for i in range(1, self._map.Extent() + 1):
+            yield self.face_at(i)
+
+
+class EdgeIndex:
+    def __init__(self, shape: TopoDS_Shape):
+        self._map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(shape, TopAbs_EDGE, self._map)
+
+    def index_of(self, face: TopoDS_Edge) -> int:
+        return self._map.FindIndex(face)
+
+    def edge_at(self, index: int) -> TopoDS_Edge:
+        return TopoDS.Edge_s(self._map.FindKey(index))  # type: ignore
+
+    def __len__(self) -> int:
+        return self._map.Extent()
+
+    def __iter__(self):
+        for i in range(1, self._map.Extent() + 1):
+            yield self.edge_at(i)
 
 
 def get_face_uv_center(face: TopoDS_Face) -> tuple[float, float]:
     """Returns the center of the UV parametric space for a TopoDS_Face."""
-    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+    u_min, u_max, v_min, v_max = BRepTools.UVBounds_s(face)
     u_mid: float = (u_max + u_min) / 2
     v_mid: float = (v_max + v_min) / 2
 
@@ -29,7 +70,7 @@ def get_face_uv_center(face: TopoDS_Face) -> tuple[float, float]:
 def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> Optional[gp_Dir]:
     """Returns the normal of a TopoDS_Face at UV"""
 
-    surface = BRep_Tool.Surface(face)
+    surface = BRep_Tool.Surface_s(face)
     props = GeomLProp_SLProps(surface, u, v, 1, 1e-6)
 
     if props.IsNormalDefined():
@@ -52,7 +93,7 @@ def get_adaptive_sample_count(face: TopoDS_Face, min_samples: int, max_samples: 
     The count is clamped between a minimum of 5 and the user-provided base_samples.
     """
     props = GProp_GProps()
-    brepgprop.SurfaceProperties(face, props)
+    BRepGProp.SurfaceProperties_s(face, props)
     return int(max(min_samples, min(max_samples, 2 + (props.Mass() ** 0.5) / 10)))
 
 
@@ -69,7 +110,7 @@ def yield_face_uv_grid(
     """
     classifier = BRepTopAdaptor_FClass2d(face, 1e-6)
 
-    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+    u_min, u_max, v_min, v_max = BRepTools.UVBounds_s(face)
 
     # Apply margin (Default to none)
     u_len = u_max - u_min
@@ -107,7 +148,7 @@ def get_point_from_uv(
     Epsilon controls the distance the point is from the face in the normal direction.
     This can be useful to cast rays that do not intersect with the face of origin.
     """
-    surface = BRep_Tool.Surface(face)
+    surface = BRep_Tool.Surface_s(face)
     p_surf = surface.Value(u, v)
 
     point = gp_Pnt(
@@ -124,12 +165,12 @@ def get_face_uv_ratios(face: TopoDS_Face):
     Calculates the ratio of parametric UV space to physical 3D space.
     Returns (u_ratio, v_ratio) where ratio * target_mm = uv_step.
     """
-    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+    u_min, u_max, v_min, v_max = BRepTools.UVBounds_s(face)
     u_range = abs(u_max - u_min)
     v_range = abs(v_max - v_min)
 
     bbox = Bnd_Box()
-    brepbndlib.Add(face, bbox)
+    BRepBndLib.Add_s(face, bbox)
     x_min, y_min, z_min, x_max, y_max, z_max = bbox.Get()
 
     phys_width = abs(x_max - x_min)
@@ -187,7 +228,7 @@ def optimize_face_uv_search(
         Tuple containing (best_uv, max_val, list_of_improvements).
     """
     u_ratio, v_ratio = get_face_uv_ratios(face)
-    u_min, u_max, v_min, v_max = breptools.UVBounds(face)
+    u_min, u_max, v_min, v_max = BRepTools.UVBounds_s(face)
 
     face_width_mm = (u_max - u_min) / u_ratio
     step_size = max(0.1, min(face_width_mm * 0.02, max_step_mm))

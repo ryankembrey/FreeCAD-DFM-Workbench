@@ -4,9 +4,11 @@
 
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, Iterator
-from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Face, topods, TopoDS_Edge
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
+from OCP.TopTools import TopTools_IndexedMapOfShape
+from OCP.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS, TopoDS_Edge
+from OCP.TopExp import TopExp, TopExp_Explorer
+from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE
+from freecad.DFM.core.utils.geometry import EdgeIndex, FaceIndex
 from ...core.models import ProcessRequirement
 
 
@@ -46,10 +48,12 @@ class BaseAnalyzer(ABC):
     def execute(
         self,
         shape: TopoDS_Shape,
+        face_index: FaceIndex,
+        edge_index: EdgeIndex,
         progress_cb: Optional[Callable[[int], None]] = None,
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict:
+    ) -> dict[tuple[str, int], Any]:
         pass
 
     def iter_faces(
@@ -72,7 +76,7 @@ class BaseAnalyzer(ABC):
             if check_abort and check_abort():
                 return
 
-            yield topods.Face(explorer.Current())
+            yield TopoDS.Face_s(explorer.Current())
 
             count += 1
             if progress_cb:
@@ -94,22 +98,13 @@ class BaseAnalyzer(ABC):
         appear only once, which is correct for edge-level analysis.
         """
 
-        explorer = TopExp_Explorer(shape, TopAbs_EDGE)  # type: ignore
-        seen: set[int] = set()
-        count = 0
+        edge_map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(shape, TopAbs_EDGE, edge_map)
 
-        while explorer.More():
+        for i in range(1, edge_map.Extent() + 1):
             if check_abort and check_abort():
                 return
-
-            edge = topods.Edge(explorer.Current())
-            edge_hash = edge.__hash__()
-
-            if edge_hash not in seen:
-                seen.add(edge_hash)
-                yield edge
-                count += 1
-                if progress_cb:
-                    progress_cb(count)
-
-            explorer.Next()
+            edge = TopoDS.Edge_s(edge_map.FindKey(i))
+            yield edge
+            if progress_cb:
+                progress_cb(i)
