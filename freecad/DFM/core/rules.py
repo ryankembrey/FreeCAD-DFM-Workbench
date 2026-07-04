@@ -98,6 +98,14 @@ class Rulebook(Enum):
         unit="°",
         description="Convex intersections of surfaces without a radius.",
     )
+    MAX_OVERHANG_ANGLE = RuleType(
+        "Maximum Overhang Angle",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="°",
+        comparison="max",
+        field_labels=("Aim for", "At most"),
+        description="Maximum unsupported surface angle relative to the print orientation.",
+    )
 
     @property
     def id(self) -> str:

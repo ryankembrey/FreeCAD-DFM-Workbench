@@ -3,7 +3,7 @@
 # SPDX-FileNotice: Part of the DFM addon.
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from PySide6 import QtGui, QtWidgets, QtCore
 
 import FreeCAD as App  # type: ignore
@@ -36,10 +36,259 @@ QPushButton:checked {
 }
 """
 
-PICK_HINTS = {
-    "model": "Click an object",
-    "pull_dir": "Click a face or edge",
-    "neutral_plane": "Click a face",
+
+# =============================================================================
+# Requirement handlers
+#
+# Each ProcessRequirement that needs user input owns a handler. The handler
+# holds its own state (value / point / reference / flipped) and builds its own
+# row of widgets (pick button, status line-edit, optional flip button). This
+# keeps all the per-requirement branching in one place and makes adding a new
+# requirement a matter of writing one small subclass.
+# =============================================================================
+
+
+class RequirementHandler(QtCore.QObject):
+    """Base handler: owns the widgets and state for one ProcessRequirement."""
+
+    def __init__(self, requirement: ProcessRequirement):
+        super().__init__()
+        self.requirement = requirement
+
+        self.value: Any = None
+        self.pnt = None
+        self.ref: str = ""
+        self.flipped: bool = False
+
+        self.pb: Optional[QtWidgets.QPushButton] = None
+        self.le: Optional[QtWidgets.QLineEdit] = None
+        self.flip_btn: Optional[QtWidgets.QAbstractButton] = None
+        self._orig_text: str = ""
+
+    @property
+    def label(self) -> str:
+        return self.requirement.name.replace("_", " ").title()
+
+    def pick_hint(self) -> str:
+        return "Click a face"
+
+    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
+        """Create this requirement's row of widgets and append to `layout`."""
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
+
+        self.pb = QtWidgets.QPushButton(f"Select {self.label}")
+        self.pb.setMinimumHeight(28)
+        self.pb.setCheckable(True)
+        self.pb.setStyleSheet(PICK_BUTTON_STYLE)
+        self._orig_text = self.pb.text()
+        self.pb.clicked.connect(lambda _checked=False: on_pick(self))
+
+        self.le = QtWidgets.QLineEdit()
+        self.le.setMinimumHeight(28)
+        self.le.setReadOnly(True)
+        self.le.setPlaceholderText("Not defined")
+
+        right = QtWidgets.QHBoxLayout()
+        right.setSpacing(4)
+        right.addWidget(self.le, 1)
+        self._build_extra(right)
+
+        row.addWidget(self.pb, 1)
+        row.addLayout(right, 1)
+        layout.addLayout(row)
+
+        self.refresh_display()
+
+    def _build_extra(self, row: QtWidgets.QHBoxLayout) -> None:
+        """Hook for subclasses to add trailing widgets (e.g. a flip button)."""
+        pass
+
+    def detach(self) -> None:
+        """Drop references to widgets that are about to be deleted."""
+        self.pb = None
+        self.le = None
+        self.flip_btn = None
+
+    def refresh_display(self) -> None:
+        if self.le is None:
+            return
+        if self.ref:
+            suffix = " (flipped)" if self.flipped else ""
+            self.le.setText(f"{self.ref}{suffix}")
+        else:
+            self.le.setText("")
+
+    def reset_ui(self) -> None:
+        """Return the pick button to its idle look."""
+        if self.pb is not None:
+            self.pb.setText(self._orig_text)
+            self.pb.setChecked(False)
+
+    def enter_picking_ui(self) -> None:
+        if self.pb is not None:
+            self.pb.setText(self.pick_hint())
+            self.pb.setChecked(True)
+
+    def apply_selection(self) -> bool:
+        """Read the current 3D selection into state. True on success."""
+        raise NotImplementedError
+
+    def is_satisfied(self) -> bool:
+        return self.value is not None
+
+    def clear(self) -> None:
+        self.value = None
+        self.pnt = None
+        self.ref = ""
+        self.flipped = False
+
+    def remove_indicator(self) -> None:
+        """Remove any 3D indicator this handler owns. Base handlers have none."""
+        pass
+
+
+# =============================================================================
+
+
+class VectorRequirement(RequirementHandler):
+    """A direction picked from a face normal or an edge tangent (with flip)."""
+
+    _COLORS = {
+        ProcessRequirement.PULL_DIRECTION: (1.0, 0.15, 0.15),  # red
+        ProcessRequirement.PRINT_ORIENTATION: (0.15, 0.45, 1.0),  # blue
+    }
+
+    def __init__(self, requirement):
+        super().__init__(requirement)
+        color = self._COLORS.get(requirement, (1.0, 0.15, 0.15))
+        self.indicator = DirectionIndicator(color, self.label)
+
+    def pick_hint(self) -> str:
+        return "Click a face or edge"
+
+    def _build_extra(self, container: QtWidgets.QHBoxLayout) -> None:
+        self.flip_btn = QtWidgets.QToolButton()
+        self.flip_btn.setIcon(QtGui.QIcon(":/icons/flip_direction.svg"))
+        self.flip_btn.setToolTip("Flip direction 180 degrees")
+        self.flip_btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.flip_btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.flip_btn.setIconSize(QtCore.QSize(18, 18))
+        self.flip_btn.setFixedSize(26, 28)
+        self.flip_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; padding: 0px; margin: 0px; }"
+            "QToolButton:hover { background: rgba(127, 127, 127, 40); border-radius: 3px; }"
+        )
+        self.flip_btn.setEnabled(self.value is not None)
+        self.flip_btn.clicked.connect(lambda _checked=False: self.flip())
+        container.addWidget(self.flip_btn, 0)
+
+    def refresh_display(self) -> None:
+        super().refresh_display()
+        if self.flip_btn is not None:
+            self.flip_btn.setEnabled(self.value is not None)
+
+    def apply_selection(self) -> bool:
+        try:
+            sel = Gui.Selection.getSelectionEx()
+            if not sel or not sel[0].SubObjects:
+                return False
+
+            sub_obj = sel[0].SubObjects[0]
+            sub_name = sel[0].SubElementNames[0] if sel[0].SubElementNames else "Selected"
+
+            if isinstance(sub_obj, Part.Face):
+                u0, u1, v0, v1 = sub_obj.ParameterRange
+                u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
+                pnt = sub_obj.valueAt(u, v)
+                dir_vec = sub_obj.normalAt(u, v).normalize()
+
+            elif isinstance(sub_obj, Part.Edge):
+                p0, p1 = sub_obj.ParameterRange
+                p_mid = (p0 + p1) * 0.5
+                pnt = sub_obj.valueAt(p_mid)
+                tangent = sub_obj.tangentAt(p_mid)
+                if tangent.Length == 0:
+                    App.Console.PrintError("Selected edge is degenerate.\n")
+                    return False
+                dir_vec = tangent.normalize()
+            else:
+                App.Console.PrintError("Selected element must be a Face or an Edge.\n")
+                return False
+
+            self.pnt = pnt
+            self.value = gp_Dir(dir_vec.x, dir_vec.y, dir_vec.z)
+            self.ref = sub_name
+            self.flipped = False
+
+            if self.le is not None:
+                self.le.setText(sub_name)
+            if self.flip_btn is not None:
+                self.flip_btn.setEnabled(True)
+
+            self.indicator.show(pnt, dir_vec)
+            return True
+
+        except Exception as e:
+            App.Console.PrintError(f"Visualizing {self.label.lower()} failed: {e}\n")
+            return False
+
+    def flip(self) -> None:
+        if not self.value or not self.pnt:
+            return
+        self.value.Reverse()
+        self.flipped = not self.flipped
+        suffix = " (flipped)" if self.flipped else ""
+        if self.le is not None:
+            self.le.setText(f"{self.ref}{suffix}")
+        dx, dy, dz = self.value.X(), self.value.Y(), self.value.Z()
+        self.indicator.show(self.pnt, App.Vector(dx, dy, dz))
+
+    def remove_indicator(self) -> None:
+        self.indicator.remove()
+
+
+# =============================================================================
+
+
+class PlaneRequirement(RequirementHandler):
+    """A reference plane picked from a face."""
+
+    def pick_hint(self) -> str:
+        return "Click a face"
+
+    def apply_selection(self) -> bool:
+        try:
+            sel = Gui.Selection.getSelectionEx()
+            if not sel or not sel[0].SubElementNames:
+                return False
+
+            face_name = sel[0].SubElementNames[0]
+            face_obj = sel[0].SubObjects[0]
+
+            if not isinstance(face_obj, Part.Face):
+                App.Console.PrintError(f"Selected element '{face_name}' is not a face.\n")
+                return False
+
+            self.value = freecad_to_ocp(face_obj)
+            self.ref = face_name
+            self.flipped = False
+
+            if self.le is not None:
+                self.le.setText(face_name)
+            return True
+
+        except Exception as e:
+            App.Console.PrintError(f"Selection error: {e}\n")
+            return False
+
+
+# =============================================================================
+
+REQUIREMENT_HANDLER_TYPES: dict[ProcessRequirement, type[RequirementHandler]] = {
+    ProcessRequirement.PULL_DIRECTION: VectorRequirement,
+    ProcessRequirement.PRINT_ORIENTATION: VectorRequirement,
+    ProcessRequirement.NEUTRAL_PLANE: PlaneRequirement,
 }
 
 
@@ -75,35 +324,19 @@ class TaskSetup:
         self.target_object = None
         self.target_shape = None
         self.process = None
-        self.pull_dir = None
-        self.pull_dir_pnt = None
-        self._pull_dir_ref = ""
-        self._pull_dir_flipped = False
-        self.neutral_plane_face = None
+
         self.indicator = DirectionIndicator()
+
+        self.handlers: dict[ProcessRequirement, RequirementHandler] = {
+            req: cls(req) for req, cls in REQUIREMENT_HANDLER_TYPES.items()
+        }
 
         self.is_running = False
         self.abort_requested = False
-        self.picking_mode: Optional[str] = None
+        self.picking_mode: Any = None
         self.cursor_overridden = False
 
-        self.requirement_widgets = {
-            ProcessRequirement.PULL_DIRECTION: [
-                self.form.pbPullDir,
-                self.form.lePullDir,
-                self.form.pbFlipPullDir,
-            ],
-            ProcessRequirement.NEUTRAL_PLANE: [
-                self.form.pbNPlane,
-                self.form.leNPlane,
-            ],
-        }
-
-        self.orig_btn_texts = {
-            "model": self.form.pbSelectModel.text(),
-            "pull_dir": self.form.pbPullDir.text(),
-            "neutral_plane": self.form.pbNPlane.text(),
-        }
+        self.orig_model_text = self.form.pbSelectModel.text()
 
         Gui.Selection.addObserver(self)
 
@@ -126,29 +359,19 @@ class TaskSetup:
         self.form.cbMaterial.setPlaceholderText("Select a process first")
         self.form.cbMaterial.setEnabled(False)
 
-        for le, placeholder in (
-            (self.form.leSelectModel, "No model selected"),
-            (self.form.lePullDir, "Not defined"),
-            (self.form.leNPlane, "Not defined"),
-        ):
-            le.setReadOnly(True)
-            le.setPlaceholderText(placeholder)
+        self.form.leSelectModel.setReadOnly(True)
+        self.form.leSelectModel.setPlaceholderText("No model selected")
+
+        self.form.pbSelectModel.setCheckable(True)
+        self.form.pbSelectModel.setStyleSheet(PICK_BUTTON_STYLE)
 
         self.form.gbOptions.hide()
         self.form.gbAnalysis.hide()
-
-        w = self.form.pbPullDir.sizeHint().width()
-        self.form.pbPullDir.setMinimumWidth(w)
-
-        self.form.pbFlipPullDir.setIcon(QtGui.QIcon(":/icons/flip_direction.svg"))
-        self.form.pbFlipPullDir.setToolTip("Flip pull direction 180 degrees")
-        self.form.pbFlipPullDir.setEnabled(False)
-
-        for btn in (self.form.pbSelectModel, self.form.pbPullDir, self.form.pbNPlane):
-            btn.setCheckable(True)
-            btn.setStyleSheet(PICK_BUTTON_STYLE)
-
         self.form.progressBar.setValue(0)
+
+        if not self.form.gbOptions.layout():
+            layout = QtWidgets.QVBoxLayout(self.form.gbOptions)
+            self.form.gbOptions.setLayout(layout)
 
     def _populate_categories(self):
         self.form.cbManCategory.blockSignals(True)
@@ -161,9 +384,6 @@ class TaskSetup:
         self.form.pbRunAnalysis.clicked.connect(self.on_run_clicked)
         self.form.pbAbort.clicked.connect(self.on_abort_clicked)
         self.form.pbSelectModel.clicked.connect(self.on_select_shape)
-        self.form.pbPullDir.clicked.connect(self.on_select_pull_dir)
-        self.form.pbFlipPullDir.clicked.connect(self.on_flip_pull_dir)
-        self.form.pbNPlane.clicked.connect(self.on_select_neutral_plane)
         self.form.cbManCategory.currentIndexChanged.connect(self.on_category_changed)
         self.form.cbManProcess.currentIndexChanged.connect(self.on_process_changed)
         self.form.cbMaterial.currentIndexChanged.connect(self._update_run_button_state)
@@ -184,13 +404,13 @@ class TaskSetup:
     def _process_picked_selection(self):
         if not self.picking_mode:
             return
-        success = False
+
         if self.picking_mode == "model":
             success = self._apply_model_selection()
-        elif self.picking_mode == "pull_dir":
-            success = self._apply_pull_dir_selection()
-        elif self.picking_mode == "neutral_plane":
-            success = self._apply_neutral_plane_selection()
+        else:
+            handler = self.handlers.get(self.picking_mode)
+            success = handler.apply_selection() if handler else False
+
         if success:
             self.picking_mode = None
             self._reset_picking_ui()
@@ -198,30 +418,37 @@ class TaskSetup:
             self._update_run_button_state()
 
     def _reset_picking_ui(self):
-        self.form.pbSelectModel.setText(self.orig_btn_texts["model"])
-        self.form.pbPullDir.setText(self.orig_btn_texts["pull_dir"])
-        self.form.pbNPlane.setText(self.orig_btn_texts["neutral_plane"])
-
+        """Reset the active states of the model button and all requirement buttons."""
+        self.form.pbSelectModel.setText(self.orig_model_text)
         self.form.pbSelectModel.setChecked(False)
-        self.form.pbPullDir.setChecked(False)
-        self.form.pbNPlane.setChecked(False)
+
+        for handler in self.handlers.values():
+            handler.reset_ui()
 
         if self.cursor_overridden:
             QtWidgets.QApplication.restoreOverrideCursor()
             self.cursor_overridden = False
 
-    def _toggle_pick_mode(self, mode: str, button: QtWidgets.QPushButton):
-        if self.picking_mode == mode:
+    def _toggle_pick_mode_model(self):
+        if self.picking_mode == "model":
             self.picking_mode = None
             self._reset_picking_ui()
             return
 
         self._reset_picking_ui()
-        self.picking_mode = mode
-        button.setChecked(True)
-        button.setText(PICK_HINTS[mode])
+        self.picking_mode = "model"
+        self.form.pbSelectModel.setChecked(True)
+        self.form.pbSelectModel.setText("Click an object")
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
         self.cursor_overridden = True
+
+    def on_select_shape(self):
+        if self._apply_model_selection():
+            Gui.Selection.clearSelection()
+            self.form.pbSelectModel.setChecked(False)
+            self._update_run_button_state()
+        else:
+            self._toggle_pick_mode_model()
 
     def _apply_model_selection(self) -> bool:
         try:
@@ -236,100 +463,25 @@ class TaskSetup:
             App.Console.PrintError(f"Could not use the selected object. {e}\n")
             return False
 
-    def _apply_pull_dir_selection(self) -> bool:
-        try:
-            sel = Gui.Selection.getSelectionEx()
-            if not sel or not sel[0].SubObjects:
-                return False
-
-            sub_obj = sel[0].SubObjects[0]
-            sub_name = sel[0].SubElementNames[0] if sel[0].SubElementNames else ""
-
-            if isinstance(sub_obj, Part.Face):
-                u0, u1, v0, v1 = sub_obj.ParameterRange
-                u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
-                pnt = sub_obj.valueAt(u, v)
-                dir_vec = sub_obj.normalAt(u, v).normalize()
-
-            elif isinstance(sub_obj, Part.Edge):
-                p0, p1 = sub_obj.ParameterRange
-                p_mid = (p0 + p1) * 0.5
-                pnt = sub_obj.valueAt(p_mid)
-                tangent = sub_obj.tangentAt(p_mid)
-                if tangent.Length == 0:
-                    App.Console.PrintError("Selected edge is degenerate.\n")
-                    return False
-                dir_vec = tangent.normalize()
-            else:
-                App.Console.PrintError("Selected element must be a Face or an Edge.\n")
-                return False
-
-            self.pull_dir_pnt = pnt
-            self.pull_dir = gp_Dir(dir_vec.x, dir_vec.y, dir_vec.z)
-            self._pull_dir_ref = sub_name
-            self._pull_dir_flipped = False
-            self.form.lePullDir.setText(sub_name)
-            self.form.pbFlipPullDir.setEnabled(True)
-            self.indicator.show(pnt, dir_vec)
-            return True
-
-        except Exception as e:
-            App.Console.PrintError(f"Visualizing pull direction failed: {e}\n")
-            return False
-
-    def _apply_neutral_plane_selection(self) -> bool:
-        try:
-            sel = Gui.Selection.getSelectionEx()
-            if not sel or not sel[0].SubElementNames:
-                return False
-            face_name = sel[0].SubElementNames[0]
-            face_obj = sel[0].SubObjects[0]
-
-            if not isinstance(face_obj, Part.Face):
-                App.Console.PrintError(f"Selected element '{face_name}' is not a face.\n")
-                return False
-
-            self.neutral_plane_face = freecad_to_ocp(face_obj)
-            self.form.leNPlane.setText(face_name)
-            return True
-        except Exception as e:
-            App.Console.PrintError(f"Selection error: {e}\n")
-            return False
-
-    def on_select_shape(self):
-        if self._apply_model_selection():
-            Gui.Selection.clearSelection()
-            self.form.pbSelectModel.setChecked(False)
-            self._update_run_button_state()
-        else:
-            self._toggle_pick_mode("model", self.form.pbSelectModel)
-
-    def on_select_pull_dir(self):
-        if self._apply_pull_dir_selection():
-            Gui.Selection.clearSelection()
-            self.form.pbPullDir.setChecked(False)
-            self._update_run_button_state()
-        else:
-            self._toggle_pick_mode("pull_dir", self.form.pbPullDir)
-
-    def on_select_neutral_plane(self):
-        if self._apply_neutral_plane_selection():
-            Gui.Selection.clearSelection()
-            self.form.pbNPlane.setChecked(False)
-            self._update_run_button_state()
-        else:
-            self._toggle_pick_mode("neutral_plane", self.form.pbNPlane)
-
-    def on_flip_pull_dir(self):
-        if not self.pull_dir or not self.pull_dir_pnt:
+    def _on_requirement_pick(self, handler: RequirementHandler):
+        """Pick-button handler shared by every dynamic requirement row."""
+        # A second click on the active button cancels picking.
+        if self.picking_mode == handler.requirement:
+            self.picking_mode = None
+            self._reset_picking_ui()
             return
-        self.pull_dir.Reverse()
-        self._pull_dir_flipped = not self._pull_dir_flipped
-        suffix = " (flipped)" if self._pull_dir_flipped else ""
-        self.form.lePullDir.setText(f"{self._pull_dir_ref}{suffix}")
-        dx, dy, dz = self.pull_dir.X(), self.pull_dir.Y(), self.pull_dir.Z()
-        fc_vector = App.Vector(dx, dy, dz)
-        self.indicator.show(self.pull_dir_pnt, fc_vector)
+
+        if handler.apply_selection():
+            Gui.Selection.clearSelection()
+            handler.reset_ui()
+            self._update_run_button_state()
+            return
+
+        self._reset_picking_ui()
+        self.picking_mode = handler.requirement
+        handler.enter_picking_ui()
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
+        self.cursor_overridden = True
 
     def _auto_select_model(self):
         if len(Gui.Selection.getSelection()) > 0:
@@ -337,6 +489,10 @@ class TaskSetup:
                 assert self.target_object is not None
                 Gui.Selection.clearSelection()
                 App.Console.PrintMessage(f"DFM: auto-selected {self.target_object.Label}\n")
+
+    def _remove_all_indicators(self):
+        for handler in self.handlers.values():
+            handler.remove_indicator()
 
     def on_category_changed(self):
         selected_category = self.form.cbManCategory.currentText()
@@ -369,7 +525,7 @@ class TaskSetup:
             self.form.cbMaterial.setPlaceholderText("Select a process first")
             self.form.cbMaterial.setCurrentIndex(-1)
             self.form.cbMaterial.blockSignals(False)
-            self.form.gbOptions.hide()
+            self._update_options_visibility()
             self._update_run_button_state()
             return
 
@@ -388,25 +544,55 @@ class TaskSetup:
         self._update_options_visibility()
         self._update_run_button_state()
 
+    def _clear_options_ui(self):
+        """Recursively delete every widget from gbOptions and detach handlers."""
+        layout = self.form.gbOptions.layout()
+
+        def delete_items(layout_node):
+            if layout_node is not None:
+                while layout_node.count():
+                    item = layout_node.takeAt(0)
+                    widget = item.widget()
+                    if widget is not None:
+                        widget.deleteLater()
+                    else:
+                        delete_items(item.layout())
+
+        delete_items(layout)
+
+        for handler in self.handlers.values():
+            handler.detach()
+
+    def _active_requirements(self) -> list[ProcessRequirement]:
+        """Active requirements that have a handler, in a fixed, stable order."""
+        active = self.get_active_requirements()
+
+        for req in active:
+            if req != ProcessRequirement.NONE and req not in REQUIREMENT_HANDLER_TYPES:
+                App.Console.PrintWarning(
+                    f"DFM: no input handler for requirement '{req.name}'; it will be skipped.\n"
+                )
+
+        return [req for req in REQUIREMENT_HANDLER_TYPES if req in active]
+
     def _update_options_visibility(self):
+        self._clear_options_ui()
         if not self.process:
             self.form.gbOptions.hide()
             return
 
-        requirements = self.get_active_requirements()
-        visible_labels = []
-        for req, widgets in self.requirement_widgets.items():
-            is_needed = req in requirements
-            for widget in widgets:
-                widget.setVisible(is_needed)
-            if is_needed:
-                visible_labels.append(req.name.replace("_", " ").title())
+        active_reqs = self._active_requirements()
+        if not active_reqs:
+            self.form.gbOptions.hide()
+            return
 
-        self.form.gbOptions.setVisible(bool(visible_labels))
-        if len(visible_labels) == 1:
-            self.form.gbOptions.setTitle(visible_labels[0])
-        else:
-            self.form.gbOptions.setTitle("Parameters")
+        layout = self.form.gbOptions.layout()
+        for req in active_reqs:
+            self.handlers[req].build_row(layout, self._on_requirement_pick)
+
+        title = "Parameters" if len(active_reqs) > 1 else self.handlers[active_reqs[0]].label
+        self.form.gbOptions.setTitle(title)
+        self.form.gbOptions.show()
 
     def get_active_requirements(self) -> set[ProcessRequirement]:
         requirements = set()
@@ -436,11 +622,9 @@ class TaskSetup:
             missing.append("material")
 
         if self.process:
-            active_reqs = self.get_active_requirements()
-            if ProcessRequirement.PULL_DIRECTION in active_reqs and not self.pull_dir:
-                missing.append("pull direction")
-            if ProcessRequirement.NEUTRAL_PLANE in active_reqs and self.neutral_plane_face is None:
-                missing.append("neutral plane")
+            for req in self._active_requirements():
+                if not self.handlers[req].is_satisfied():
+                    missing.append(req.name.replace("_", " ").lower())
         return missing
 
     def _update_run_button_state(self):
@@ -475,12 +659,9 @@ class TaskSetup:
         assert self.target_object is not None
         assert self.process is not None
 
-        active_reqs = self.get_active_requirements()
         kwargs = {}
-        if ProcessRequirement.PULL_DIRECTION in active_reqs:
-            kwargs[ProcessRequirement.PULL_DIRECTION.name] = self.pull_dir
-        if ProcessRequirement.NEUTRAL_PLANE in active_reqs:
-            kwargs[ProcessRequirement.NEUTRAL_PLANE.name] = self.neutral_plane_face
+        for req in self._active_requirements():
+            kwargs[req.name] = self.handlers[req].value
 
         self.is_running = True
         self.abort_requested = False
@@ -565,7 +746,7 @@ class TaskSetup:
         view_bridge = DFMViewProvider(self.target_object)
         results_view = TaskResults()
 
-        self.indicator.remove()
+        self._remove_all_indicators()
         try:
             Gui.Selection.removeObserver(self)
         except Exception:
@@ -604,7 +785,7 @@ class TaskSetup:
         if self.is_running:
             self.abort_requested = True
         self._reset_picking_ui()
-        self.indicator.remove()
+        self._remove_all_indicators()
         try:
             Gui.Selection.removeObserver(self)
         except Exception:
@@ -613,7 +794,7 @@ class TaskSetup:
 
     def accept(self):
         self._reset_picking_ui()
-        self.indicator.remove()
+        self._remove_all_indicators()
         try:
             Gui.Selection.removeObserver(self)
         except Exception:

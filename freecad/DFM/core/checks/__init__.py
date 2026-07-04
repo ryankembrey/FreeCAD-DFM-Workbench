@@ -7,3 +7,4 @@ from .thickness_check import MinThicknessCheck, MaxThicknessCheck
 from .undercut_check import UndercutCheck
 from .sharp_internal_corner_check import SharpInternalCornerCheck
 from .sharp_external_corner_check import SharpExternalCornerCheck
+from .overhang_angle_check import OverhangAngleCheck

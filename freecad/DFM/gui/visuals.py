@@ -10,7 +10,9 @@ import FreeCADGui as Gui  # type: ignore
 
 
 class DirectionIndicator:
-    def __init__(self):
+    def __init__(self, color=(1.0, 0.0, 0.0), label=""):
+        self.color = color
+        self.label = label
         self.view_node = None
         self.view_trans = None
         self.scale_node = None
@@ -43,8 +45,8 @@ class DirectionIndicator:
             self.view_node.addChild(db)
 
             mat = coin.SoMaterial()
-            mat.diffuseColor = (1.0, 0.0, 0.0)
-            mat.ambientColor = (1.0, 0.0, 0.0)
+            mat.diffuseColor = self.color
+            mat.ambientColor = self.color
             mat.specularColor = (0.0, 0.0, 0.0)
             mat.shininess = 0.0
             self.view_node.addChild(mat)
@@ -78,6 +80,25 @@ class DirectionIndicator:
 
             arrow_group.addChild(c_trans)
             arrow_group.addChild(cone)
+            self.view_node.addChild(arrow_group)
+
+            if self.label:
+                label_sep = coin.SoSeparator()
+
+                label_trans = coin.SoTransform()
+                label_trans.translation.setValue(0, 32.0, 0)
+                label_sep.addChild(label_trans)
+
+                font = coin.SoFont()
+                font.size.setValue(14.0)
+                label_sep.addChild(font)
+
+                text = coin.SoText2()
+                text.string.setValue(self.label)
+                text.justification.setValue(coin.SoText2.CENTER)
+                label_sep.addChild(text)
+
+                self.view_node.addChild(label_sep)
             self.view_node.addChild(arrow_group)
 
             if hasattr(view, "getSceneGraph"):

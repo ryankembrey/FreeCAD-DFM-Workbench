@@ -62,6 +62,9 @@ class ProcessRequirement(Enum):
     NONE = "NONE"
     PULL_DIRECTION = "PULL_DIRECTION"
     NEUTRAL_PLANE = "NEUTRAL_PLANE"
+    PRINT_ORIENTATION = "PRINT_ORIENTATION"
+    NOZZLE_DIAMETER = "NOZZLE_DIAMETER"
+    LAYER_HEIGHT = "LAYER_HEIGHT"
 
     @classmethod
     def from_str(cls, label: str):

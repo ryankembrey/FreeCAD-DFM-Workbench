@@ -36,6 +36,7 @@ class BaseCheck(ABC):
         rule_config: RuleLimit,
         rule: Rulebook,
         feedback: RuleFeedback,
+        **kwargs,
     ) -> list[CheckResult]:
         pass
 

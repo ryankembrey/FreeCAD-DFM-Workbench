@@ -12,15 +12,15 @@ from ...core.rules import Rulebook
 from ...core.registries import register_check
 
 
-@register_check(Rulebook.MIN_DRAFT_ANGLE)
-class DraftAngleCheck(BaseCheck):
+@register_check(Rulebook.MAX_OVERHANG_ANGLE)
+class OverhangAngleCheck(BaseCheck):
     @property
     def name(self) -> str:
-        return "Draft Checker"
+        return "Overhang Angle Checker"
 
     @property
     def required_analyzer_id(self) -> str:
-        return "DRAFT_ANALYZER"
+        return "OVERHANG_ANALYZER"
 
     def run_check(
         self,
@@ -43,40 +43,33 @@ class DraftAngleCheck(BaseCheck):
         fb = feedback or RuleFeedback()
 
         for face, measured in analysis_data_map.items():
-            if math.isclose(abs(measured), 90.0, abs_tol=tolerance):
-                continue
-
             severity: Optional[Severity] = None
             template = ""
-
-            if limit is not None and measured < (limit - tolerance):
+            if limit is not None and measured > (limit + tolerance):
                 severity = Severity.ERROR
                 template = fb.error_msg
-            elif target is not None and measured < (target - tolerance):
+            elif target is not None and measured > (target + tolerance):
                 severity = Severity.WARNING
                 template = fb.warning_msg
             else:
                 continue
-
             effective_limit = limit if limit is not None else 0.0
             effective_target = target if target is not None else 0.0
             formatted_msg = self.format_feedback(
                 template, measured, effective_target, effective_limit, unit
             )
-
             threshold = effective_limit if severity == Severity.ERROR else effective_target
-
             results.append(
                 CheckResult(
                     rule_id=rule,
-                    overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}",
+                    overview=f"{measured:.2f}{unit} > {threshold:.2f}{unit}",
                     message=formatted_msg,
                     severity=severity,
                     failing_geometry=[face],
                     ignore=False,
                     value=round(float(measured), 4),
                     limit=float(effective_limit),
-                    comparison="<",
+                    comparison=">",
                     unit=unit,
                 )
             )

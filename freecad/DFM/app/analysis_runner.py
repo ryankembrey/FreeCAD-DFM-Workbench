@@ -118,6 +118,7 @@ class AnalysisRunner:
                 current_step,
                 total_steps,
                 progress_cb,
+                **kwargs,
             )
 
             if timing:
@@ -220,6 +221,7 @@ class AnalysisRunner:
         current_step: int,
         total_steps: int,
         progress_cb: ProgressCallback,
+        **kwargs,
     ) -> list[CheckResult]:
         """Run a single check against cached analyzer data and return its results."""
         analysis_data = self.analyzer_cache[check_instance.required_analyzer_id]
@@ -230,7 +232,11 @@ class AnalysisRunner:
 
         try:
             return check_instance.run_check(
-                analysis_data, rule_config, rule_id, feedback=feedback_templates
+                analysis_data,
+                rule_config,
+                rule_id,
+                feedback=feedback_templates,
+                **kwargs,
             )
         except Exception as e:
             App.Console.PrintError(f"Error in {rule_id.name}: {e}\n")
