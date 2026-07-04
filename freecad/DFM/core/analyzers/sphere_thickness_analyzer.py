@@ -270,7 +270,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                         other_face = TopoDS.Face_s(self.dist_tool.SupportOnShape2(i))
                         if not other_face.IsSame(origin_face):
                             u_other, v_other = self.dist_tool.ParOnFaceS2(i)
-                            other_idx = self.face_index.index_of(origin_face)
+                            other_idx = self.face_index.index_of(other_face)
                             self.face_seeds[other_idx].append((u_other, v_other, thickness))
 
         return thickness
