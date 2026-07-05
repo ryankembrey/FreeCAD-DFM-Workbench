@@ -10,7 +10,7 @@ This workbench is in early development and your feedback shapes it. If
 something looks wrong, behaves unexpectedly, or a feature would help your
 workflow, please open an issue!
 
-![DFM Workbench](https://raw.githubusercontent.com/ryankembrey/FreeCAD-DFM-Workbench/refs/heads/main/.github/images/sharp_internal.png)
+![DFM Workbench](https://raw.githubusercontent.com/ryankembrey/FreeCAD-DFM-Workbench/refs/heads/main/.github/images/overview.png)
 
 ---
 

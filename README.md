@@ -6,7 +6,7 @@
 A FreeCAD workbench that analyses 3D models for Design for Manufacturing (DFM)
 issues, helping designers catch problems before they reach the factory.
 
-![DFM Workbench](.github/images/sharp_internal.png)
+![DFM Workbench](.github/images/overview.png)
 
 ## Features
 
@@ -25,8 +25,6 @@ materials are fully configurable to support any manufacturing workflow.
 - [x] **Customisation:** add manufacturing processes and edit materials
 - [x] **Export:** analysis results exportable to CSV
 
-More coming soon! Visit the [projects page](https://github.com/users/ryankembrey/projects/1) to see what is around the corner.
-
 ## Installation
 
 Install directly from the **FreeCAD Addon Manager**.
@@ -41,12 +39,10 @@ Install directly from the **FreeCAD Addon Manager**.
 
 </div>
 
-## Screenshots
+## Process Library
 
 <p align="center">
-  <img src=".github/images/undercut_detected.png" alt="Undercut Detection" width="80%"/>
-  <img src=".github/images/process_library2.png" alt="Process Library" width="80%"/>
-  <img src=".github/images/history_diff.png" alt="History Diffing" width="80%"/>
+  <img src=".github/images/process_library.png" alt="Process Library" width="80%"/>
 </p>
 
 ## Contributing
