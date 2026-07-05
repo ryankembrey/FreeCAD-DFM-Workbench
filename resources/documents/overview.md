@@ -36,3 +36,6 @@ and materials are fully configurable for any manufacturing workflow.
 - FreeCAD 1.1+ - Officially supported
 - FreeCAD 1.0  - Should work, not tested
 - FreeCAD 0.x  - Not supported
+
+![Process Library](https://raw.githubusercontent.com/ryankembrey/FreeCAD-DFM-Workbench/refs/heads/main/.github/images/process_library.png)
+
