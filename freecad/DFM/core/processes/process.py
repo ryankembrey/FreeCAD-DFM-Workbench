@@ -15,6 +15,8 @@ class RuleLimit:
     target: str = ""
     limit: str = ""
     binary_severity: Optional[str] = "ERROR"
+    min_value: str = ""
+    max_value: str = ""
 
     @classmethod
     def from_dict(cls, data: dict):
