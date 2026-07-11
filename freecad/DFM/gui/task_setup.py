@@ -486,7 +486,6 @@ class TaskSetup:
         self.abort_requested = False
         self.form.pbRunAnalysis.hide()
         self.form.lProgress.setText("Starting analysis")
-        self.form.progressBar.setValue(0)
         self.form.pbAbort.setText("Abort")
         self.form.pbAbort.setEnabled(True)
         self.form.gbAnalysis.show()
