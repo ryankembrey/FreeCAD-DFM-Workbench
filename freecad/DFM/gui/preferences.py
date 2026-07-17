@@ -354,18 +354,6 @@ class BridgeSpanPanel(AnalyzerPanel):
         FieldGroup(
             "Algorithm Settings",
             [
-                FloatField(
-                    "BridgeProbeDepth",
-                    "Wall probe depth",
-                    default=0.5,
-                    min=0.01,
-                    max=10.0,
-                    step=0.05,
-                    suffix=" mm",
-                    tooltip="How far beneath an edge to look for material when deciding whether "
-                    "it rests on a wall. Must stay well above the classifier tolerance, and "
-                    "below the height of the shallowest wall you expect to detect.",
-                ),
                 ToleranceField(
                     "BridgeClassifierTol",
                     "Solid classifier tolerance",

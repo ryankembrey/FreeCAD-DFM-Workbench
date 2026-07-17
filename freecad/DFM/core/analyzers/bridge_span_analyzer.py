@@ -59,7 +59,7 @@ class BridgeSpanAnalyzer(BaseAnalyzer):
     def resolve_prefs(self, prefs: dict) -> None:
         self.horizontal_tolerance_deg = prefs.get("BridgeHorizontalTolerance", 1.0)
         self.bed_tolerance = prefs.get("BridgeBedTolerance", 0.5)
-        self.probe_depth = prefs.get("BridgeProbeDepth", 0.5)
+        self.probe_depth = 0.01  # mm
         self.classifier_tol = prefs.get("BridgeClassifierTol", 1e-6)
 
     def execute(
