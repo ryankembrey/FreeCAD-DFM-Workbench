@@ -2,10 +2,16 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-from .draft_angle_check import DraftAngleCheck
-from .thickness_check import MinThicknessCheck, MaxThicknessCheck
-from .undercut_check import UndercutCheck
-from .sharp_internal_corner_check import SharpInternalCornerCheck
-from .sharp_external_corner_check import SharpExternalCornerCheck
-from .overhang_angle_check import OverhangAngleCheck
-from .bridge_span_check import BridgeSpanCheck
+"""Imports every check module so its @register_check decorator runs."""
+
+import importlib
+import pkgutil
+
+
+def _import_submodules() -> None:
+    for _, name, _ in pkgutil.iter_modules(__path__):
+        if not name.startswith("_"):
+            importlib.import_module(f".{name}", __name__)
+
+
+_import_submodules()

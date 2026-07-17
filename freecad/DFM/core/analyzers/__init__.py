@@ -2,10 +2,16 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-from .draft_analyzer import DraftAnalyzer
-from .ray_thickness_analyzer import RayThicknessAnalyzer
-from .sphere_thickness_analyzer import SphereThicknessAnalyzer
-from .undercut_analyzer import UndercutAnalyzer
-from .sharp_corners import SharpCornersAnalyzer
-from .overhang_analyzer import OverhangAnalyzer
-from .bridge_span_analyzer import BridgeSpanAnalyzer
+"""Imports every analyzer module so its @register_analyzer decorator runs."""
+
+import importlib
+import pkgutil
+
+
+def _import_submodules() -> None:
+    for _, name, _ in pkgutil.iter_modules(__path__):
+        if not name.startswith("_"):
+            importlib.import_module(f".{name}", __name__)
+
+
+_import_submodules()
