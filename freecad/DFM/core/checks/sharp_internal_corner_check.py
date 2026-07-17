@@ -29,6 +29,7 @@ class SharpInternalCornerCheck(BaseCheck):
         rule_config: RuleLimit,
         rule: Rulebook,
         feedback: Optional[RuleFeedback] = None,
+        **kwargs,
     ) -> list[CheckResult]:
         tolerance = 1e-4
         results: list[CheckResult] = []

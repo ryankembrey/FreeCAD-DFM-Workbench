@@ -29,6 +29,7 @@ class SharpExternalCornerCheck(BaseCheck):
         rule_config: RuleLimit,
         rule: Rulebook,
         feedback: Optional[RuleFeedback] = None,
+        **kwargs,
     ) -> list[CheckResult]:
         results: list[CheckResult] = []
 
