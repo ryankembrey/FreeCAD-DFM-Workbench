@@ -10,8 +10,10 @@ from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepGProp import BRepGProp
 from OCP.Bnd import Bnd_Box
 from OCP.BRepTopAdaptor import BRepTopAdaptor_FClass2d
+from OCP.Geom import Geom_Surface
+from OCP.GeomLib import GeomLib_IsPlanarSurface
 from OCP.GeomLProp import GeomLProp_SLProps
-from OCP.gp import gp_Dir, gp_Pnt, gp_Pnt2d
+from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Pnt2d, gp_Trsf, gp_Vec
 from OCP.GProp import GProp_GProps
 from OCP.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
 from OCP.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS, TopoDS_Edge
@@ -19,11 +21,16 @@ from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCP.TopTools import TopTools_IndexedMapOfShape
 from OCP.TopExp import TopExp
 
+from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
+
 
 class FaceIndex:
     def __init__(self, shape: TopoDS_Shape):
         self._map = TopTools_IndexedMapOfShape()
         TopExp.MapShapes_s(shape, TopAbs_FACE, self._map)
+
+    def key_of(self, face: TopoDS_Face) -> tuple[str, int]:
+        return ("Face", self.index_of(face))
 
     def index_of(self, face: TopoDS_Face) -> int:
         return self._map.FindIndex(face)
@@ -43,6 +50,9 @@ class EdgeIndex:
     def __init__(self, shape: TopoDS_Shape):
         self._map = TopTools_IndexedMapOfShape()
         TopExp.MapShapes_s(shape, TopAbs_EDGE, self._map)
+
+    def key_of(self, edge: TopoDS_Edge) -> tuple[str, int]:
+        return ("Edge", self.index_of(edge))
 
     def index_of(self, face: TopoDS_Edge) -> int:
         return self._map.FindIndex(face)
@@ -85,6 +95,17 @@ def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> Optional[gp_Dir
             norm.Reverse()
 
         return norm
+
+
+def is_flat(target: TopoDS_Face | Geom_Surface, tolerance: float = 1e-6) -> bool:
+    """
+    Checks if a face or surface is geometrically planar.
+
+    This is not the same as testing GetType() == GeomAbs_Plane. A surface can be
+    but be represented with bsplines instead of a GeomAbs_Plane.
+    """
+    surface = BRep_Tool.Surface_s(target) if isinstance(target, TopoDS_Face) else target
+    return GeomLib_IsPlanarSurface(surface, tolerance).IsPlanar()
 
 
 def get_adaptive_sample_count(face: TopoDS_Face, min_samples: int, max_samples: int) -> int:
@@ -302,3 +323,35 @@ def optimize_face_uv_search(
                 break
 
     return current_best_uv, current_max_val, improvements
+
+
+def get_extent_along(shape: TopoDS_Shape, direction: gp_Dir) -> tuple[float, float]:
+    """Returns (min, max) of a shape's extent along an arbitrary direction.
+
+    Rotates the shape so `direction` becomes the global Z axis, then reads the
+    bounding box. Handles curved geometry correctly, unlike projecting vertices,
+    which misses the extremes of an arc.
+    """
+    if direction.IsEqual(gp_Dir(0, 0, 1), 1e-4):
+        moved = shape
+    else:
+        trsf = gp_Trsf()
+        trsf.SetTransformation(
+            gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)),
+            gp_Ax3(gp_Pnt(0, 0, 0), direction),
+        )
+        moved = BRepBuilderAPI_Transform(shape, trsf, True).Shape()
+
+    bbox = Bnd_Box()
+    BRepBndLib.AddOptimal_s(moved, bbox)
+    _, _, zmin, _, _, zmax = bbox.Get()
+    return zmin, zmax
+
+
+def project_onto(pnt: gp_Pnt, direction: gp_Dir) -> float:
+    """Coordinate of a point along an arbitrary axis through the origin."""
+    return gp_Vec(pnt.XYZ()).Dot(gp_Vec(direction))
+
+
+def calculate_bed_height(shape, print_orientation: gp_Dir) -> float:
+    return get_extent_along(shape, print_orientation)[0]

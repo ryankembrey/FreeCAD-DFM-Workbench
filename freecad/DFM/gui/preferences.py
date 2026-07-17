@@ -333,6 +333,53 @@ class RayThicknessPanel(AnalyzerPanel):
 # =============================================================================
 
 
+class BridgeSpanPanel(AnalyzerPanel):
+    title = "Bridge Span"
+    groups = [
+        FieldGroup(
+            "Detection Settings",
+            [
+                FloatField(
+                    "BridgeBedTolerance",
+                    "Bed contact tolerance",
+                    default=0.5,
+                    max=5.0,
+                    step=0.05,
+                    suffix=" mm",
+                    tooltip="How close to the lowest point of the model a face must sit to be "
+                    "considered resting on the bed, and so exempt from bridging.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Algorithm Settings",
+            [
+                FloatField(
+                    "BridgeProbeDepth",
+                    "Wall probe depth",
+                    default=0.5,
+                    min=0.01,
+                    max=10.0,
+                    step=0.05,
+                    suffix=" mm",
+                    tooltip="How far beneath an edge to look for material when deciding whether "
+                    "it rests on a wall. Must stay well above the classifier tolerance, and "
+                    "below the height of the shallowest wall you expect to detect.",
+                ),
+                ToleranceField(
+                    "BridgeClassifierTol",
+                    "Solid classifier tolerance",
+                    default=1e-6,
+                    tooltip="Sets the tolerance of the inside/outside test used to find walls.",
+                ),
+            ],
+        ),
+    ]
+
+
+# =============================================================================
+
+
 class DFMPreferencesGeneral:
     DEFAULT_PRINT_TIMING_REPORT = False
 
@@ -381,6 +428,7 @@ class DFMPreferencesAnalyzers:
 
         self._register(SphereThicknessPanel())
         self._register(RayThicknessPanel())
+        self._register(BridgeSpanPanel())
 
         self.combo.currentIndexChanged.connect(self.stack.setCurrentIndex)
 

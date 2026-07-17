@@ -106,6 +106,14 @@ class Rulebook(Enum):
         field_labels=("Aim for", "At most"),
         description="Maximum unsupported surface angle relative to the print orientation.",
     )
+    MAX_BRIDGE_SPAN = RuleType(
+        "Maximum Bridge Span",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="max",
+        field_labels=("Aim for", "At most"),
+        description="Maximum unsupported horizontal span between two supported regions.",
+    )
 
     @property
     def id(self) -> str:
