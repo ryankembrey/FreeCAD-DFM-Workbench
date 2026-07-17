@@ -9,11 +9,8 @@ import FreeCAD as App  # type: ignore
 
 from OCP.TopoDS import TopoDS_Shape, TopoDS_Face
 from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.gp import gp_Dir, gp_Pnt, gp_Vec, gp_Trsf, gp_Ax3
+from OCP.gp import gp_Dir, gp_Vec
 from OCP.GeomAbs import GeomAbs_Plane
-from OCP.Bnd import Bnd_Box
-from OCP.BRepBndLib import BRepBndLib
-from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 
 from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.models import ProcessRequirement
@@ -21,6 +18,7 @@ from ...core.registries import register_analyzer
 from ...core.utils.geometry import (
     EdgeIndex,
     FaceIndex,
+    calculate_bed_height,
     get_face_uv_center,
     get_face_uv_normal,
     yield_face_uv_grid,
@@ -63,38 +61,15 @@ class OverhangAnalyzer(BaseAnalyzer):
         self.samples = kwargs.get("samples", 15)
         self.face_index = face_index
 
-        self.bed_height = self._calculate_bed_height(shape)
+        self.bed_height = calculate_bed_height(shape, self.print_orientation)
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
             overhang = self._get_overhang_for_face(face)
             if overhang is not None and overhang > 0.0:
-                results[("Face", face_index.index_of(face))] = overhang
+                results[self.face_index.key_of(face)] = overhang
 
         return results
-
-    def _calculate_bed_height(self, shape: TopoDS_Shape) -> float:
-        """Finds the true minimum coordinate of the shape along the print axis."""
-
-        if self.print_orientation.IsEqual(gp_Dir(0, 0, 1), 1e-4):
-            bbox = Bnd_Box()
-            BRepBndLib.Add_s(shape, bbox)
-            return bbox.Get()[2]  # zmin
-
-        global_cs = gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1))
-        local_cs = gp_Ax3(gp_Pnt(0, 0, 0), self.print_orientation)
-
-        trsf = gp_Trsf()
-        trsf.SetTransformation(global_cs, local_cs)
-
-        transformer = BRepBuilderAPI_Transform(shape, trsf, True)
-        transformed_shape = transformer.Shape()
-
-        bbox = Bnd_Box()
-        BRepBndLib.Add_s(transformed_shape, bbox)
-
-        _, _, zmin, _, _, _ = bbox.Get()
-        return zmin
 
     def _is_on_bed(self, surface: BRepAdaptor_Surface, u: float, v: float) -> bool:
         """Checks if a specific UV point on a face is touching the print bed."""
@@ -134,4 +109,4 @@ class OverhangAnalyzer(BaseAnalyzer):
         angle_deg = math.degrees(self.print_orientation.Angle(normal_dir))
         if angle_deg <= 90.0:
             return 0.0
-        return angle_deg - 90.0
+        return angle_deg
