@@ -7,6 +7,7 @@ import FreeCADGui as Gui  # type: ignore
 from .gui import task_setup, task_show_normals, process_library
 from .gui import preferences
 from .gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers
+from .gui import tools as _dfm_contour_tools
 
 
 class DFMWorkbench(Gui.Workbench):
@@ -22,12 +23,11 @@ class DFMWorkbench(Gui.Workbench):
         self.list = [
             "DFM_SetupAnalysis",
             "DFM_ProcessLibrary",
+            "DFM_DraftContour",
+            "DFM_ClearContour",
         ]
-        self.appendToolbar("DFM Tools", self.list)
-        self.appendMenu("DFM", self.list)  # creates a new menu
-        # self.appendMenu(
-        #     ["An existing Menu", "My submenu"], self.list
-        # )  # appends a submenu to an existing menu
+        self.appendToolbar("DFM Analysis", self.list)
+        self.appendMenu("DFM", self.list)
 
     def Activated(self):
         """This function is executed whenever the workbench is activated"""
