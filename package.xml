@@ -6,8 +6,8 @@
     <!-- Versions -->
     <freecadmin>1.1.0</freecadmin>
     <pythonmin>3.11</pythonmin>
-    <version>0.1.14</version>
-    <date>2026-07-17</date>
+    <version>0.1.15</version>
+    <date>2026-07-29</date>
 
     <!-- Info -->
     <name>DFM</name>
@@ -32,6 +32,7 @@
 
     <!-- Dependencies -->
     <depend type="python">cadquery-ocp</depend>
+    <depend type="python">gmsh</depend>
 
     <!-- Urls -->
     <url type="repository" branch="main">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>
