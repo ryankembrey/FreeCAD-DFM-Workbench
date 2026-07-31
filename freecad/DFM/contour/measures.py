@@ -2,13 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Contour measures: turn a UniformMesh into a per-triangle scalar field.
-
-A ContourMeasure is the one piece each contour tool provides. The shared task
-panel reads its metadata (label, unit, colormap, range, whether it needs a pull
-direction) to build the UI, and calls measure() to compute the values. Draft is
-implemented here; a thickness measure will subclass the same interface.
-"""
+"""Contour measures: turn a UniformMesh into a per-triangle scalar field."""
 
 import math
 
@@ -25,6 +19,19 @@ class BoolOption:
         self.tooltip = tooltip
 
 
+class ChoiceOption:
+    """A pick-one option a measure exposes to the panel as a dropdown."""
+
+    def __init__(self, id, label, choices, default=None, tooltip=""):
+        self.id = id
+        self.label = label
+        self.choices = list(choices)
+        self.default = (
+            default if default is not None else (self.choices[0] if self.choices else None)
+        )
+        self.tooltip = tooltip
+
+
 class ContourMeasure:
     """Base interface for a per-triangle scalar field."""
 
@@ -33,10 +40,13 @@ class ContourMeasure:
     unit = ""
     default_colormap = "Turbo"
     default_range = (-1.0, 1.0)
+    # Spin-box step and decimals for the range control (per unit).
     range_step = 1.0
     range_decimals = 0
+    # Fixed domain shown on the legend, or None to use the data's own min/max.
     range_limits = None
     needs_pull_direction = False
+    # Optional on/off toggles (list of BoolOption) rendered by the panel.
     options = []
 
     def value_limits(self, opts):
@@ -54,6 +64,9 @@ class ContourMeasure:
         """Return (values, normals): one scalar and one outward unit normal per
         triangle. Normals are used for the overlay's lighting."""
         raise NotImplementedError
+
+
+# --- geometry helpers (shared by measures that need outward orientation) ------
 
 
 def triangle_normal(vertices, tri):
@@ -156,6 +169,9 @@ def outward_normals(shape, mesh):
     return normals
 
 
+# --- draft --------------------------------------------------------------------
+
+
 def draft_angle_for_normal(nx, ny, nz, pull) -> float:
     """Signed draft in degrees: 0 = vertical wall, +90 = normal along pull,
     -90 = normal against pull."""
@@ -208,6 +224,85 @@ class DraftMeasure(ContourMeasure):
             v = draft_angle_for_normal(nx, ny, nz, pull)
             values.append(abs(v) if magnitude else v)
             if progress_cb and (idx & 0x1FFF) == 0:
+                progress_cb(idx, n_tri)
+        if progress_cb:
+            progress_cb(n_tri, n_tri)
+        return values, normals
+
+
+def _triangle_centroid(vertices, tri):
+    a, b, c = tri
+    ax, ay, az = vertices[a]
+    bx, by, bz = vertices[b]
+    cx, cy, cz = vertices[c]
+    return ((ax + bx + cx) / 3.0, (ay + by + cy) / 3.0, (az + bz + cz) / 3.0)
+
+
+def _triangle_scale(vertices, tri):
+    """Mean edge length: a safe outward margin that clears the facet's sag."""
+    a, b, c = tri
+    pa, pb, pc = vertices[a], vertices[b], vertices[c]
+
+    def d(p, q):
+        return math.sqrt((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2)
+
+    return (d(pa, pb) + d(pb, pc) + d(pc, pa)) / 3.0
+
+
+class ThicknessMeasure(ContourMeasure):
+    id = "thickness"
+    label = "Thickness"
+    unit = "mm"
+    default_colormap = "Turbo"
+    default_range = None  # auto: taken from the data's own min/max
+    range_limits = None
+    range_step = 0.5
+    range_decimals = 2
+    needs_pull_direction = False
+    options = [
+        ChoiceOption(
+            "method",
+            "Method",
+            ["Rays (faster)", "Shrinking Sphere (slower)"],
+            "Rays (faster)",
+            "Rays are fast; the shrinking sphere is slower but more robust in "
+            "tight or angled regions.",
+        )
+    ]
+
+    def measure(self, shape, mesh, pull=None, options=None, progress_cb=None, check_abort=None):
+        options = options or {}
+        method = options.get("method", "Rays")
+
+        # Outward normals give lighting and the inward measurement direction.
+        normals = outward_normals(shape, mesh)
+
+        try:
+            from ..core.utils.conversion import freecad_to_ocp
+            from .thickness_backend import make_backend
+
+            ocp_shape = freecad_to_ocp(shape)
+            backend = make_backend(method, ocp_shape)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Thickness analysis needs OCP and the FreeCAD-to-OCP conversion. {exc}"
+            )
+
+        vertices = mesh.vertices
+        triangles = mesh.triangles
+        n_tri = len(triangles)
+        values = []
+        for idx, tri in enumerate(triangles):
+            if check_abort and (idx & 0x3FF) == 0 and check_abort():
+                break
+            centroid = _triangle_centroid(vertices, tri)
+            margin = _triangle_scale(vertices, tri)
+            try:
+                thickness = backend.at(centroid, normals[idx], margin)
+            except Exception:
+                thickness = 0.0
+            values.append(thickness)
+            if progress_cb and (idx & 0xFF) == 0:
                 progress_cb(idx, n_tri)
         if progress_cb:
             progress_cb(n_tri, n_tri)

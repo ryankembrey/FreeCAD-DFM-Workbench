@@ -6,25 +6,26 @@
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from ..contour.scene import clear_all
+from ..contour.panel import ContourTaskPanel
+from ...contour.measures import DraftMeasure
 
-_ICON = ":/icons/dfm_clear_contour.svg"
+_ICON = ":/icons/dfm_draft_contour.svg"
 
 
-class ClearContourCommand:
+class DraftAnalysisCommand:
     def GetResources(self):
         return {
             # "Pixmap": _ICON,
-            "MenuText": "Clear Contour",
-            "ToolTip": "Remove any contour overlay from the view.",
+            "MenuText": "Draft Analysis",
+            "ToolTip": "Color the model by draft angle on a uniform mesh.",
         }
 
     def Activated(self):
-        clear_all()
+        Gui.Control.showDialog(ContourTaskPanel(DraftMeasure(), "Draft Analysis", _ICON))
 
     def IsActive(self):
         return App.ActiveDocument is not None
 
 
 if App.GuiUp:
-    Gui.addCommand("DFM_ClearContour", ClearContourCommand())
+    Gui.addCommand("DFM_DraftAnalysis", DraftAnalysisCommand())

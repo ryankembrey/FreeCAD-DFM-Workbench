@@ -23,8 +23,8 @@ class DFMWorkbench(Gui.Workbench):
         self.list = [
             "DFM_SetupAnalysis",
             "DFM_ProcessLibrary",
-            "DFM_DraftContour",
-            "DFM_ClearContour",
+            "DFM_DraftAnalysis",
+            "DFM_ThicknessAnalysis",
         ]
         self.appendToolbar("DFM Analysis", self.list)
         self.appendMenu("DFM", self.list)

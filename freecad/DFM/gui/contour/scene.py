@@ -64,7 +64,7 @@ class ContourNode:
     def __init__(self, target_object):
         self.target_object = target_object
         self._sep = None
-        self._chunks = []
+        self._chunks = []  # [{'material':..., 'values':[...]}]
         self._name_to_chunk = {}
         self._view = None
         self._original_visibility = None
@@ -194,6 +194,17 @@ class ContourNode:
 _ACTIVE_CONTOURS = []
 
 
+def build_scene(
+    vertices, triangles, values, normals, vmin, vmax, colormap=DEFAULT_COLORMAP, band_step=0.0
+):
+    """Build a standalone contour separator (for a view provider to own).
+
+    Unlike ContourNode.attach(), this does not touch the live scene graph.
+    """
+    node = ContourNode(None)
+    return node.build(vertices, triangles, values, normals, vmin, vmax, colormap, band_step)
+
+
 def register(node: ContourNode):
     _ACTIVE_CONTOURS.append(node)
 
@@ -201,3 +212,4 @@ def register(node: ContourNode):
 def clear_all():
     while _ACTIVE_CONTOURS:
         _ACTIVE_CONTOURS.pop().remove()
+    App.Console.PrintMessage("DFM contour: cleared.\n")

@@ -2,5 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-from . import draft_contour  # noqa: F401
-from . import clear_contour  # noqa: F401
+
+from . import draft_analysis  # noqa: F401
+from . import thickness_analysis  # noqa: F401

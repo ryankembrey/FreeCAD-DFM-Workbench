@@ -2,6 +2,12 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+"""Base task panel shared by every contour tool.
+
+A tool is just a ContourMeasure plus a title and icon; this panel reads the
+measure's metadata to build the UI (adding a pull-direction picker only when the
+measure needs one) and drives meshing, measuring, the coin overlay, the
+interactive legend, and the hover readout."""
 
 from typing import Optional
 import time
@@ -23,10 +29,12 @@ except Exception:
 
 from ...contour.meshing import generate_uniform_mesh
 from ...contour.colormap import COLORMAPS
+from ...contour.measures import BoolOption, ChoiceOption
 
 from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend
 from .resolution import ResolutionField
+from . import document  # noqa: F401
 
 
 PICK_BUTTON_STYLE = """
@@ -55,10 +63,13 @@ class _EscapeFilter(QtCore.QObject):
 
 
 class ContourTaskPanel:
-    def __init__(self, measure, title, icon=":/icons/dfm_analysis.svg"):
+    def __init__(self, measure, title, icon=":/icons/dfm_analysis.svg", analysis_obj=None):
         self.measure = measure
         self._title = title
         self._icon = icon
+        self._analysis_obj = analysis_obj
+        self._saved = False
+        self._auto_range = False
 
         self.target_object = None
         self.target_shape = None
@@ -92,7 +103,10 @@ class ContourTaskPanel:
         Gui.Selection.addObserver(self)
         self._escape_filter = _EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
-        self._auto_select()
+        if self._analysis_obj is not None:
+            self._load_from_object(self._analysis_obj)
+        else:
+            self._auto_select()
         self._update_generate_state()
 
     def _grid(self, box):
@@ -103,6 +117,18 @@ class ContourTaskPanel:
         g.setColumnStretch(0, 1)
         g.setColumnStretch(1, 1)
         return g
+
+    @staticmethod
+    def _compact_combo(combo):
+        """Stop a combo's longest item from dictating column width, so the two
+        grid columns can share space evenly."""
+        combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        combo.setMinimumContentsLength(6)
+        combo.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
 
     def _build_form(self):
         self.form = QtWidgets.QWidget()
@@ -129,6 +155,7 @@ class ContourTaskPanel:
         og.addWidget(self.le_object, 0, 1)
         root.addWidget(obj_box)
 
+        # Pull direction (only if the measure needs it)
         if self.measure.needs_pull_direction:
             pull_box = QtWidgets.QGroupBox("Pull Direction")
             pg = self._grid(pull_box)
@@ -167,6 +194,36 @@ class ContourTaskPanel:
         else:
             self.pb_pull = None
 
+        # Options (measure-specific, e.g. thickness method): above Contour.
+        if self.measure.options:
+            opt_box = QtWidgets.QGroupBox("Options")
+            og2 = self._grid(opt_box)
+            orow = 0
+            for opt in self.measure.options:
+                if isinstance(opt, ChoiceOption):
+                    og2.addWidget(QtWidgets.QLabel(opt.label), orow, 0)
+                    combo = QtWidgets.QComboBox()
+                    combo.addItems(opt.choices)
+                    if opt.default in opt.choices:
+                        combo.setCurrentText(opt.default)
+                    if opt.tooltip:
+                        combo.setToolTip(opt.tooltip)
+                    self._compact_combo(combo)
+                    combo.currentIndexChanged.connect(self._on_option_changed)
+                    og2.addWidget(combo, orow, 1)
+                    self._option_widgets[opt.id] = combo
+                else:
+                    cb = QtWidgets.QCheckBox(opt.label)
+                    cb.setChecked(opt.default)
+                    if opt.tooltip:
+                        cb.setToolTip(opt.tooltip)
+                    cb.toggled.connect(self._on_option_changed)
+                    og2.addWidget(cb, orow, 0, 1, 2)
+                    self._option_widgets[opt.id] = cb
+                orow += 1
+            root.addWidget(opt_box)
+
+        # Contour
         cont_box = QtWidgets.QGroupBox("Contour")
         cg = self._grid(cont_box)
         cg.addWidget(QtWidgets.QLabel("Resolution"), 0, 0)
@@ -178,6 +235,7 @@ class ContourTaskPanel:
         self.cb_colormap = QtWidgets.QComboBox()
         self.cb_colormap.addItems(list(COLORMAPS.keys()))
         self.cb_colormap.setCurrentText(self.measure.default_colormap)
+        self._compact_combo(self.cb_colormap)
         self.cb_colormap.currentIndexChanged.connect(self._on_style_changed)
         cg.addWidget(self.cb_colormap, 1, 1)
 
@@ -198,6 +256,9 @@ class ContourTaskPanel:
                 sb.setSuffix(f" {self.measure.unit}")
             sb.setValue(val)
             sb.setToolTip("Set the color range. Also adjustable by dragging the legend ends.")
+            sb.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+            )
             sb.valueChanged.connect(self._on_range_spin)
         range_row.addWidget(self.sb_range_lo, 1)
         range_row.addWidget(QtWidgets.QLabel("to"), 0)
@@ -210,19 +271,9 @@ class ContourTaskPanel:
         self.cb_bands = QtWidgets.QComboBox()
         self.cb_bands.addItems(list(_BAND_STEPS.keys()))
         self.cb_bands.setToolTip("Quantize colors into fixed steps of the measured value.")
+        self._compact_combo(self.cb_bands)
         self.cb_bands.currentIndexChanged.connect(self._on_style_changed)
         cg.addWidget(self.cb_bands, 3, 1)
-
-        option_row = 4
-        for opt in self.measure.options:
-            cb = QtWidgets.QCheckBox(opt.label)
-            cb.setChecked(opt.default)
-            if opt.tooltip:
-                cb.setToolTip(opt.tooltip)
-            cb.toggled.connect(self._on_option_changed)
-            cg.addWidget(cb, option_row, 0, 1, 2)
-            self._option_widgets[opt.id] = cb
-            option_row += 1
         root.addWidget(cont_box)
 
         row = QtWidgets.QHBoxLayout()
@@ -389,19 +440,27 @@ class ContourTaskPanel:
         return _BAND_STEPS.get(self.cb_bands.currentText(), 0.0)
 
     def _options(self):
-        return {oid: cb.isChecked() for oid, cb in self._option_widgets.items()}
+        out = {}
+        for oid, w in self._option_widgets.items():
+            if isinstance(w, QtWidgets.QComboBox):
+                out[oid] = w.currentText()
+            else:
+                out[oid] = w.isChecked()
+        return out
 
     def _on_option_changed(self, _checked=False):
         opts = self._options()
         lim = self.measure.value_limits(opts) or (-1.0e6, 1.0e6)
-        rng = self.measure.initial_range(opts) or lim
         for sb in (self.sb_range_lo, self.sb_range_hi):
             sb.blockSignals(True)
             sb.setRange(lim[0], lim[1])
             sb.blockSignals(False)
-        self._set_range_spins(rng[0], rng[1])
-        if self._mesh is not None:
-            self._mark_dirty()
+        rng = self.measure.initial_range(opts)
+        if rng is not None:
+            self._set_range_spins(rng[0], rng[1])
+        # Auto-ranged measures (rng is None) keep their current spin values;
+        # a regenerate refits them to the data.
+        self._mark_dirty()
 
     def _mark_dirty(self):
         if self._has_contour:
@@ -410,6 +469,7 @@ class ContourTaskPanel:
 
     def _on_resolution_changed(self):
         self._mark_dirty()
+        self._update_generate_state()
 
     def _update_generate_state(self):
         valid = self.target_object is not None and self.resolution.is_safe()
@@ -449,7 +509,7 @@ class ContourTaskPanel:
 
         self.pb_generate.setEnabled(False)
         self.progress.show()
-        self.progress.setRange(0, 1)
+        self.progress.setRange(0, 0)
         self.progress.setFormat("Meshing... %p%")
         QtWidgets.QApplication.processEvents()
         try:
@@ -488,6 +548,7 @@ class ContourTaskPanel:
             )
             dmin = min(values) if values else 0.0
             dmax = max(values) if values else 1.0
+            self._auto_range = self.measure.initial_range(self._options()) is None
             self._last = (self._mesh, values, normals, dmin, dmax)
             self._render()
         except Exception as exc:
@@ -534,6 +595,7 @@ class ContourTaskPanel:
     def _render(self):
         if self._last is None:
             return
+        # Replace any existing overlay (this also serves re-renders on option change).
         self._remove_hover()
         clear_all()
         self._destroy_legend()
@@ -541,7 +603,11 @@ class ContourTaskPanel:
 
         mesh, values, normals, dmin, dmax = self._last
         dom_lo, dom_hi = self.measure.value_limits(self._options()) or (dmin, dmax)
-        low, high = self._current_range()
+        if self._auto_range:
+            low, high = dmin, dmax
+            self._auto_range = False
+        else:
+            low, high = self._current_range()
         low = max(dom_lo, min(low, dom_hi))
         high = max(dom_lo, min(high, dom_hi))
         if low > high:
@@ -585,7 +651,7 @@ class ContourTaskPanel:
 
     def _position_legend(self):
         """Place the legend just to the right of the model by projecting the
-        object's bounding box to screen. Falls back to top right corner."""
+        object's bounding box to screen. Falls back to the default corner spot."""
         if self._legend is None or self.target_shape is None:
             return
         try:
@@ -605,7 +671,6 @@ class ContourTaskPanel:
             parent = self._legend.parentWidget()
             if parent is None:
                 return
-            # getPointOnScreen has a bottom-left origin; flip to widget coords.
             right_x = max(xs) + 24
             center_y = parent.height() - (min(ys) + max(ys)) / 2.0
             wx = int(min(max(right_x, 0), max(0, parent.width() - self._legend.width())))
@@ -629,6 +694,97 @@ class ContourTaskPanel:
         self._has_contour = False
         self._dirty = False
         self._update_generate_state()
+
+    def _gather_params(self):
+        resolution, element_size = self.resolution.state()
+        low, high = self._current_range()
+        pull = None
+        if self.measure.needs_pull_direction:
+            pull = (self.pull_dir.x, self.pull_dir.y, self.pull_dir.z)
+        return {
+            "source": self.target_object,
+            "measure": self.measure.id,
+            "pull_direction": pull,
+            "pull_reference": self.pull_ref,
+            "resolution": resolution,
+            "element_size": element_size,
+            "colormap": self.cb_colormap.currentText(),
+            "range_low": low,
+            "range_high": high,
+            "bands": self.cb_bands.currentText(),
+            "options": self._options(),
+        }
+
+    def _on_save(self):
+        if self._last is None:
+            return
+        mesh, values, normals, dmin, dmax = self._last
+        field = {
+            "vertices": list(mesh.vertices),
+            "triangles": [tuple(t) for t in mesh.triangles],
+            "values": list(values),
+            "normals": list(normals),
+            "dmin": dmin,
+            "dmax": dmax,
+        }
+        try:
+            from .document import create_or_update_analysis
+
+            self._analysis_obj = create_or_update_analysis(
+                self._analysis_obj, self._gather_params(), field
+            )
+            self._saved = True
+        except Exception as exc:
+            App.Console.PrintError(f"DFM analysis: could not save. {exc}\n")
+            return
+        # The saved object now owns a persistent overlay; drop our preview and close.
+        self._teardown()
+
+    def _load_from_object(self, obj):
+        try:
+            src = getattr(obj, "Source", None)
+            if src is not None:
+                self._apply_object(src)
+            self.resolution.set_state(
+                getattr(obj, "Resolution", ""), getattr(obj, "ElementSize", 0.0)
+            )
+            if obj.ColorMap:
+                self.cb_colormap.setCurrentText(obj.ColorMap)
+            if obj.Bands:
+                self.cb_bands.setCurrentText(obj.Bands)
+            for oid, w in self._option_widgets.items():
+                if oid in (obj.Options or {}):
+                    val = obj.Options[oid]
+                    if isinstance(w, QtWidgets.QComboBox):
+                        w.setCurrentText(str(val))
+                    else:
+                        w.setChecked(bool(val))
+            if self.measure.needs_pull_direction:
+                self.pull_dir = App.Vector(obj.PullDirection)
+                self.pull_ref = obj.PullReference or self.pull_ref
+                self.le_pull.setText(self.pull_ref)
+                self._refresh_arrow()
+            self._set_range_spins(obj.RangeLow, obj.RangeHigh)
+
+            field = getattr(obj, "FieldData", None)
+            if field:
+                import types
+
+                stub = types.SimpleNamespace(
+                    vertices=field["vertices"], triangles=field["triangles"]
+                )
+                self._auto_range = False
+                self._last = (
+                    stub,
+                    field["values"],
+                    field["normals"],
+                    field.get("dmin", 0.0),
+                    field.get("dmax", 1.0),
+                )
+                self._mesh = None  # a re-mesh is needed to Update; static until then
+                self._render()
+        except Exception as exc:
+            App.Console.PrintError(f"DFM analysis: could not load. {exc}\n")
 
     def _view_widget(self):
         try:
@@ -752,7 +908,10 @@ class ContourTaskPanel:
             label.raise_()
 
     def getStandardButtons(self):
-        return QtWidgets.QDialogButtonBox.StandardButton.Close
+        return (
+            QtWidgets.QDialogButtonBox.StandardButton.Save
+            | QtWidgets.QDialogButtonBox.StandardButton.Close
+        )
 
     def _teardown(self):
         self._reset_pick_ui()
@@ -761,6 +920,7 @@ class ContourTaskPanel:
             self._hover_label.deleteLater()
             self._hover_label = None
         self._destroy_legend()
+        clear_all()  # drop the live preview overlay
         if self.indicator is not None:
             self.indicator.remove()
         try:
@@ -773,4 +933,6 @@ class ContourTaskPanel:
         self._teardown()
 
     def accept(self):
-        self._teardown()
+        self._on_save()
+        if not self._saved:
+            self._teardown()

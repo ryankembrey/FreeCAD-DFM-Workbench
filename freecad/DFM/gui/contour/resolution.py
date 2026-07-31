@@ -32,9 +32,7 @@ class ResolutionField(QtWidgets.QWidget):
         self.combo = QtWidgets.QComboBox()
         self.combo.addItems(list(RESOLUTION_DIVISORS.keys()) + [_CUSTOM])
         self.combo.setCurrentText(DEFAULT_RESOLUTION)
-        self.combo.setToolTip(
-            "Element size preset, scaled to the part. Choose custom to specify element size in mm."
-        )
+        self.combo.setToolTip("Element size preset, scaled to the part. Custom lets you type mm.")
         self.combo.currentIndexChanged.connect(self._on_combo)
         layout.addWidget(self.combo)
 
@@ -69,6 +67,23 @@ class ResolutionField(QtWidgets.QWidget):
 
     def is_safe(self):
         return self._safe
+
+    def state(self):
+        return self.combo.currentText(), self.element_size()
+
+    def set_state(self, resolution, element_size=None):
+        items = [self.combo.itemText(i) for i in range(self.combo.count())]
+        self.combo.blockSignals(True)
+        if resolution in items:
+            self.combo.setCurrentText(resolution)
+        self.combo.blockSignals(False)
+        custom = self.combo.currentText() == _CUSTOM
+        self.spin.setVisible(custom)
+        if custom and element_size:
+            self.spin.blockSignals(True)
+            self.spin.setValue(element_size)
+            self.spin.blockSignals(False)
+        self._refresh_safe()
 
     def _on_combo(self):
         custom = self.combo.currentText() == _CUSTOM
