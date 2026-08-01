@@ -2,12 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Per-point wall-thickness backends for the thickness contour.
-
-These are the ray-cast and shrinking-sphere methods from the DFM analyzers,
-stripped of the hill-climbing and neighbour seeding: the mesh already gives one
-point per triangle, so each is measured exactly once.
-"""
 
 _EPS = 1e-4
 _INF = float("inf")
@@ -127,7 +121,7 @@ class SphereThickness:
             closest = self._dist.PointOnShape2(1)
             best = closest.SquareDistance(center)
             for i in range(2, self._dist.NbSolution() + 1):
-                cand = self._dist.PointOnShape2(i)
+                x
                 d2 = cand.SquareDistance(center)
                 if d2 < best:
                     best, closest = d2, cand

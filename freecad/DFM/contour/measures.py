@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Contour measures: turn a UniformMesh into a per-triangle scalar field."""
 
 import math
 
@@ -64,9 +63,6 @@ class ContourMeasure:
         """Return (values, normals): one scalar and one outward unit normal per
         triangle. Normals are used for the overlay's lighting."""
         raise NotImplementedError
-
-
-# --- geometry helpers (shared by measures that need outward orientation) ------
 
 
 def triangle_normal(vertices, tri):
@@ -158,7 +154,7 @@ def outward_normals(shape, mesh):
             fx, fy, fz = facet
             if flip:
                 fx, fy, fz = -fx, -fy, -fz
-        c = cad[idx] if has_cad else None
+        c = cad[idx] if (has_cad and cad is not None) else None
         if c is None:
             normals.append((fx, fy, fz))
         else:
@@ -167,9 +163,6 @@ def outward_normals(shape, mesh):
                 nx, ny, nz = -nx, -ny, -nz
             normals.append((nx, ny, nz))
     return normals
-
-
-# --- draft --------------------------------------------------------------------
 
 
 def draft_angle_for_normal(nx, ny, nz, pull) -> float:
@@ -277,33 +270,19 @@ class ThicknessMeasure(ContourMeasure):
         # Outward normals give lighting and the inward measurement direction.
         normals = outward_normals(shape, mesh)
 
-        try:
-            from ..core.utils.conversion import freecad_to_ocp
-            from .thickness_backend import make_backend
-
-            ocp_shape = freecad_to_ocp(shape)
-            backend = make_backend(method, ocp_shape)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Thickness analysis needs OCP and the FreeCAD-to-OCP conversion. {exc}"
-            )
-
         vertices = mesh.vertices
         triangles = mesh.triangles
-        n_tri = len(triangles)
-        values = []
-        for idx, tri in enumerate(triangles):
-            if check_abort and (idx & 0x3FF) == 0 and check_abort():
-                break
-            centroid = _triangle_centroid(vertices, tri)
-            margin = _triangle_scale(vertices, tri)
-            try:
-                thickness = backend.at(centroid, normals[idx], margin)
-            except Exception:
-                thickness = 0.0
-            values.append(thickness)
-            if progress_cb and (idx & 0xFF) == 0:
-                progress_cb(idx, n_tri)
-        if progress_cb:
-            progress_cb(n_tri, n_tri)
+        tasks = [
+            (_triangle_centroid(vertices, tri), normals[idx], _triangle_scale(vertices, tri))
+            for idx, tri in enumerate(triangles)
+        ]
+
+        try:
+            from .thickness_parallel import measure_thickness
+        except Exception as exc:
+            raise RuntimeError(f"Thickness analysis backend unavailable. {exc}")
+
+        values = measure_thickness(
+            shape, tasks, method, progress_cb=progress_cb, check_abort=check_abort
+        )
         return values, normals
