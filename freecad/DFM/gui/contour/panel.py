@@ -2,12 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Base task panel shared by every contour tool.
-
-A tool is just a ContourMeasure plus a title and icon; this panel reads the
-measure's metadata to build the UI (adding a pull-direction picker only when the
-measure needs one) and drives meshing, measuring, the coin overlay, the
-interactive legend, and the hover readout."""
 
 from typing import Optional
 import time
@@ -41,6 +35,8 @@ PICK_BUTTON_STYLE = """
 QPushButton:checked { border: 2px solid palette(highlight); font-weight: bold; }
 """
 
+_LEGEND_STATE = {"pos": None, "size": None, "horizontal": False}
+
 _BAND_STEPS = {
     "Smooth": 0.0,
     "1 unit bands": 1.0,
@@ -70,6 +66,7 @@ class ContourTaskPanel:
         self._analysis_obj = analysis_obj
         self._saved = False
         self._auto_range = False
+        self._range_initialized = False
 
         self.target_object = None
         self.target_shape = None
@@ -87,8 +84,8 @@ class ContourTaskPanel:
 
         self._has_contour = False
         self._dirty = False
-        self._last = None
-        self._mesh = None
+        self._last = None  # (mesh, values, normals, dmin, dmax)
+        self._mesh = None  # cached UniformMesh, so option toggles skip remeshing
         self._node = None
         self._legend = None
         self._option_widgets = {}
@@ -276,6 +273,7 @@ class ContourTaskPanel:
         cg.addWidget(self.cb_bands, 3, 1)
         root.addWidget(cont_box)
 
+        # Actions (Save lives at the window level, next to Close)
         row = QtWidgets.QHBoxLayout()
         self.pb_generate = QtWidgets.QPushButton("Generate Contour")
         self.pb_generate.setMinimumHeight(30)
@@ -548,7 +546,6 @@ class ContourTaskPanel:
             )
             dmin = min(values) if values else 0.0
             dmax = max(values) if values else 1.0
-            self._auto_range = self.measure.initial_range(self._options()) is None
             self._last = (self._mesh, values, normals, dmin, dmax)
             self._render()
         except Exception as exc:
@@ -603,10 +600,12 @@ class ContourTaskPanel:
 
         mesh, values, normals, dmin, dmax = self._last
         dom_lo, dom_hi = self.measure.value_limits(self._options()) or (dmin, dmax)
-        if self._auto_range:
-            low, high = dmin, dmax
-            self._auto_range = False
+        if not self._range_initialized:
+            rng = self.measure.initial_range(self._options())
+            low, high = (dmin, dmax) if rng is None else rng
+            self._range_initialized = True
         else:
+            # Keep the user's window so the scale doesn't jump on Update.
             low, high = self._current_range()
         low = max(dom_lo, min(low, dom_hi))
         high = max(dom_lo, min(high, dom_hi))
@@ -626,6 +625,9 @@ class ContourTaskPanel:
         if view_widget is not None:
             self._legend = ContourLegend(view_widget)
             self._legend.rangeChanged.connect(self._on_range_changed)
+            self._legend.colormapChanged.connect(self._on_legend_colormap)
+            self._legend.bandsChanged.connect(self._on_legend_bands)
+            self._legend.fitRequested.connect(self._fit_to_data)
             self._legend.configure(
                 self.measure.label,
                 self.measure.unit,
@@ -640,7 +642,7 @@ class ContourTaskPanel:
             )
             self._legend.show()
             self._legend.raise_()
-            self._position_legend()
+            self._restore_legend_geometry()
         else:
             App.Console.PrintWarning("DFM contour: no 3D view widget found for the legend.\n")
 
@@ -648,6 +650,47 @@ class ContourTaskPanel:
         self._has_contour = True
         self._dirty = False
         self._update_generate_state()
+
+    def _on_legend_colormap(self, name):
+        if name and name != self.cb_colormap.currentText():
+            self.cb_colormap.setCurrentText(name)  # triggers recolor + legend sync
+
+    def _on_legend_bands(self, name):
+        if name and name != self.cb_bands.currentText():
+            self.cb_bands.setCurrentText(name)
+
+    def _fit_to_data(self):
+        if self._last is None:
+            return
+        _, _, _, dmin, dmax = self._last
+        dom_lo, dom_hi = self.measure.value_limits(self._options()) or (dmin, dmax)
+        low = max(dom_lo, min(dmin, dom_hi))
+        high = max(dom_lo, min(dmax, dom_hi))
+        if low > high:
+            low, high = high, low
+        self._set_range_spins(low, high)
+        if self._node is not None:
+            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band())
+        if self._legend is not None:
+            self._legend.set_range(low, high)
+
+    def _restore_legend_geometry(self):
+        """Reapply the remembered place/size/orientation, or auto-position the
+        first time (when nothing has been remembered yet)."""
+        if self._legend is None:
+            return
+        size = _LEGEND_STATE.get("size")
+        pos = _LEGEND_STATE.get("pos")
+        if size is None or pos is None:
+            self._position_legend()
+            return
+        try:
+            self._legend.set_orientation(_LEGEND_STATE.get("horizontal", False))
+            self._legend.resize(size)
+            self._legend.move(pos)
+            self._legend._clamp_into_parent()
+        except Exception:
+            self._position_legend()
 
     def _position_legend(self):
         """Place the legend just to the right of the model by projecting the
@@ -671,6 +714,7 @@ class ContourTaskPanel:
             parent = self._legend.parentWidget()
             if parent is None:
                 return
+            # getPointOnScreen has a bottom-left origin; flip to widget coords.
             right_x = max(xs) + 24
             center_y = parent.height() - (min(ys) + max(ys)) / 2.0
             wx = int(min(max(right_x, 0), max(0, parent.width() - self._legend.width())))
@@ -693,6 +737,7 @@ class ContourTaskPanel:
         self._mesh = None
         self._has_contour = False
         self._dirty = False
+        self._range_initialized = False
         self._update_generate_state()
 
     def _gather_params(self):
@@ -774,6 +819,7 @@ class ContourTaskPanel:
                     vertices=field["vertices"], triangles=field["triangles"]
                 )
                 self._auto_range = False
+                self._range_initialized = True  # use the stored range as-is
                 self._last = (
                     stub,
                     field["values"],
@@ -786,7 +832,7 @@ class ContourTaskPanel:
         except Exception as exc:
             App.Console.PrintError(f"DFM analysis: could not load. {exc}\n")
 
-    def _view_widget(self):
+    def _view_widget(self) -> Optional[QtWidgets.QWidget]:
         try:
             mw = Gui.getMainWindow()
             mdi = mw.findChild(QtWidgets.QMdiArea)
@@ -799,6 +845,12 @@ class ContourTaskPanel:
 
     def _destroy_legend(self):
         if self._legend is not None:
+            try:
+                _LEGEND_STATE["pos"] = self._legend.pos()
+                _LEGEND_STATE["size"] = self._legend.size()
+                _LEGEND_STATE["horizontal"] = self._legend.orientation_horizontal()
+            except Exception:
+                pass
             try:
                 self._legend.cleanup()
                 self._legend.setParent(None)
@@ -832,6 +884,7 @@ class ContourTaskPanel:
                 )
             except Exception:
                 pass
+        self._reset_hover_cursor()
         self._hover_cb = None
         self._hover_view = None
         self._last_face_key = None
@@ -868,6 +921,52 @@ class ContourTaskPanel:
         if self._hover_label is not None:
             self._hover_label.hide()
 
+    def _gl_widget(self):
+        """The actual 3D GL/viewer widget under the view container, so the
+        crosshair shows over the model (the container's cursor only reaches the
+        legend). Falls back to the container if the viewer can't be identified."""
+        vw = self._view_widget()
+        if vw is None:
+            return None
+        try:
+            for w in vw.findChildren(QtWidgets.QWidget):
+                if w is self._legend:
+                    continue
+                cn = w.metaObject().className().lower()
+                if any(k in cn for k in ("quarter", "glarea", "viewer", "soqt", "opengl")):
+                    return w
+        except Exception:
+            pass
+        return vw
+
+    def _set_hover_cursor(self, on_contour):
+        # Crosshair only while the pick is on the contour model. The legend keeps
+        # its own arrow cursor, so it is never affected.
+        if getattr(self, "_cursor_cross", None) == on_contour:
+            return
+        self._cursor_cross = on_contour
+        w = self._gl_widget()
+        if w is None:
+            return
+        self._cursor_widget = w
+        try:
+            if on_contour:
+                w.setCursor(QtCore.Qt.CursorShape.CrossCursor)
+            else:
+                w.unsetCursor()
+        except Exception:
+            pass
+
+    def _reset_hover_cursor(self):
+        w = getattr(self, "_cursor_widget", None)
+        if w is not None:
+            try:
+                w.unsetCursor()
+            except Exception:
+                pass
+        self._cursor_widget = None
+        self._cursor_cross = None
+
     def _on_hover(self, event_cb):
         node = self._node
         if node is None:
@@ -882,6 +981,7 @@ class ContourTaskPanel:
             result = None
 
         if result is None:
+            self._set_hover_cursor(False)
             self._hide_hover_label()
             if self._legend is not None:
                 self._legend.set_marker(None)
@@ -890,6 +990,7 @@ class ContourTaskPanel:
                 self._last_face_key = None
             return
 
+        self._set_hover_cursor(True)
         key, value, _point = result
         label = self._hover_label_widget()
         if key != self._last_face_key:
@@ -930,9 +1031,11 @@ class ContourTaskPanel:
         Gui.Control.closeDialog()
 
     def reject(self):
+        # "Close" button.
         self._teardown()
 
     def accept(self):
+        # "Save" button: persist to the tree, then close.
         self._on_save()
         if not self._saved:
             self._teardown()

@@ -2,18 +2,34 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+"""FEM-style contour legend that floats over the 3D view.
+
+No background panel: the color bar and haloed labels sit directly on the
+viewport. The bar spans the measure's domain; the gradient is mapped to the
+active [low, high] window, whose ends are draggable handles (the range control).
+Right-click for colormap / bands / orientation / fit-to-data; double-click a
+handle to type its value. Works vertical or horizontal. The widget is a child of
+the view, movable by its body and resizable from the bottom-right corner.
+"""
 
 import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...contour.colormap import value_to_color
+from ...contour.colormap import value_to_color, COLORMAPS
 
 
 _RESIZE_ZONE = 16
 _HANDLE_GRAB = 9
-_MIN_W, _MIN_H = 90, 160
 _BAR_W = 18
+
+_BAND_OPTIONS = [
+    ("Smooth", 0.0),
+    ("1 unit bands", 1.0),
+    ("2 unit bands", 2.0),
+    ("5 unit bands", 5.0),
+    ("10 unit bands", 10.0),
+]
 
 
 def _nice_step(raw):
@@ -36,6 +52,9 @@ def _decimals_for(step):
 
 class ContourLegend(QtWidgets.QWidget):
     rangeChanged = QtCore.Signal(float, float)
+    colormapChanged = QtCore.Signal(str)
+    bandsChanged = QtCore.Signal(str)
+    fitRequested = QtCore.Signal()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -48,6 +67,7 @@ class ContourLegend(QtWidgets.QWidget):
         self._low = -1.0
         self._high = 1.0
         self._marker = None
+        self._horizontal = False
 
         self._drag_mode = None
         self._press_global = None
@@ -57,11 +77,25 @@ class ContourLegend(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAutoFillBackground(False)
-        self.setMinimumSize(_MIN_W, _MIN_H)
+        self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.DefaultContextMenu)
+        self._apply_min_size()
         self.resize(150, 280)
         if parent is not None:
             parent.installEventFilter(self)
         self._place_top_right()
+
+    def orientation_horizontal(self):
+        return self._horizontal
+
+    def set_orientation(self, horizontal):
+        horizontal = bool(horizontal)
+        if horizontal != self._horizontal:
+            self._horizontal = horizontal
+            self._apply_min_size()
+            self.update()
+
+    # ---- API -------------------------------------------------------------
 
     def configure(
         self, title, unit, colormap, band, dom_lo, dom_hi, low, high, data_min=None, data_max=None
@@ -80,12 +114,6 @@ class ContourLegend(QtWidgets.QWidget):
         self._low, self._high = low, high
         self.update()
 
-    def low(self):
-        return self._low
-
-    def high(self):
-        return self._high
-
     def set_marker(self, value):
         if value != self._marker:
             self._marker = value
@@ -99,28 +127,65 @@ class ContourLegend(QtWidgets.QWidget):
             except Exception:
                 pass
 
+    # ---- geometry (orientation-aware) ------------------------------------
+
+    def _apply_min_size(self):
+        if self._horizontal:
+            self.setMinimumSize(180, 84)
+        else:
+            self.setMinimumSize(90, 160)
+
     def _bar_rect(self):
-        top = 30
-        bottom_pad = 12
+        if self._horizontal:
+            left, top, right_pad, bottom = 14, 34, 14, 26
+            return QtCore.QRect(left, top, max(2, self.width() - left - right_pad), _BAR_W)
+        top, bottom_pad = 30, 12
         return QtCore.QRect(10, top, _BAR_W, max(2, self.height() - top - bottom_pad))
 
-    def _value_to_y(self, value, bar):
+    def _axis_len(self, bar):
+        return bar.width() if self._horizontal else bar.height()
+
+    def _value_to_pos(self, value, bar):
         span = self._dom_hi - self._dom_lo
         frac = (value - self._dom_lo) / span if span else 0.0
         frac = max(0.0, min(1.0, frac))
+        if self._horizontal:
+            return bar.left() + frac * bar.width()
         return bar.bottom() - frac * bar.height()
 
-    def _y_to_value(self, y, bar):
+    def _pos_to_value(self, coord, bar):
         span = self._dom_hi - self._dom_lo
-        frac = (bar.bottom() - y) / bar.height() if bar.height() else 0.0
+        if self._horizontal:
+            frac = (coord - bar.left()) / bar.width() if bar.width() else 0.0
+        else:
+            frac = (bar.bottom() - coord) / bar.height() if bar.height() else 0.0
         frac = max(0.0, min(1.0, frac))
         return self._dom_lo + frac * span
 
     def _handle_hit(self, which, pos, bar):
-        y = self._value_to_y(self._low if which == "low" else self._high, bar)
-        return abs(pos.y() - y) <= _HANDLE_GRAB and (bar.left() - 14) <= pos.x() <= (
+        value = self._low if which == "low" else self._high
+        c = self._value_to_pos(value, bar)
+        if self._horizontal:
+            return abs(pos.x() - c) <= _HANDLE_GRAB and (bar.top() - 14) <= pos.y() <= (
+                bar.bottom() + 4
+            )
+        return abs(pos.y() - c) <= _HANDLE_GRAB and (bar.left() - 14) <= pos.x() <= (
             bar.right() + 4
         )
+
+    def _which_handle(self, pos, bar):
+        near_low = self._handle_hit("low", pos, bar)
+        near_high = self._handle_hit("high", pos, bar)
+        if not (near_low or near_high):
+            return None
+        if near_low and near_high:
+            cl = self._value_to_pos(self._low, bar)
+            ch = self._value_to_pos(self._high, bar)
+            here = pos.x() if self._horizontal else pos.y()
+            return "low" if abs(here - cl) <= abs(here - ch) else "high"
+        return "low" if near_low else "high"
+
+    # ---- placement -------------------------------------------------------
 
     def _place_top_right(self):
         parent = self.parent()
@@ -141,6 +206,8 @@ class ContourLegend(QtWidgets.QWidget):
             self._clamp_into_parent()
         return False
 
+    # ---- interaction -----------------------------------------------------
+
     @staticmethod
     def _global(event):
         return event.globalPosition().toPoint()
@@ -150,6 +217,8 @@ class ContourLegend(QtWidgets.QWidget):
         return event.position().toPoint()
 
     def mousePressEvent(self, event):
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
+            return
         self._press_global = self._global(event)
         self._start_pos = self.pos()
         self._start_size = self.size()
@@ -160,15 +229,9 @@ class ContourLegend(QtWidgets.QWidget):
             return
 
         bar = self._bar_rect()
-        near_low = self._handle_hit("low", pos, bar)
-        near_high = self._handle_hit("high", pos, bar)
-        if near_low or near_high:
-            if near_low and near_high:
-                yl = self._value_to_y(self._low, bar)
-                yh = self._value_to_y(self._high, bar)
-                self._drag_mode = "low" if abs(pos.y() - yl) <= abs(pos.y() - yh) else "high"
-            else:
-                self._drag_mode = "low" if near_low else "high"
+        which = self._which_handle(pos, bar)
+        if which is not None:
+            self._drag_mode = which
             return
 
         self._drag_mode = "move"
@@ -178,7 +241,9 @@ class ContourLegend(QtWidgets.QWidget):
             return
         if self._drag_mode in ("low", "high"):
             bar = self._bar_rect()
-            value = round(self._y_to_value(self._localpt(event).y(), bar))
+            pt = self._localpt(event)
+            coord = pt.x() if self._horizontal else pt.y()
+            value = round(self._pos_to_value(coord, bar))
             gap = max((self._dom_hi - self._dom_lo) * 0.02, 1.0)
             if self._drag_mode == "low":
                 self._low = min(value, self._high - gap)
@@ -191,8 +256,8 @@ class ContourLegend(QtWidgets.QWidget):
         delta = self._global(event) - self._press_global
         parent = self.parent()
         if self._drag_mode == "resize":
-            new_w = max(_MIN_W, self._start_size.width() + delta.x())
-            new_h = max(_MIN_H, self._start_size.height() + delta.y())
+            new_w = max(self.minimumWidth(), self._start_size.width() + delta.x())
+            new_h = max(self.minimumHeight(), self._start_size.height() + delta.y())
             if parent is not None:
                 new_w = min(new_w, parent.width() - self.x())
                 new_h = min(new_h, parent.height() - self.y())
@@ -206,6 +271,76 @@ class ContourLegend(QtWidgets.QWidget):
 
     def mouseReleaseEvent(self, _event):
         self._drag_mode = None
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
+            return
+        bar = self._bar_rect()
+        which = self._which_handle(self._localpt(event), bar)
+        if which is None:
+            return
+        current = self._low if which == "low" else self._high
+        label = "Lower bound:" if which == "low" else "Upper bound:"
+        value, ok = QtWidgets.QInputDialog.getDouble(
+            self,
+            "Set color range",
+            label,
+            float(current),
+            float(self._dom_lo),
+            float(self._dom_hi),
+            3,
+        )
+        if not ok:
+            return
+        gap = max((self._dom_hi - self._dom_lo) * 0.02, 1.0)
+        if which == "low":
+            self._low = min(value, self._high - gap)
+        else:
+            self._high = max(value, self._low + gap)
+        self.update()
+        self.rangeChanged.emit(self._low, self._high)
+
+    def contextMenuEvent(self, event):
+        menu = QtWidgets.QMenu(self)
+
+        cmap_menu = menu.addMenu("Color Map")
+        cmap_group = QtGui.QActionGroup(cmap_menu)
+        cmap_group.setExclusive(True)
+        for name in COLORMAPS.keys():
+            act = cmap_menu.addAction(name)
+            act.setCheckable(True)
+            act.setChecked(name == self._colormap)
+            cmap_group.addAction(act)
+            act.triggered.connect(lambda _c=False, n=name: self.colormapChanged.emit(n))
+
+        bands_menu = menu.addMenu("Bands")
+        bands_group = QtGui.QActionGroup(bands_menu)
+        bands_group.setExclusive(True)
+        for name, step in _BAND_OPTIONS:
+            act = bands_menu.addAction(name)
+            act.setCheckable(True)
+            act.setChecked(abs(step - self._band) < 1e-9)
+            bands_group.addAction(act)
+            act.triggered.connect(lambda _c=False, n=name: self.bandsChanged.emit(n))
+
+        menu.addSeparator()
+        orient = menu.addAction("Horizontal")
+        orient.setCheckable(True)
+        orient.setChecked(self._horizontal)
+        orient.triggered.connect(self._toggle_orientation)
+
+        menu.addAction("Fit To Data", self.fitRequested.emit)
+        menu.exec(event.globalPos())
+
+    def _toggle_orientation(self):
+        self._horizontal = not self._horizontal
+        self._apply_min_size()
+        # Swap the footprint so the bar keeps a sensible aspect.
+        self.resize(self.height(), self.width())
+        self._clamp_into_parent()
+        self.update()
+
+    # ---- painting --------------------------------------------------------
 
     def _halo_text(self, p, x, baseline, text):
         p.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
@@ -241,17 +376,29 @@ class ContourLegend(QtWidgets.QWidget):
         title = f"{self._title} ({self._unit})" if self._unit else self._title
         self._halo_text(p, 8, 20, title)
 
-        # color bar, mapped to the active window (flat outside it)
-        for i in range(bar.height()):
-            value = self._y_to_value(bar.top() + i, bar)
-            r, g, b = value_to_color(value, self._low, self._high, self._colormap, self._band)
-            p.fillRect(
-                bar.left(),
-                bar.top() + i,
-                bar.width(),
-                1,
-                QtGui.QColor(int(r * 255), int(g * 255), int(b * 255)),
-            )
+        # Color bar, mapped to the active window (flat outside it).
+        if self._horizontal:
+            for i in range(bar.width()):
+                value = self._pos_to_value(bar.left() + i, bar)
+                r, g, b = value_to_color(value, self._low, self._high, self._colormap, self._band)
+                p.fillRect(
+                    bar.left() + i,
+                    bar.top(),
+                    1,
+                    bar.height(),
+                    QtGui.QColor(int(r * 255), int(g * 255), int(b * 255)),
+                )
+        else:
+            for i in range(bar.height()):
+                value = self._pos_to_value(bar.top() + i, bar)
+                r, g, b = value_to_color(value, self._low, self._high, self._colormap, self._band)
+                p.fillRect(
+                    bar.left(),
+                    bar.top() + i,
+                    bar.width(),
+                    1,
+                    QtGui.QColor(int(r * 255), int(g * 255), int(b * 255)),
+                )
         p.setPen(QtGui.QColor(20, 20, 20, 220))
         p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         p.drawRect(bar)
@@ -269,13 +416,18 @@ class ContourLegend(QtWidgets.QWidget):
         dec = _decimals_for(step)
 
         def draw(value):
-            y = int(self._value_to_y(value, bar))
-            p.setPen(QtGui.QColor(20, 20, 20, 220))
-            p.drawLine(bar.right(), y, bar.right() + 4, y)
+            c = int(self._value_to_pos(value, bar))
             label = f"{value:.{dec}f}"
             if float(label) == 0.0:
                 label = f"{0:.{dec}f}"
-            self._halo_text(p, bar.right() + 8, y + fm.ascent() // 2 - 1, label)
+            p.setPen(QtGui.QColor(20, 20, 20, 220))
+            if self._horizontal:
+                p.drawLine(c, bar.bottom(), c, bar.bottom() + 4)
+                w = fm.horizontalAdvance(label)
+                self._halo_text(p, c - w / 2, bar.bottom() + 6 + fm.ascent(), label)
+            else:
+                p.drawLine(bar.right(), c, bar.right() + 4, c)
+                self._halo_text(p, bar.right() + 8, c + fm.ascent() // 2 - 1, label)
 
         draw(self._dom_lo)
         draw(self._dom_hi)
@@ -288,16 +440,27 @@ class ContourLegend(QtWidgets.QWidget):
 
     def _paint_handles(self, p, bar):
         for which in ("low", "high"):
-            y = int(self._value_to_y(self._low if which == "low" else self._high, bar))
+            value = self._low if which == "low" else self._high
+            c = int(self._value_to_pos(value, bar))
             p.setPen(QtGui.QColor(15, 15, 15, 230))
-            p.drawLine(bar.left(), y, bar.right(), y)
-            tri = QtGui.QPolygon(
-                [
-                    QtCore.QPoint(bar.left() - 2, y),
-                    QtCore.QPoint(bar.left() - 10, y - 5),
-                    QtCore.QPoint(bar.left() - 10, y + 5),
-                ]
-            )
+            if self._horizontal:
+                p.drawLine(c, bar.top(), c, bar.bottom())
+                tri = QtGui.QPolygon(
+                    [
+                        QtCore.QPoint(c, bar.top() - 2),
+                        QtCore.QPoint(c - 5, bar.top() - 10),
+                        QtCore.QPoint(c + 5, bar.top() - 10),
+                    ]
+                )
+            else:
+                p.drawLine(bar.left(), c, bar.right(), c)
+                tri = QtGui.QPolygon(
+                    [
+                        QtCore.QPoint(bar.left() - 2, c),
+                        QtCore.QPoint(bar.left() - 10, c - 5),
+                        QtCore.QPoint(bar.left() - 10, c + 5),
+                    ]
+                )
             p.setBrush(QtGui.QColor(245, 245, 245))
             p.setPen(QtGui.QPen(QtGui.QColor(15, 15, 15), 1))
             p.drawPolygon(tri)
@@ -305,16 +468,26 @@ class ContourLegend(QtWidgets.QWidget):
     def _paint_marker(self, p, bar):
         if self._marker is None:
             return
-        y = int(self._value_to_y(self._marker, bar))
+        c = int(self._value_to_pos(self._marker, bar))
         p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 2))
-        p.drawLine(bar.left(), y, bar.right(), y)
-        tri = QtGui.QPolygon(
-            [
-                QtCore.QPoint(bar.right() + 2, y),
-                QtCore.QPoint(bar.right() + 8, y - 4),
-                QtCore.QPoint(bar.right() + 8, y + 4),
-            ]
-        )
+        if self._horizontal:
+            p.drawLine(c, bar.top(), c, bar.bottom())
+            tri = QtGui.QPolygon(
+                [
+                    QtCore.QPoint(c, bar.bottom() + 2),
+                    QtCore.QPoint(c - 4, bar.bottom() + 8),
+                    QtCore.QPoint(c + 4, bar.bottom() + 8),
+                ]
+            )
+        else:
+            p.drawLine(bar.left(), c, bar.right(), c)
+            tri = QtGui.QPolygon(
+                [
+                    QtCore.QPoint(bar.right() + 2, c),
+                    QtCore.QPoint(bar.right() + 8, c - 4),
+                    QtCore.QPoint(bar.right() + 8, c + 4),
+                ]
+            )
         p.setBrush(QtGui.QColor(30, 30, 30))
         p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1))
         p.drawPolygon(tri)

@@ -2,6 +2,13 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+"""Contour measures: turn a UniformMesh into a per-triangle scalar field.
+
+A ContourMeasure is the one piece each contour tool provides. The shared task
+panel reads its metadata (label, unit, colormap, range, whether it needs a pull
+direction) to build the UI, and calls measure() to compute the values. Draft is
+implemented here; a thickness measure will subclass the same interface.
+"""
 
 import math
 
@@ -63,6 +70,9 @@ class ContourMeasure:
         """Return (values, normals): one scalar and one outward unit normal per
         triangle. Normals are used for the overlay's lighting."""
         raise NotImplementedError
+
+
+# --- geometry helpers (shared by measures that need outward orientation) ------
 
 
 def triangle_normal(vertices, tri):
@@ -165,6 +175,9 @@ def outward_normals(shape, mesh):
     return normals
 
 
+# --- draft --------------------------------------------------------------------
+
+
 def draft_angle_for_normal(nx, ny, nz, pull) -> float:
     """Signed draft in degrees: 0 = vertical wall, +90 = normal along pull,
     -90 = normal against pull."""
@@ -183,7 +196,7 @@ class DraftMeasure(ContourMeasure):
     label = "Draft Angle"
     unit = "°"
     default_colormap = "Turbo"
-    default_range = (-15.0, 15.0)
+    default_range = (-90.0, 90.0)
     range_limits = (-90.0, 90.0)
     needs_pull_direction = True
     options = [
@@ -200,7 +213,8 @@ class DraftMeasure(ContourMeasure):
         return (0.0, 90.0) if opts.get("magnitude") else (-90.0, 90.0)
 
     def initial_range(self, opts):
-        return (0.0, 15.0) if opts.get("magnitude") else (-15.0, 15.0)
+        # Full scale by default; the user narrows it on the legend if wanted.
+        return (0.0, 90.0) if opts.get("magnitude") else (-90.0, 90.0)
 
     def measure(self, shape, mesh, pull=None, options=None, progress_cb=None, check_abort=None):
         options = options or {}
