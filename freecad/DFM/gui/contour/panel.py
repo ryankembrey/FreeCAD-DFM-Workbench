@@ -17,7 +17,7 @@ import Part  # type: ignore
 from ..visuals import DirectionIndicator
 
 try:
-    from .. import DFM_rc  # noqa: F401
+    from .. import DFM_rc  # noqa: F401  (registers the icon resources)
 except Exception:
     pass
 
@@ -28,13 +28,15 @@ from ...contour.measures import BoolOption, ChoiceOption
 from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend
 from .resolution import ResolutionField
-from . import document  # noqa: F401
+from . import document  # noqa: F401  (registers the saved-analysis classes at import)
 
 
 PICK_BUTTON_STYLE = """
 QPushButton:checked { border: 2px solid palette(highlight); font-weight: bold; }
 """
 
+# Remembered across contour updates and reopened analyses within the session, so
+# the legend keeps the place, size and orientation the user gave it.
 _LEGEND_STATE = {"pos": None, "size": None, "horizontal": False}
 
 _BAND_STEPS = {
@@ -228,7 +230,7 @@ class ContourTaskPanel:
         self.resolution.changed.connect(self._on_resolution_changed)
         cg.addWidget(self.resolution, 0, 1)
 
-        cg.addWidget(QtWidgets.QLabel("Color Map"), 1, 0)
+        cg.addWidget(QtWidgets.QLabel("Color map"), 1, 0)
         self.cb_colormap = QtWidgets.QComboBox()
         self.cb_colormap.addItems(list(COLORMAPS.keys()))
         self.cb_colormap.setCurrentText(self.measure.default_colormap)
@@ -271,9 +273,16 @@ class ContourTaskPanel:
         self._compact_combo(self.cb_bands)
         self.cb_bands.currentIndexChanged.connect(self._on_style_changed)
         cg.addWidget(self.cb_bands, 3, 1)
+
+        self.cb_smooth = QtWidgets.QCheckBox("Smooth shading")
+        self.cb_smooth.setToolTip(
+            "Blend colors across triangles so the mesh facets disappear. "
+            "Off shows one flat color per triangle."
+        )
+        self.cb_smooth.toggled.connect(self._on_smooth_changed)
+        cg.addWidget(self.cb_smooth, 4, 0, 1, 2)
         root.addWidget(cont_box)
 
-        # Actions (Save lives at the window level, next to Close)
         row = QtWidgets.QHBoxLayout()
         self.pb_generate = QtWidgets.QPushButton("Generate Contour")
         self.pb_generate.setMinimumHeight(30)
@@ -589,6 +598,11 @@ class ContourTaskPanel:
         if self._legend is not None:
             self._legend.set_style(colormap, band)
 
+    def _on_smooth_changed(self, _checked=False):
+        # Display-only: rebuild the overlay (no re-mesh, no re-measure).
+        if self._last is not None:
+            self._render()
+
     def _render(self):
         if self._last is None:
             return
@@ -616,7 +630,23 @@ class ContourTaskPanel:
         band = self._band()
 
         node = ContourNode(self.target_object)
-        node.build(mesh.vertices, mesh.triangles, values, normals, low, high, colormap, band)
+        smooth = self.cb_smooth.isChecked()
+        # Don't blend across a value jump bigger than half the scale (in the
+        # measure's own units: degrees for draft, mm for thickness).
+        span = dom_hi - dom_lo
+        value_gap = 0.5 * span if (smooth and span > 0) else None
+        node.build(
+            mesh.vertices,
+            mesh.triangles,
+            values,
+            normals,
+            low,
+            high,
+            colormap,
+            band,
+            smooth,
+            value_gap,
+        )
         node.attach()
         register(node)
         self._node = node
@@ -693,40 +723,28 @@ class ContourTaskPanel:
             self._position_legend()
 
     def _position_legend(self):
-        """Place the legend just to the right of the model by projecting the
-        object's bounding box to screen. Falls back to the default corner spot."""
-        if self._legend is None or self.target_shape is None:
+        """Default placement: horizontal, near the top and biased away from the
+        right edge, so it never lands under a right-docked task-panel overlay.
+        Used only the first time; after that the remembered geometry wins."""
+        if self._legend is None:
+            return
+        parent = self._legend.parentWidget()
+        if parent is None:
             return
         try:
-            view = Gui.ActiveDocument.ActiveView
-            bb = self.target_shape.BoundBox
-            corners = [
-                App.Vector(x, y, z)
-                for x in (bb.XMin, bb.XMax)
-                for y in (bb.YMin, bb.YMax)
-                for z in (bb.ZMin, bb.ZMax)
-            ]
-            xs, ys = [], []
-            for c in corners:
-                sx, sy = view.getPointOnScreen(c)
-                xs.append(sx)
-                ys.append(sy)
-            parent = self._legend.parentWidget()
-            if parent is None:
-                return
-            # getPointOnScreen has a bottom-left origin; flip to widget coords.
-            right_x = max(xs) + 24
-            center_y = parent.height() - (min(ys) + max(ys)) / 2.0
-            wx = int(min(max(right_x, 0), max(0, parent.width() - self._legend.width())))
-            wy = int(
-                min(
-                    max(center_y - self._legend.height() / 2, 0),
-                    max(0, parent.height() - self._legend.height()),
-                )
-            )
-            self._legend.move(wx, wy)
+            self._legend.set_orientation(True)  # horizontal
+            pw = parent.width()
+            w = min(max(320, pw // 3), max(200, pw - 40))
+            h = 96
+            self._legend.resize(w, h)
+            x = (pw - w) // 2
+            # Keep clear of a right-side overlay panel (~right third of the view).
+            right_limit = int(pw * 0.62)
+            if x + w > right_limit:
+                x = max(8, right_limit - w)
+            self._legend.move(x, 12)
         except Exception:
-            pass  # keep the default placement
+            pass  # keep whatever placement the widget already has
 
     def _on_clear(self):
         self._remove_hover()
@@ -757,6 +775,7 @@ class ContourTaskPanel:
             "range_low": low,
             "range_high": high,
             "bands": self.cb_bands.currentText(),
+            "smooth": self.cb_smooth.isChecked(),
             "options": self._options(),
         }
 
@@ -782,7 +801,6 @@ class ContourTaskPanel:
         except Exception as exc:
             App.Console.PrintError(f"DFM analysis: could not save. {exc}\n")
             return
-        # The saved object now owns a persistent overlay; drop our preview and close.
         self._teardown()
 
     def _load_from_object(self, obj):
@@ -797,6 +815,7 @@ class ContourTaskPanel:
                 self.cb_colormap.setCurrentText(obj.ColorMap)
             if obj.Bands:
                 self.cb_bands.setCurrentText(obj.Bands)
+            self.cb_smooth.setChecked(bool(getattr(obj, "Smooth", False)))
             for oid, w in self._option_widgets.items():
                 if oid in (obj.Options or {}):
                     val = obj.Options[oid]
@@ -940,8 +959,6 @@ class ContourTaskPanel:
         return vw
 
     def _set_hover_cursor(self, on_contour):
-        # Crosshair only while the pick is on the contour model. The legend keeps
-        # its own arrow cursor, so it is never affected.
         if getattr(self, "_cursor_cross", None) == on_contour:
             return
         self._cursor_cross = on_contour
@@ -1021,7 +1038,7 @@ class ContourTaskPanel:
             self._hover_label.deleteLater()
             self._hover_label = None
         self._destroy_legend()
-        clear_all()  # drop the live preview overlay
+        clear_all()
         if self.indicator is not None:
             self.indicator.remove()
         try:
@@ -1031,11 +1048,9 @@ class ContourTaskPanel:
         Gui.Control.closeDialog()
 
     def reject(self):
-        # "Close" button.
         self._teardown()
 
     def accept(self):
-        # "Save" button: persist to the tree, then close.
         self._on_save()
         if not self._saved:
             self._teardown()

@@ -2,12 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Value-to-color mapping for contour visualisations.
-
-Each colormap is a function taking a normalized parameter t in [0, 1] and
-returning an (r, g, b) tuple of floats in [0, 1]. Use `value_to_color` to map a
-raw value against a [vmin, vmax] display range, optionally quantized into bands.
-"""
 
 from typing import Callable
 
@@ -36,8 +30,155 @@ def _lerp_stops(t: float, stops: list) -> tuple:
     return stops[-1][1]
 
 
-def jet(t: float) -> tuple:
-    """Classic FEM rainbow: blue (low) through green to red (high)."""
+_VIRIDIS_STOPS = [
+    (0.00, (0.267, 0.005, 0.329)),
+    (0.10, (0.283, 0.131, 0.449)),
+    (0.20, (0.263, 0.242, 0.521)),
+    (0.30, (0.220, 0.343, 0.549)),
+    (0.40, (0.177, 0.438, 0.558)),
+    (0.50, (0.143, 0.523, 0.556)),
+    (0.60, (0.120, 0.607, 0.540)),
+    (0.70, (0.166, 0.690, 0.497)),
+    (0.80, (0.319, 0.770, 0.411)),
+    (0.90, (0.526, 0.833, 0.288)),
+    (1.00, (0.993, 0.906, 0.144)),
+]
+
+_CIVIDIS_STOPS = [
+    (0.00, (0.000, 0.135, 0.305)),
+    (0.10, (0.000, 0.187, 0.403)),
+    (0.20, (0.225, 0.245, 0.394)),
+    (0.30, (0.322, 0.306, 0.400)),
+    (0.40, (0.402, 0.364, 0.416)),
+    (0.50, (0.479, 0.423, 0.430)),
+    (0.60, (0.557, 0.487, 0.427)),
+    (0.70, (0.645, 0.557, 0.410)),
+    (0.80, (0.742, 0.629, 0.376)),
+    (0.90, (0.846, 0.703, 0.321)),
+    (1.00, (0.995, 0.910, 0.218)),
+]
+
+_PLASMA_STOPS = [
+    (0.00, (0.050, 0.030, 0.528)),
+    (0.20, (0.358, 0.001, 0.645)),
+    (0.40, (0.611, 0.091, 0.620)),
+    (0.60, (0.799, 0.278, 0.470)),
+    (0.80, (0.930, 0.472, 0.326)),
+    (1.00, (0.940, 0.975, 0.131)),
+]
+
+_INFERNO_STOPS = [
+    (0.00, (0.001, 0.000, 0.014)),
+    (0.20, (0.230, 0.036, 0.371)),
+    (0.40, (0.502, 0.132, 0.428)),
+    (0.60, (0.775, 0.246, 0.320)),
+    (0.80, (0.955, 0.478, 0.148)),
+    (1.00, (0.988, 0.998, 0.645)),
+]
+
+_MAGMA_STOPS = [
+    (0.00, (0.001, 0.000, 0.014)),
+    (0.20, (0.199, 0.048, 0.396)),
+    (0.40, (0.482, 0.146, 0.507)),
+    (0.60, (0.780, 0.243, 0.451)),
+    (0.80, (0.972, 0.447, 0.360)),
+    (1.00, (0.987, 0.991, 0.749)),
+]
+
+
+def viridis(t):
+    return _lerp_stops(t, _VIRIDIS_STOPS)
+
+
+def cividis(t):
+    return _lerp_stops(t, _CIVIDIS_STOPS)
+
+
+def plasma(t):
+    return _lerp_stops(t, _PLASMA_STOPS)
+
+
+def inferno(t):
+    return _lerp_stops(t, _INFERNO_STOPS)
+
+
+def magma(t):
+    return _lerp_stops(t, _MAGMA_STOPS)
+
+
+def grayscale(t):
+    t = _clamp(t)
+    return (t, t, t)
+
+
+_COOLWARM_STOPS = [
+    (0.00, (0.230, 0.299, 0.754)),
+    (0.50, (0.865, 0.865, 0.865)),
+    (1.00, (0.706, 0.016, 0.150)),
+]
+
+# matplotlib RdBu: red (low) - white - blue (high). Good for stress/pressure.
+_RDBU_STOPS = [
+    (0.00, (0.404, 0.000, 0.122)),
+    (0.10, (0.698, 0.094, 0.168)),
+    (0.20, (0.839, 0.376, 0.302)),
+    (0.30, (0.957, 0.647, 0.510)),
+    (0.40, (0.992, 0.859, 0.780)),
+    (0.50, (0.969, 0.969, 0.969)),
+    (0.60, (0.820, 0.898, 0.941)),
+    (0.70, (0.573, 0.773, 0.871)),
+    (0.80, (0.262, 0.576, 0.765)),
+    (0.90, (0.129, 0.400, 0.674)),
+    (1.00, (0.020, 0.188, 0.380)),
+]
+
+# matplotlib BrBG: brown (low) - white - teal/green (high). Colorblind-safe.
+_BRBG_STOPS = [
+    (0.00, (0.329, 0.188, 0.020)),
+    (0.10, (0.549, 0.318, 0.039)),
+    (0.20, (0.749, 0.506, 0.176)),
+    (0.30, (0.875, 0.761, 0.490)),
+    (0.40, (0.965, 0.910, 0.765)),
+    (0.50, (0.961, 0.961, 0.961)),
+    (0.60, (0.780, 0.918, 0.898)),
+    (0.70, (0.502, 0.804, 0.757)),
+    (0.80, (0.208, 0.592, 0.561)),
+    (0.90, (0.004, 0.400, 0.369)),
+    (1.00, (0.000, 0.235, 0.188)),
+]
+
+
+def coolwarm(t):
+    """Smooth blue-gray-red (Moreland), blue low and red high."""
+    return _lerp_stops(t, _COOLWARM_STOPS)
+
+
+def rdbu(t):
+    return _lerp_stops(t, _RDBU_STOPS)
+
+
+def brbg(t):
+    return _lerp_stops(t, _BRBG_STOPS)
+
+
+_TURBO_STOPS = [
+    (0.000, (0.190, 0.072, 0.232)),
+    (0.125, (0.257, 0.395, 0.877)),
+    (0.250, (0.213, 0.618, 0.994)),
+    (0.375, (0.105, 0.831, 0.799)),
+    (0.500, (0.363, 0.973, 0.470)),
+    (0.625, (0.737, 0.985, 0.223)),
+    (0.750, (0.981, 0.759, 0.187)),
+    (0.875, (0.932, 0.383, 0.086)),
+    (1.000, (0.480, 0.016, 0.011)),
+]
+
+
+def turbo(t):
+    return _lerp_stops(t, _TURBO_STOPS)
+
+
+def jet(t):
     t = _clamp(t)
     r = _clamp(1.5 - abs(4.0 * t - 3.0))
     g = _clamp(1.5 - abs(4.0 * t - 2.0))
@@ -45,106 +186,28 @@ def jet(t: float) -> tuple:
     return (r, g, b)
 
 
-_TURBO_STOPS = [
-    (0.00, (0.190, 0.072, 0.232)),
-    (0.25, (0.100, 0.620, 0.930)),
-    (0.50, (0.400, 0.940, 0.300)),
-    (0.75, (0.980, 0.720, 0.160)),
-    (1.00, (0.730, 0.010, 0.010)),
-]
-
-
-def turbo(t: float) -> tuple:
-    return _lerp_stops(t, _TURBO_STOPS)
-
-
-_COOLWARM_STOPS = [
-    (0.00, (0.230, 0.300, 0.750)),
-    (0.50, (0.870, 0.870, 0.870)),
-    (1.00, (0.710, 0.020, 0.150)),
-]
-
-
-def coolwarm(t: float) -> tuple:
-    """Diverging blue-to-red, neutral pale gray at the center."""
-    return _lerp_stops(t, _COOLWARM_STOPS)
-
-
-_VIRIDIS_STOPS = [
-    (0.00, (0.267, 0.005, 0.329)),
-    (0.25, (0.229, 0.322, 0.545)),
-    (0.50, (0.128, 0.567, 0.551)),
-    (0.75, (0.369, 0.789, 0.383)),
-    (1.00, (0.993, 0.906, 0.144)),
-]
-
-
-def viridis(t: float) -> tuple:
-    return _lerp_stops(t, _VIRIDIS_STOPS)
-
-
-_PLASMA_STOPS = [
-    (0.00, (0.050, 0.030, 0.528)),
-    (0.25, (0.417, 0.000, 0.658)),
-    (0.50, (0.692, 0.165, 0.564)),
-    (0.75, (0.881, 0.392, 0.383)),
-    (1.00, (0.940, 0.975, 0.131)),
-]
-
-
-def plasma(t: float) -> tuple:
-    return _lerp_stops(t, _PLASMA_STOPS)
-
-
-_INFERNO_STOPS = [
-    (0.00, (0.001, 0.000, 0.014)),
-    (0.25, (0.258, 0.039, 0.406)),
-    (0.50, (0.578, 0.148, 0.404)),
-    (0.75, (0.865, 0.317, 0.226)),
-    (1.00, (0.988, 0.998, 0.645)),
-]
-
-
-def inferno(t: float) -> tuple:
-    return _lerp_stops(t, _INFERNO_STOPS)
-
-
-def grayscale(t: float) -> tuple:
-    t = _clamp(t)
-    return (t, t, t)
-
-
-_DRAFT_STOPS = [
-    (0.00, (0.020, 0.190, 0.780)),
-    (0.30, (0.150, 0.650, 0.900)),
-    (0.48, (0.980, 0.950, 0.250)),
-    (0.50, (1.000, 0.900, 0.150)),
-    (0.52, (0.980, 0.950, 0.250)),
-    (0.70, (0.980, 0.520, 0.180)),
-    (1.00, (0.780, 0.050, 0.050)),
-]
-
-
-def draft_diverging(t: float) -> tuple:
-    return _lerp_stops(t, _DRAFT_STOPS)
-
-
 COLORMAPS: dict = {
-    "Jet": jet,
-    "Turbo": turbo,
-    "Cool-Warm": coolwarm,
+    # Sequential (magnitude data, e.g. thickness)
     "Viridis": viridis,
-    "Plasma": plasma,
+    "Cividis": cividis,  # colorblind-safe
+    "Plasma": plasma,  # thermal
     "Inferno": inferno,
+    "Magma": magma,
     "Grayscale": grayscale,
-    "Draft (center highlight)": draft_diverging,
+    # Diverging (signed data, e.g. draft)
+    "Cool-Warm": coolwarm,
+    "RdBu": rdbu,  # stresses / pressure
+    "BrBG": brbg,  # colorblind-safe
+    # Rainbow (legacy)
+    "Turbo": turbo,
+    "Jet": jet,
 }
 
-DEFAULT_COLORMAP = "Turbo"
+DEFAULT_COLORMAP = "Cool-Warm"
 
 
 def get_colormap(name: str) -> Callable[[float], tuple]:
-    return COLORMAPS.get(name, jet)
+    return COLORMAPS.get(name, viridis)
 
 
 def normalize(value: float, vmin: float, vmax: float) -> float:

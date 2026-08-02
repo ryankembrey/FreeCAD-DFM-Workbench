@@ -72,9 +72,6 @@ class ContourMeasure:
         raise NotImplementedError
 
 
-# --- geometry helpers (shared by measures that need outward orientation) ------
-
-
 def triangle_normal(vertices, tri):
     """Unit facet normal from the edge cross product, or None for a sliver."""
     ia, ib, ic = tri
@@ -175,27 +172,20 @@ def outward_normals(shape, mesh):
     return normals
 
 
-# --- draft --------------------------------------------------------------------
-
-
 def draft_angle_for_normal(nx, ny, nz, pull) -> float:
     """Signed draft in degrees: 0 = vertical wall, +90 = normal along pull,
-    -90 = normal against pull."""
+    -90 = normal against pull. Continuous across the whole range (no jump at the
+    poles), so adjacent faces never differ wildly for near-identical normals."""
     dot = nx * pull.x + ny * pull.y + nz * pull.z
     dot = max(-1.0, min(1.0, dot))
-    angle = math.degrees(math.acos(dot))
-    if angle < 1e-5:
-        return 90.0
-    if angle > 180.0 - 1e-5:
-        return -90.0
-    return angle - 90.0
+    return 90.0 - math.degrees(math.acos(dot))
 
 
 class DraftMeasure(ContourMeasure):
     id = "draft"
     label = "Draft Angle"
     unit = "°"
-    default_colormap = "Turbo"
+    default_colormap = "Cool-Warm"
     default_range = (-90.0, 90.0)
     range_limits = (-90.0, 90.0)
     needs_pull_direction = True
@@ -260,7 +250,7 @@ class ThicknessMeasure(ContourMeasure):
     id = "thickness"
     label = "Thickness"
     unit = "mm"
-    default_colormap = "Turbo"
+    default_colormap = "Viridis"
     default_range = None  # auto: taken from the data's own min/max
     range_limits = None
     range_step = 0.5

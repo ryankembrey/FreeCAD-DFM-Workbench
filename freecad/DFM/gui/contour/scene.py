@@ -12,6 +12,9 @@ keeps live overlays referenced so they persist after a dialog closes.
 
 from pivy import coin
 
+import math
+from collections import defaultdict
+
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
@@ -20,6 +23,10 @@ from ...contour.colormap import value_to_color, DEFAULT_COLORMAP
 
 _TARGET_PER_CHUNK = 2500
 _NAME_PREFIX = "DFMContourChunk_"
+
+# Blend colors only across edges smoother than this; sharper edges (corners,
+# chamfers) stay crisp so a draft jump from 0 to 90 degrees is not smeared.
+_CREASE_COS = math.cos(math.radians(35.0))
 
 
 def _partition(vertices, triangles, values, normals, target=_TARGET_PER_CHUNK):
@@ -68,6 +75,95 @@ class ContourNode:
         self._name_to_chunk = {}
         self._view = None
         self._original_visibility = None
+        self._smooth = False
+        self._global_material = None
+        self._vertex_values = None
+
+    @staticmethod
+    def _split_for_smoothing(
+        vertices, triangles, values, normals, crease_cos=_CREASE_COS, value_gap=None
+    ):
+        """Duplicate vertices across sharp edges so smoothing groups blend
+        within a surface (fillets) but stay crisp across creases (corners).
+
+        Two triangles blend only if their normals agree within the crease AND
+        their values are within value_gap (when given). The value check is what
+        stops, e.g., +90 and -89 degrees blending, and it works for any measure
+        (thickness in mm included) since the gap is passed in by the caller.
+
+        Returns (new_vertices, new_triangles, per_vertex_values). Triangles keep
+        their order, so per-triangle values/normals still line up by index.
+        """
+        incident = defaultdict(list)
+        for ti, tri in enumerate(triangles):
+            for corner in tri:
+                incident[corner].append(ti)
+
+        new_vertices = [tuple(v) for v in vertices]
+        vertex_values = [0.0] * len(new_vertices)
+        vertex_normals = [(0.0, 0.0, 1.0)] * len(new_vertices)
+        tris = [list(t) for t in triangles]
+
+        for v, tlist in incident.items():
+            # Union incident triangles that share a smooth surface and value.
+            parent = {ti: ti for ti in tlist}
+
+            def find(x):
+                while parent[x] != x:
+                    parent[x] = parent[parent[x]]
+                    x = parent[x]
+                return x
+
+            for i in range(len(tlist)):
+                ni = normals[tlist[i]]
+                if ni is None:
+                    continue
+                vi = values[tlist[i]]
+                for j in range(i + 1, len(tlist)):
+                    nj = normals[tlist[j]]
+                    if nj is None:
+                        continue
+                    if ni[0] * nj[0] + ni[1] * nj[1] + ni[2] * nj[2] < crease_cos:
+                        continue
+                    if value_gap is not None and abs(vi - values[tlist[j]]) > value_gap:
+                        continue
+                    parent[find(tlist[i])] = find(tlist[j])
+
+            clusters = defaultdict(list)
+            for ti in tlist:
+                clusters[find(ti)].append(ti)
+
+            first = True
+            for group in clusters.values():
+                mean_val = sum(values[ti] for ti in group) / len(group)
+                # Average the group's face normals for smooth (Gouraud) lighting.
+                sx = sy = sz = 0.0
+                for ti in group:
+                    nn = normals[ti]
+                    if nn is not None:
+                        sx += nn[0]
+                        sy += nn[1]
+                        sz += nn[2]
+                mag = math.sqrt(sx * sx + sy * sy + sz * sz)
+                mean_nrm = (sx / mag, sy / mag, sz / mag) if mag > 1e-9 else (0.0, 0.0, 1.0)
+                if first:
+                    idx = v
+                    first = False
+                else:
+                    idx = len(new_vertices)
+                    new_vertices.append(new_vertices[v])  # duplicate coordinate
+                    vertex_values.append(0.0)
+                    vertex_normals.append((0.0, 0.0, 1.0))
+                vertex_values[idx] = mean_val
+                vertex_normals[idx] = mean_nrm
+                for ti in group:
+                    corner = tris[ti]
+                    for k in range(3):
+                        if corner[k] == v:
+                            corner[k] = idx
+                            break
+
+        return new_vertices, [tuple(t) for t in tris], vertex_values, vertex_normals
 
     def build(
         self,
@@ -79,7 +175,10 @@ class ContourNode:
         vmax,
         colormap=DEFAULT_COLORMAP,
         band_step=0.0,
+        smooth=False,
+        value_gap=None,
     ):
+        self._smooth = smooth
         root = coin.SoSeparator()
 
         hints = coin.SoShapeHints()
@@ -88,12 +187,41 @@ class ContourNode:
         hints.creaseAngle = 0.0
         root.addChild(hints)
 
+        if smooth:
+            # Split vertices at creases and value jumps, so color and lighting
+            # blend along fillets but not across sharp edges or sign flips.
+            (r_vertices, r_triangles, self._vertex_values, vertex_normals) = (
+                self._split_for_smoothing(vertices, triangles, values, normals, value_gap=value_gap)
+            )
+        else:
+            r_vertices, r_triangles = vertices, triangles
+
         coords = coin.SoCoordinate3()
-        coords.point.setValues(0, len(vertices), vertices)
+        coords.point.setValues(0, len(r_vertices), r_vertices)
         root.addChild(coords)
 
-        for i, chunk in enumerate(_partition(vertices, triangles, values, normals)):
-            root.addChild(self._build_chunk(i, chunk, vmin, vmax, colormap, band_step))
+        if smooth:
+            gmat = coin.SoMaterial()
+            colors = [
+                value_to_color(v, vmin, vmax, colormap, band_step) for v in self._vertex_values
+            ]
+            gmat.diffuseColor.setValues(0, len(colors), colors)
+            root.addChild(gmat)
+            gbind = coin.SoMaterialBinding()
+            gbind.value = coin.SoMaterialBinding.PER_VERTEX_INDEXED
+            root.addChild(gbind)
+            self._global_material = gmat
+
+            # Smoothed per-vertex normals so lighting no longer shows facets.
+            gnorm = coin.SoNormal()
+            gnorm.vector.setValues(0, len(vertex_normals), vertex_normals)
+            root.addChild(gnorm)
+            gnbind = coin.SoNormalBinding()
+            gnbind.value = coin.SoNormalBinding.PER_VERTEX_INDEXED
+            root.addChild(gnbind)
+
+        for i, chunk in enumerate(_partition(r_vertices, r_triangles, values, normals)):
+            root.addChild(self._build_chunk(i, chunk, vmin, vmax, colormap, band_step, smooth))
 
         self._sep = root
         App.Console.PrintMessage(
@@ -101,25 +229,28 @@ class ContourNode:
         )
         return root
 
-    def _build_chunk(self, index, chunk, vmin, vmax, colormap, band_step):
+    def _build_chunk(self, index, chunk, vmin, vmax, colormap, band_step, smooth=False):
         sep = coin.SoSeparator()
 
-        material = coin.SoMaterial()
-        colors = [value_to_color(v, vmin, vmax, colormap, band_step) for v in chunk["values"]]
-        material.diffuseColor.setValues(0, len(colors), colors)
-        sep.addChild(material)
+        chunk_material = None
+        if not smooth:
+            material = coin.SoMaterial()
+            colors = [value_to_color(v, vmin, vmax, colormap, band_step) for v in chunk["values"]]
+            material.diffuseColor.setValues(0, len(colors), colors)
+            sep.addChild(material)
 
-        mbind = coin.SoMaterialBinding()
-        mbind.value = coin.SoMaterialBinding.PER_FACE
-        sep.addChild(mbind)
+            mbind = coin.SoMaterialBinding()
+            mbind.value = coin.SoMaterialBinding.PER_FACE
+            sep.addChild(mbind)
+            chunk_material = material
 
-        normal_node = coin.SoNormal()
-        normal_node.vector.setValues(0, len(chunk["normals"]), chunk["normals"])
-        sep.addChild(normal_node)
+            normal_node = coin.SoNormal()
+            normal_node.vector.setValues(0, len(chunk["normals"]), chunk["normals"])
+            sep.addChild(normal_node)
 
-        nbind = coin.SoNormalBinding()
-        nbind.value = coin.SoNormalBinding.PER_FACE
-        sep.addChild(nbind)
+            nbind = coin.SoNormalBinding()
+            nbind.value = coin.SoNormalBinding.PER_FACE
+            sep.addChild(nbind)
 
         face_set = coin.SoIndexedFaceSet()
         flat = []
@@ -130,14 +261,24 @@ class ContourNode:
         face_set.setName(coin.SbName(name))
         sep.addChild(face_set)
 
-        self._chunks.append({"material": material, "values": chunk["values"]})
+        self._chunks.append({"material": chunk_material, "values": chunk["values"]})
         self._name_to_chunk[name] = index
         return sep
 
     def recolor(self, vmin, vmax, colormap=DEFAULT_COLORMAP, band_step=0.0):
+        if self._smooth and self._global_material is not None:
+            colors = [
+                value_to_color(v, vmin, vmax, colormap, band_step)
+                for v in (self._vertex_values or [])
+            ]
+            self._global_material.diffuseColor.setValues(0, len(colors), colors)
+            return
         for chunk in self._chunks:
+            material = chunk.get("material")
+            if material is None:
+                continue
             colors = [value_to_color(v, vmin, vmax, colormap, band_step) for v in chunk["values"]]
-            chunk["material"].diffuseColor.setValues(0, len(colors), colors)
+            material.diffuseColor.setValues(0, len(colors), colors)
 
     def pick_value(self, picked):
         """Resolve a coin picked point to (key, value, point) or None."""
@@ -195,14 +336,25 @@ _ACTIVE_CONTOURS = []
 
 
 def build_scene(
-    vertices, triangles, values, normals, vmin, vmax, colormap=DEFAULT_COLORMAP, band_step=0.0
+    vertices,
+    triangles,
+    values,
+    normals,
+    vmin,
+    vmax,
+    colormap=DEFAULT_COLORMAP,
+    band_step=0.0,
+    smooth=False,
+    value_gap=None,
 ):
     """Build a standalone contour separator (for a view provider to own).
 
     Unlike ContourNode.attach(), this does not touch the live scene graph.
     """
     node = ContourNode(None)
-    return node.build(vertices, triangles, values, normals, vmin, vmax, colormap, band_step)
+    return node.build(
+        vertices, triangles, values, normals, vmin, vmax, colormap, band_step, smooth, value_gap
+    )
 
 
 def register(node: ContourNode):

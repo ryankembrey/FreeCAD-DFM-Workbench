@@ -2,7 +2,15 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""A saved contour analysis as a tree object."""
+"""A saved contour analysis as a tree object.
+
+Save on the task panel creates (or updates) an ``App::FeaturePython`` that stores
+the analysis parameters and the computed field. Its view provider owns the
+contour overlay under its own display node, so FreeCAD's eye icon toggles it and
+it reloads statically from the stored field (no remeshing on file open).
+Double-clicking reopens the task panel bound to the object, where the user can
+change settings and re-mesh on demand.
+"""
 
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
@@ -41,6 +49,7 @@ class ContourAnalysisFeature:
         obj.addProperty("App::PropertyFloat", "RangeLow", "DFM", "Color range low")
         obj.addProperty("App::PropertyFloat", "RangeHigh", "DFM", "Color range high")
         obj.addProperty("App::PropertyString", "Bands", "DFM", "Banding mode")
+        obj.addProperty("App::PropertyBool", "Smooth", "DFM", "Smooth (blended) shading")
         obj.addProperty("App::PropertyPythonObject", "Options", "DFM", "Measure options")
         obj.addProperty("App::PropertyPythonObject", "FieldData", "DFM", "Computed field")
         obj.Options = {}
@@ -59,6 +68,7 @@ class ContourAnalysisFeature:
         obj.RangeLow = float(params.get("range_low", 0.0))
         obj.RangeHigh = float(params.get("range_high", 0.0))
         obj.Bands = params.get("bands", "Smooth")
+        obj.Smooth = bool(params.get("smooth", False))
         obj.Options = dict(params.get("options", {}))
         obj.FieldData = field
 
