@@ -2,15 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""A saved contour analysis as a tree object.
-
-Save on the task panel creates (or updates) an ``App::FeaturePython`` that stores
-the analysis parameters and the computed field. Its view provider owns the
-contour overlay under its own display node, so FreeCAD's eye icon toggles it and
-it reloads statically from the stored field (no remeshing on file open).
-Double-clicking reopens the task panel bound to the object, where the user can
-change settings and re-mesh on demand.
-"""
 
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
@@ -146,7 +137,7 @@ def create_or_update_analysis(obj, params, field):
 def open_panel_for(obj):
     """Reopen the task panel bound to a saved analysis object."""
     from .panel import ContourTaskPanel
-    from ...contour.measures import DraftMeasure, ThicknessMeasure
+    from ...app.contour.measures import DraftMeasure, ThicknessMeasure
 
     measure_id = getattr(obj, "Measure", "draft")
     measure = ThicknessMeasure() if measure_id == "thickness" else DraftMeasure()

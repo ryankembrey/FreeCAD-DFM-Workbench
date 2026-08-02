@@ -2,13 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Uniform surface meshing via gmsh, shared by every contour tool.
-
-Produces a triangle mesh whose elements are all roughly the same size, plus the
-true CAD surface normal per triangle (so curved walls read a smooth angle rather
-than a faceting checkerboard). Also provides the resolution presets and a
-triangle-count estimate used to guard against ruinously fine meshes.
-"""
 
 from dataclasses import dataclass
 import math

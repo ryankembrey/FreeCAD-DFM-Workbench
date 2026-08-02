@@ -2,20 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Per-point wall-thickness backends for the thickness contour.
-
-These are the ray-cast and shrinking-sphere methods from the DFM analyzers,
-stripped of the hill-climbing and neighbour seeding: the mesh already gives one
-point per triangle, so each is measured exactly once.
-
-Both start the measurement from just *outside* the surface, along the outward
-normal, by a small margin. A triangle centroid on a curved face sits slightly
-off the true surface (the flat facet sags in), so a ray started at the centroid
-would hit the true surface first and report ~0. Starting outside and reading the
-first two intersections (entry, exit) gives the wall thickness exactly, free of
-that facet error. OCP is imported lazily so the module loads even where OCP is
-unavailable.
-"""
 
 _EPS = 1e-4
 _INF = float("inf")

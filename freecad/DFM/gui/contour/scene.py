@@ -18,7 +18,7 @@ from collections import defaultdict
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from ...contour.colormap import value_to_color, DEFAULT_COLORMAP
+from ...app.contour.colormap import value_to_color, DEFAULT_COLORMAP
 
 
 _TARGET_PER_CHUNK = 2500

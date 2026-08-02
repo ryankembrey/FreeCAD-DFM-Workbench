@@ -21,9 +21,10 @@ try:
 except Exception:
     pass
 
-from ...contour.meshing import generate_uniform_mesh
-from ...contour.colormap import COLORMAPS
-from ...contour.measures import BoolOption, ChoiceOption
+
+from ...app.contour.meshing import generate_uniform_mesh
+from ...app.contour.colormap import COLORMAPS
+from ...app.contour.measures import BoolOption, ChoiceOption
 
 from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend

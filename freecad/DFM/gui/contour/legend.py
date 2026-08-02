@@ -16,7 +16,7 @@ import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...contour.colormap import value_to_color, COLORMAPS
+from ...app.contour.colormap import value_to_color, COLORMAPS
 
 
 _RESIZE_ZONE = 16
@@ -95,8 +95,6 @@ class ContourLegend(QtWidgets.QWidget):
             self._apply_min_size()
             self.update()
 
-    # ---- API -------------------------------------------------------------
-
     def configure(
         self, title, unit, colormap, band, dom_lo, dom_hi, low, high, data_min=None, data_max=None
     ):
@@ -126,8 +124,6 @@ class ContourLegend(QtWidgets.QWidget):
                 parent.removeEventFilter(self)
             except Exception:
                 pass
-
-    # ---- geometry (orientation-aware) ------------------------------------
 
     def _apply_min_size(self):
         if self._horizontal:
@@ -185,8 +181,6 @@ class ContourLegend(QtWidgets.QWidget):
             return "low" if abs(here - cl) <= abs(here - ch) else "high"
         return "low" if near_low else "high"
 
-    # ---- placement -------------------------------------------------------
-
     def _place_top_right(self):
         parent = self.parent()
         if parent is not None:
@@ -205,8 +199,6 @@ class ContourLegend(QtWidgets.QWidget):
         if obj is self.parent() and event.type() == QtCore.QEvent.Type.Resize:
             self._clamp_into_parent()
         return False
-
-    # ---- interaction -----------------------------------------------------
 
     @staticmethod
     def _global(event):
@@ -339,8 +331,6 @@ class ContourLegend(QtWidgets.QWidget):
         self.resize(self.height(), self.width())
         self._clamp_into_parent()
         self.update()
-
-    # ---- painting --------------------------------------------------------
 
     def _halo_text(self, p, x, baseline, text):
         p.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)

@@ -5,7 +5,7 @@
 
 from PySide6 import QtCore, QtWidgets
 
-from ...contour.meshing import (
+from ...app.contour.meshing import (
     RESOLUTION_DIVISORS,
     DEFAULT_RESOLUTION,
     MIN_ELEMENT_SIZE,

@@ -7,7 +7,7 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 from ..contour.panel import ContourTaskPanel
-from ...contour.measures import DraftMeasure
+from ...app.contour.measures import DraftMeasure
 
 _ICON = ":/icons/dfm_draft_contour.svg"
 

@@ -135,7 +135,7 @@ def measure_thickness(
 
 
 def _serial(part_shape, tasks, method, progress_cb, check_abort, tol):
-    from ..core.utils.conversion import freecad_to_ocp
+    from ...core.utils.conversion import freecad_to_ocp
     from .thickness_backend import make_backend
 
     backend = make_backend(method, freecad_to_ocp(part_shape))
