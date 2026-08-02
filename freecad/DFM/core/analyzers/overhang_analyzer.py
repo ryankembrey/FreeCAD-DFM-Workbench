@@ -109,4 +109,4 @@ class OverhangAnalyzer(BaseAnalyzer):
         angle_deg = math.degrees(self.print_orientation.Angle(normal_dir))
         if angle_deg <= 90.0:
             return 0.0
-        return angle_deg
+        return angle_deg - 90
