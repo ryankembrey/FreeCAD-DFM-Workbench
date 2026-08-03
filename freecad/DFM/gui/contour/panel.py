@@ -79,7 +79,9 @@ class ContourTaskPanel:
         self.pull_flipped = False
         self.pull_anchor = None
         self.indicator = (
-            DirectionIndicator((1.0, 0.15, 0.15), "Pull") if measure.needs_pull_direction else None
+            DirectionIndicator((1.0, 0.15, 0.15), "Pull Direction")
+            if measure.needs_pull_direction
+            else None
         )
 
         self.picking_mode: Optional[str] = None
