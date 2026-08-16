@@ -100,6 +100,8 @@ class ContourTaskPanel:
         self._last_hover_t = 0.0
         self._hover_interval = 0.03
         self._last_face_key = None
+        self._probes = []
+        self._click_cb = None
 
         self._build_form()
         Gui.Selection.addObserver(self)
@@ -290,11 +292,18 @@ class ContourTaskPanel:
         self.pb_generate = QtWidgets.QPushButton("Generate Contour")
         self.pb_generate.setMinimumHeight(30)
         self.pb_generate.clicked.connect(self._on_generate)
+
+        self.pb_clear_probes = QtWidgets.QPushButton("Clear Probes")
+        self.pb_clear_probes.setMinimumHeight(30)
+        self.pb_clear_probes.setEnabled(False)
+        self.pb_clear_probes.clicked.connect(self._clear_probes)
+
         self.pb_clear = QtWidgets.QPushButton("Clear")
         self.pb_clear.setMinimumHeight(30)
         self.pb_clear.setEnabled(False)
         self.pb_clear.clicked.connect(self._on_clear)
         row.addWidget(self.pb_generate, 1)
+        row.addWidget(self.pb_clear_probes, 1)
         row.addWidget(self.pb_clear, 1)
         root.addLayout(row)
 
@@ -513,6 +522,7 @@ class ContourTaskPanel:
             App.Console.PrintError("DFM contour: resolution too fine.\n")
             return
 
+        self._clear_probes()
         self.picking_mode = None
         self._reset_pick_ui()
         size = self.resolution.element_size()
@@ -750,6 +760,7 @@ class ContourTaskPanel:
             pass  # keep whatever placement the widget already has
 
     def _on_clear(self):
+        self._clear_probes()
         self._remove_hover()
         clear_all()
         self._destroy_legend()
@@ -894,6 +905,9 @@ class ContourTaskPanel:
             self._hover_cb = view.addEventCallbackPivy(
                 coin.SoLocation2Event.getClassTypeId(), self._on_hover
             )
+            self._click_cb = view.addEventCallbackPivy(
+                coin.SoMouseButtonEvent.getClassTypeId(), self._on_click
+            )
             self._hover_view = view
         except Exception as exc:
             App.Console.PrintWarning(f"DFM contour: hover unavailable. {exc}\n")
@@ -906,6 +920,14 @@ class ContourTaskPanel:
                 )
             except Exception:
                 pass
+        if getattr(self, "_click_cb", None) is not None and self._hover_view is not None:
+            try:
+                self._hover_view.removeEventCallbackPivy(
+                    coin.SoMouseButtonEvent.getClassTypeId(), self._click_cb
+                )
+            except Exception:
+                pass
+            self._click_cb = None
         self._reset_hover_cursor()
         self._hover_cb = None
         self._hover_view = None
@@ -1028,6 +1050,46 @@ class ContourTaskPanel:
             label.show()
             label.raise_()
 
+    def _on_click(self, event_cb):
+        event = event_cb.getEvent()
+        if (
+            event.getState() == coin.SoButtonEvent.DOWN
+            and event.getButton() == coin.SoMouseButtonEvent.BUTTON1
+        ):
+            if self.picking_mode:
+                return
+            node = self._node
+            if node is None:
+                return
+            picked = event_cb.getPickedPoint()
+            if picked is None:
+                return
+            try:
+                result = node.pick_value(picked)
+            except Exception:
+                result = None
+            if result is not None:
+                key, value, point = result
+                self._add_probe(point, value)
+                event_cb.setHandled()
+
+    def _add_probe(self, point, value):
+        from ..visuals import ContourProbe
+
+        text = self.measure.format_value(value)
+        probe = ContourProbe(point, text, color=(0.15, 0.15, 0.15))
+        probe.show(self._hover_view)
+        self._probes.append(probe)
+        self.pb_clear_probes.setEnabled(True)
+
+    def _clear_probes(self):
+        if hasattr(self, "_probes"):
+            for probe in self._probes:
+                probe.remove(self._hover_view)
+            self._probes.clear()
+        if hasattr(self, "pb_clear_probes"):
+            self.pb_clear_probes.setEnabled(False)
+
     def getStandardButtons(self):
         return (
             QtWidgets.QDialogButtonBox.StandardButton.Save
@@ -1036,6 +1098,7 @@ class ContourTaskPanel:
 
     def _teardown(self):
         self._reset_pick_ui()
+        self._clear_probes()
         self._remove_hover()
         if self._hover_label is not None:
             self._hover_label.deleteLater()
