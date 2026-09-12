@@ -49,6 +49,61 @@ _BAND_STEPS = {
 }
 
 
+def _probe_ray_pick(view, event):
+    """Run a real Coin SoRayPickAction at the event's cursor position and
+    return (docName, objName) for the nearest probe hit, or None.
+
+    The probe's pickable geometry lives inside an SoAnnotation with
+    depth-testing disabled, so it's always drawn -- and always picked -- on
+    top of the mesh regardless of camera angle. SoRayPickAction with
+    setPickAll returns every hit along the ray nearest-first; we walk each
+    hit's path for an SoFCSelection node carrying a document/object name
+    (that's a probe) and return the front-most one. Intervening mesh hits
+    are skipped, so a probe behind the model still wins as long as the ray
+    touches its geometry.
+    """
+    try:
+        pos = event.getPosition()
+        size = view.getSize()
+        if not size or size[0] <= 0 or size[1] <= 0:
+            return None
+        render_manager = view.getViewer().getSoRenderManager()
+        viewport_region = render_manager.getViewportRegion()
+        scene = render_manager.getSceneGraph()
+
+        action = coin.SoRayPickAction(viewport_region)
+        action.setPoint(coin.SbVec2s(int(pos[0]), int(pos[1])))
+        action.setPickAll(True)  # all hits along the ray, nearest first
+        action.apply(scene)
+
+        picked_list = action.getPickedPointList()
+        try:
+            count = picked_list.getLength()
+        except Exception:
+            count = len(picked_list)
+        for i in range(count):
+            path = picked_list[i].getPath()
+            if path is None:
+                continue
+            for j in range(path.getLength()):
+                node = path.getNode(j)
+                try:
+                    type_name = node.getTypeId().getName().getString()
+                except Exception:
+                    continue
+                if type_name == "SoFCSelection":
+                    try:
+                        doc_name = node.documentName.getValue().getString()
+                        obj_name = node.objectName.getValue().getString()
+                    except Exception:
+                        continue
+                    if doc_name and obj_name:
+                        return (doc_name, obj_name)
+    except Exception:
+        return None
+    return None
+
+
 class _EscapeFilter(QtCore.QObject):
     def __init__(self, callback):
         super().__init__()
@@ -59,6 +114,30 @@ class _EscapeFilter(QtCore.QObject):
             if event.key() == QtCore.Qt.Key.Key_Escape and self._callback():
                 return True
         return False
+
+
+class _ProbeCreationGate:
+    """Selection gate rejecting selection of whichever probes are currently
+    in their just-created protection window (see
+    ContourTaskPanel._add_probe / _release_new_probe_protection), and
+    allowing everything else through unchanged.
+
+    A newly placed probe has reliably come out selected immediately, even
+    though nothing in this file explicitly selects it -- this is FreeCAD's
+    own native reaction to the same click that created it, evidently acting
+    on the button release rather than the press. A Selection Gate is
+    FreeCAD's own mechanism for exactly this: every selection attempt,
+    regardless of what triggers it, has to pass through it.
+    """
+
+    def __init__(self):
+        self.protected = set()  # {(docName, objName), ...}
+
+    def allow(self, doc, obj, sub):
+        try:
+            return (doc.Name, obj.Name) not in self.protected
+        except Exception:
+            return True
 
 
 class ContourTaskPanel:
@@ -100,8 +179,14 @@ class ContourTaskPanel:
         self._last_hover_t = 0.0
         self._hover_interval = 0.03
         self._last_face_key = None
-        self._probes = []
+        self._probe_seq = 0
         self._click_cb = None
+        self._pending_new_probe = None  # (docName, objName) awaiting its button-up
+        self._new_probe_gate = _ProbeCreationGate()
+        try:
+            Gui.Selection.addSelectionGate(self._new_probe_gate)
+        except Exception:
+            self._new_probe_gate = None
 
         self._build_form()
         Gui.Selection.addObserver(self)
@@ -522,6 +607,8 @@ class ContourTaskPanel:
             App.Console.PrintError("DFM contour: resolution too fine.\n")
             return
 
+        # A resolution change invalidates old probe placements, since they
+        # may no longer correspond to a point on the new mesh.
         self._clear_probes()
         self.picking_mode = None
         self._reset_pick_ui()
@@ -570,6 +657,12 @@ class ContourTaskPanel:
             dmax = max(values) if values else 1.0
             self._last = (self._mesh, values, normals, dmin, dmax)
             self._render()
+            # A "Thickness Analysis" (or Draft Analysis) tree item now appears
+            # as soon as a contour successfully renders, not only on Save, so
+            # probes placed during this session have a real parent to attach
+            # to right away. Save's job becomes snapshotting the field data
+            # so double-clicking the tree item later reopens this same view.
+            self._ensure_analysis_object()
         except Exception as exc:
             App.Console.PrintError(f"DFM contour: {exc}\n")
             import traceback
@@ -690,6 +783,10 @@ class ContourTaskPanel:
             App.Console.PrintWarning("DFM contour: no 3D view widget found for the legend.\n")
 
         self._install_hover()
+        # Probes are only visible while their analysis's contour preview is
+        # showing (same idea as the source object being hidden while the
+        # overlay is up); reveal any that already exist, e.g. on reopen.
+        self._set_probes_visible(True)
         self._has_contour = True
         self._dirty = False
         self._update_generate_state()
@@ -793,11 +890,11 @@ class ContourTaskPanel:
             "options": self._options(),
         }
 
-    def _on_save(self):
+    def _build_field(self):
         if self._last is None:
-            return
+            return None
         mesh, values, normals, dmin, dmax = self._last
-        field = {
+        return {
             "vertices": list(mesh.vertices),
             "triangles": [tuple(t) for t in mesh.triangles],
             "values": list(values),
@@ -805,16 +902,38 @@ class ContourTaskPanel:
             "dmin": dmin,
             "dmax": dmax,
         }
-        try:
+
+    def _ensure_analysis_object(self):
+        """Creates the analysis document object the first time a contour
+        renders successfully, or refreshes it on subsequent updates. Probes
+        parent to whatever this returns."""
+        field = self._build_field()
+        if field is None:
+            return None
+        if self._analysis_obj is None:
             from .document import create_or_update_analysis
 
-            self._analysis_obj = create_or_update_analysis(
-                self._analysis_obj, self._gather_params(), field
-            )
-            self._saved = True
-        except Exception as exc:
-            App.Console.PrintError(f"DFM analysis: could not save. {exc}\n")
+            try:
+                self._analysis_obj = create_or_update_analysis(
+                    None, self._gather_params(), field
+                )
+            except Exception as exc:
+                App.Console.PrintError(f"DFM contour: could not create analysis object. {exc}\n")
+                return None
+        else:
+            try:
+                self._analysis_obj.Proxy.store(self._analysis_obj, self._gather_params(), field)
+                self._analysis_obj.touch()
+                App.ActiveDocument.recompute()
+            except Exception as exc:
+                App.Console.PrintError(f"DFM contour: could not update analysis object. {exc}\n")
+        return self._analysis_obj
+
+    def _on_save(self):
+        analysis = self._ensure_analysis_object()
+        if analysis is None:
             return
+        self._saved = True
         self._teardown()
 
     def _load_from_object(self, obj):
@@ -861,7 +980,14 @@ class ContourTaskPanel:
                     field.get("dmax", 1.0),
                 )
                 self._mesh = None  # a re-mesh is needed to Update; static until then
-                self._render()
+                self._render()  # also reveals any existing probes
+
+            from .document import _probe_children
+
+            existing = _probe_children(obj)
+            self._probe_seq = len(existing)
+            if existing:
+                self.pb_clear_probes.setEnabled(True)
         except Exception as exc:
             App.Console.PrintError(f"DFM analysis: could not load. {exc}\n")
 
@@ -1009,14 +1135,50 @@ class ContourTaskPanel:
         self._cursor_widget = None
         self._cursor_cross = None
 
+    def _probe_at_cursor(self, event_cb):
+        """(docName, objName) for the front-most probe whose geometry the
+        cursor's pick ray actually touches, or None.
+
+        Uses a real Coin ray-pick (see module-level _probe_ray_pick), which
+        is depth-correct from any camera angle because the probe's pickable
+        geometry is drawn on top via SoAnnotation with depth-testing off.
+        This replaces the earlier toward-camera shift and screen-space
+        projection heuristics -- the probe's cross and badge are large
+        enough on screen that a direct geometry hit is all that's needed,
+        no proximity buffer."""
+        view = self._hover_view
+        if view is None:
+            return None
+        return _probe_ray_pick(view, event_cb.getEvent())
+
     def _on_hover(self, event_cb):
-        node = self._node
-        if node is None:
-            return
         now = time.monotonic()
         if now - self._last_hover_t < self._hover_interval:
             return
         self._last_hover_t = now
+
+        probe_hit = self._probe_at_cursor(event_cb)
+        if probe_hit is not None:
+            # An existing probe is under the cursor (marker or badge): don't
+            # show the add-a-probe crosshair there, and don't show the mesh
+            # measurement tooltip on top of the probe's own permanent label.
+            # FreeCAD's native SoFCSelection highlight (the badge background
+            # and the '+' are both plain geometry inside it, drawn on top via
+            # SoAnnotation) shows it's interactive on its own.
+            self._set_hover_cursor(False)
+            self._hide_hover_label()
+            if self._legend is not None:
+                self._legend.set_marker(None)
+            if self._last_face_key is not None:
+                Gui.getMainWindow().statusBar().clearMessage()
+                self._last_face_key = None
+            return
+
+        node = self._node
+        if node is None:
+            self._set_hover_cursor(False)
+            self._hide_hover_label()
+            return
         try:
             result = node.pick_value(event_cb.getPickedPoint())
         except Exception:
@@ -1052,43 +1214,145 @@ class ContourTaskPanel:
 
     def _on_click(self, event_cb):
         event = event_cb.getEvent()
-        if (
-            event.getState() == coin.SoButtonEvent.DOWN
-            and event.getButton() == coin.SoMouseButtonEvent.BUTTON1
-        ):
-            if self.picking_mode:
-                return
-            node = self._node
-            if node is None:
-                return
-            picked = event_cb.getPickedPoint()
-            if picked is None:
-                return
+        if event.getButton() != coin.SoMouseButtonEvent.BUTTON1:
+            return
+        state = event.getState()
+
+        if state == coin.SoButtonEvent.UP:
+            # Whatever selects a freshly placed probe appears to act on
+            # release, not press (nothing here selects it explicitly), so
+            # protection installed on the matching button-down is released
+            # once that release has actually happened -- not on a fixed
+            # delay from button-down, which can fire before the real
+            # release even arrives for a fast click.
+            if self._pending_new_probe is not None:
+                key = self._pending_new_probe
+                self._pending_new_probe = None
+                QtCore.QTimer.singleShot(0, lambda k=key: self._release_new_probe_protection(k))
+            return
+
+        if state != coin.SoButtonEvent.DOWN:
+            return
+        if self.picking_mode:
+            return
+        hit = self._probe_at_cursor(event_cb)
+        if hit is not None:
+            # Our own callback runs ahead of (and apparently blocks)
+            # SoFCSelection's native click handling, so select it
+            # ourselves directly rather than counting on that to fire.
+            doc_name, obj_name = hit
             try:
-                result = node.pick_value(picked)
+                Gui.Selection.clearSelection()
+                Gui.Selection.addSelection(doc_name, obj_name)
             except Exception:
-                result = None
-            if result is not None:
-                key, value, point = result
-                self._add_probe(point, value)
-                event_cb.setHandled()
+                pass
+            event_cb.setHandled()
+            return
+        node = self._node
+        if node is None:
+            return
+        picked = event_cb.getPickedPoint()
+        if picked is None:
+            return
+        try:
+            result = node.pick_value(picked)
+        except Exception:
+            result = None
+        if result is not None:
+            key, value, point = result
+            # Handled before doing the actual work: addObject/recompute in
+            # _add_probe takes a moment, and if the click is still marked
+            # unhandled while that happens, the brand-new probe's own
+            # SoFCSelection can end up seeing this same click as unhandled
+            # once the scene is next traversed -- which is what caused it
+            # to flash/stick selected immediately on placement.
+            event_cb.setHandled()
+            self._add_probe(point, value)
+
+    def _release_new_probe_protection(self, key):
+        if self._new_probe_gate is not None:
+            self._new_probe_gate.protected.discard(key)
+        # Gui.Selection.removeSelection needs the actual DocumentObject, not
+        # (docName, objName) strings -- the string form raises TypeError
+        # (the same signature mismatch the debug isSelected call exposed).
+        doc_name, obj_name = key
+        try:
+            doc = App.getDocument(doc_name)
+            obj = doc.getObject(obj_name)
+            if obj is not None:
+                Gui.Selection.removeSelection(obj)
+        except Exception:
+            pass
 
     def _add_probe(self, point, value):
-        from ..visuals import ContourProbe
+        analysis = self._ensure_analysis_object()
+        if analysis is None:
+            return None
+        from .document import (
+            ContourProbeFeature,
+            ContourProbeViewProvider,
+            default_display_text,
+            default_probe_label,
+        )
 
-        text = self.measure.format_value(value)
-        probe = ContourProbe(point, text, color=(0.15, 0.15, 0.15))
-        probe.show(self._hover_view)
-        self._probes.append(probe)
+        doc = analysis.Document
+        self._probe_seq += 1
+        index = self._probe_seq
+        unit = self.measure.unit
+        formatted = self.measure.format_value(value)
+
+        obj = doc.addObject("App::FeaturePython", f"Probe{index:03d}")
+        ContourProbeFeature(obj)
+        obj.Parent = analysis
+        obj.Position = App.Vector(point[0], point[1], point[2])
+        obj.Value = float(value)
+        obj.Unit = unit
+        obj.FormattedValue = formatted
+        obj.DisplayText = default_display_text(value, unit)
+        obj.Label = default_probe_label(index, value, unit)
+        if App.GuiUp and obj.ViewObject is not None:
+            ContourProbeViewProvider(obj.ViewObject)
+            obj.ViewObject.Visibility = True
+            key = (doc.Name, obj.Name)
+            if self._new_probe_gate is not None:
+                self._new_probe_gate.protected.add(key)
+            self._pending_new_probe = key
+            # Safety net in case the matching button-up is somehow never
+            # seen (e.g. focus lost mid-click), so this can never leave a
+            # probe permanently unselectable.
+            QtCore.QTimer.singleShot(2000, lambda k=key: self._release_new_probe_protection(k))
+        doc.recompute()
         self.pb_clear_probes.setEnabled(True)
+        return obj
 
     def _clear_probes(self):
-        if hasattr(self, "_probes"):
-            for probe in self._probes:
-                probe.remove(self._hover_view)
-            self._probes.clear()
+        """Deletes every probe under the current analysis. Used by the
+        button and by a resolution change, both of which mean "start over",
+        as opposed to closing the panel, which only hides them (see
+        _set_probes_visible / _teardown) since they should still be there
+        next time the analysis is reopened."""
+        if self._analysis_obj is not None:
+            from .document import _probe_children
+
+            doc = self._analysis_obj.Document
+            for child in _probe_children(self._analysis_obj):
+                try:
+                    doc.removeObject(child.Name)
+                except Exception:
+                    pass
         if hasattr(self, "pb_clear_probes"):
             self.pb_clear_probes.setEnabled(False)
+
+    def _set_probes_visible(self, visible):
+        if self._analysis_obj is None:
+            return
+        from .document import _probe_children
+
+        for child in _probe_children(self._analysis_obj):
+            try:
+                child.ViewObject.Visibility = visible
+            except Exception:
+                pass
 
     def getStandardButtons(self):
         return (
@@ -1098,8 +1362,14 @@ class ContourTaskPanel:
 
     def _teardown(self):
         self._reset_pick_ui()
-        self._clear_probes()
+        self._set_probes_visible(False)
         self._remove_hover()
+        if self._new_probe_gate is not None:
+            try:
+                Gui.Selection.removeSelectionGate()
+            except Exception:
+                pass
+            self._new_probe_gate = None
         if self._hover_label is not None:
             self._hover_label.deleteLater()
             self._hover_label = None
