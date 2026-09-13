@@ -61,21 +61,74 @@ def _looks_safe():
     return "python" in exe
 
 
+def _find_python_executable():
+    """A real python.exe/python binary to launch spawn workers with.
+
+    Inside FreeCAD, sys.executable is FreeCAD.exe, so spawning it directly
+    would try to boot new FreeCAD instances as workers. We instead locate a
+    genuine Python interpreter shipped alongside FreeCAD (or on PATH) and
+    hand it to the spawn context via set_executable.
+    """
+    import glob
+
+    candidates = []
+
+    # 1) If sys.executable already is a python, use it (Linux, some setups).
+    exe = sys.executable or ""
+    if "python" in os.path.basename(exe).lower():
+        candidates.append(exe)
+
+    # 2) Python bundled with FreeCAD. On Windows the layout is usually
+    #    <FreeCADRoot>/bin/python.exe next to FreeCAD.exe.
+    exe_dir = os.path.dirname(exe)
+    base = os.path.basename(exe).lower()
+    pyname = "python.exe" if os.name == "nt" else "python3"
+    if exe_dir:
+        candidates.append(os.path.join(exe_dir, pyname))
+        # FreeCAD.exe often lives in bin/ already; also try a sibling bin/.
+        candidates.append(os.path.join(os.path.dirname(exe_dir), "bin", pyname))
+
+    # 3) sys.prefix / base_prefix layouts.
+    for prefix in {sys.prefix, getattr(sys, "base_prefix", sys.prefix)}:
+        if not prefix:
+            continue
+        if os.name == "nt":
+            candidates.append(os.path.join(prefix, "python.exe"))
+            candidates.append(os.path.join(prefix, "bin", "python.exe"))
+        else:
+            candidates.append(os.path.join(prefix, "bin", "python3"))
+
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
 def _pick_context():
     """Choose a multiprocessing context, or None if none is safe here.
 
-    fork is preferred: the workers inherit the running interpreter (FreeCAD, OCP
-    and this package are already imported), so there's no fresh import chain and
-    no dependence on sys.executable. spawn is only used as a fallback, and only
-    when the interpreter looks like a real Python.
+    fork is preferred (Unix): workers inherit the running interpreter, so no
+    fresh import chain and no dependence on sys.executable. On Windows fork
+    doesn't exist, so we use spawn -- but only after pointing it at a real
+    python.exe (never FreeCAD.exe, which would boot new FreeCAD instances).
     """
     import multiprocessing
 
     methods = multiprocessing.get_all_start_methods()
     if "fork" in methods:
         return multiprocessing.get_context("fork")
-    if _looks_safe():
-        return multiprocessing.get_context("spawn")
+
+    if "spawn" in methods:
+        py = _find_python_executable()
+        if py is None:
+            return None
+        ctx = multiprocessing.get_context("spawn")
+        try:
+            ctx.set_executable(py)
+        except Exception:
+            return None
+        return ctx
+
     return None
 
 
