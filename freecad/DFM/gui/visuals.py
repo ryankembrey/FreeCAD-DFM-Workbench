@@ -43,7 +43,6 @@ class DirectionIndicator:
         self.viewport_height_px = 0
 
     def show(self, base_pnt, direction):
-        """Creates a constant-screen-size arrow at the base point pointing in the specified direction."""
         active_doc = Gui.ActiveDocument
         if not active_doc or not hasattr(active_doc, "ActiveView"):
             return
@@ -139,13 +138,6 @@ class DirectionIndicator:
         self._refresh_view(view)
 
     def _build_label_node(self):
-        """Builds the label badge, matching the style of FreeCAD's transform handles.
-
-        The badge is painted into a QImage and displayed through an SoImage so it
-        renders at a fixed pixel size, always faces the camera, and reads clearly
-        over any model colour. Falls back to plain SoText2 if the image cannot be
-        built (e.g. a pivy build that will not accept a Python buffer).
-        """
         label_sep = coin.SoSeparator()
 
         self.label_trans = coin.SoTransform()
@@ -161,7 +153,6 @@ class DirectionIndicator:
         return label_sep
 
     def _build_label_image(self):
-        """Returns an SoImage holding the painted badge, or None if unavailable."""
         try:
             dpr = self._device_pixel_ratio()
             image = self._paint_badge(self.label, dpr)
@@ -169,7 +160,6 @@ class DirectionIndicator:
             logical_w = image.width() / dpr
             logical_h = image.height() / dpr
 
-            # Coin expects the bottom row of pixels first.
             flipped = image.mirrored(False, True).convertToFormat(
                 QtGui.QImage.Format.Format_RGBA8888
             )
@@ -190,7 +180,6 @@ class DirectionIndicator:
             return None
 
     def _paint_badge(self, text: str, dpr: float) -> QtGui.QImage:
-        """Paints a rounded, filled badge with bold centred text."""
         font = QtGui.QFont()
         font.setPointSizeF(LABEL_FONT_POINT_SIZE)
         font.setBold(True)
@@ -231,7 +220,6 @@ class DirectionIndicator:
         return image
 
     def _text_colour(self) -> QtGui.QColor:
-        """White text, unless the badge fill is light enough to need dark text."""
         r, g, b = self.color
         luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b)
         return QtGui.QColor(25, 25, 25) if luminance > 0.6 else QtGui.QColor(255, 255, 255)
@@ -246,7 +234,6 @@ class DirectionIndicator:
         return 1.0
 
     def _build_label_text(self):
-        """Plain text label, used only when the badge image is unavailable."""
         text_sep = coin.SoSeparator()
 
         font = coin.SoFont()
@@ -263,13 +250,6 @@ class DirectionIndicator:
         return text_sep
 
     def _update_label_position(self):
-        """Places the badge just past the arrow tip, offset in screen space.
-
-        The offset direction is the arrow direction projected onto the camera
-        plane, so the badge trails the arrow head whichever way it points and
-        never lands on top of the shaft. When the arrow points at or away from
-        the camera that projection collapses, so the badge goes above instead.
-        """
         if self.label_trans is None or self.base_pnt is None or self.direction is None:
             return
 
@@ -304,7 +284,6 @@ class DirectionIndicator:
         self.label_trans.translation.setValue(*anchor)
 
     def _camera_axes(self):
-        """Returns the camera's right, up and view vectors in world space."""
         if not self.active_camera:
             return None
         try:
@@ -348,11 +327,9 @@ class DirectionIndicator:
         return (x / length, y / length, z / length)
 
     def _camera_changed(self, userdata, sensor):
-        """Callback triggered whenever the camera moves or zooms."""
         self._update_scale()
 
     def _update_scale(self):
-        """Calculates the exact scale factor needed to keep the arrow a constant screen size."""
         if not self.active_camera or not self.scale_node or not self.base_pnt:
             return
 
@@ -403,7 +380,6 @@ class DirectionIndicator:
             self.label_image = None
 
     def _refresh_view(self, view):
-        """Triggers a redraw of the 3D view."""
         try:
             viewer = getattr(view, "getViewer", lambda: None)()
             if viewer and hasattr(viewer, "update"):
@@ -415,3 +391,206 @@ class DirectionIndicator:
                 updater()
         except Exception:
             pass
+
+
+class ContourProbe:
+    def __init__(self, point, text, color=(0.15, 0.15, 0.15)):
+        self.point = point
+        self.text = text
+        self.color = color
+        self.view_node = None
+        self.label_trans = None
+        self.camera_sensor = None
+        self.active_camera = None
+        self.world_per_px = 0.0
+        self.viewport_height_px = 0
+
+    def show(self, view):
+        self.viewport_height_px = self._viewport_height(view)
+
+        self.view_node = coin.SoSeparator()
+
+        lm = coin.SoLightModel()
+        lm.model.setValue(coin.SoLightModel.BASE_COLOR)
+        self.view_node.addChild(lm)
+
+        db = coin.SoDepthBuffer()
+        db.test.setValue(False)
+        self.view_node.addChild(db)
+
+        mat = coin.SoMaterial()
+        mat.diffuseColor.setValue(1, 1, 1)
+        mat.emissiveColor.setValue(1, 1, 1)
+        self.view_node.addChild(mat)
+
+        base_trans = coin.SoTransform()
+        base_trans.translation.setValue(self.point[0], self.point[1], self.point[2])
+        self.view_node.addChild(base_trans)
+
+        marker_coords = coin.SoCoordinate3()
+        marker_coords.point.setValue(0, 0, 0)
+        self.view_node.addChild(marker_coords)
+
+        marker = coin.SoMarkerSet()
+        marker.markerIndex.setValue(coin.SoMarkerSet.PLUS_9_9)
+        self.view_node.addChild(marker)
+
+        label_sep = coin.SoSeparator()
+        self.label_trans = coin.SoTransform()
+        label_sep.addChild(self.label_trans)
+
+        image_node = self._build_label_image()
+        if image_node:
+            label_sep.addChild(image_node)
+        else:
+            text_node = coin.SoText2()
+            text_node.string.setValue(self.text)
+            text_node.justification.setValue(coin.SoText2.LEFT)
+            label_sep.addChild(text_node)
+
+        self.view_node.addChild(label_sep)
+
+        if hasattr(view, "getSceneGraph"):
+            view.getSceneGraph().addChild(self.view_node)
+
+        camera = view.getCameraNode()
+        if camera:
+            if self.camera_sensor is None:
+                self.camera_sensor = coin.SoNodeSensor(self._camera_changed, None)
+            if self.active_camera != camera:
+                if self.active_camera is not None:
+                    self.camera_sensor.detach()
+                self.active_camera = camera
+                self.camera_sensor.attach(self.active_camera)
+            self._update_scale()
+
+    def remove(self, view):
+        if self.camera_sensor:
+            self.camera_sensor.detach()
+            self.camera_sensor = None
+        self.active_camera = None
+        if self.view_node and view and hasattr(view, "getSceneGraph"):
+            try:
+                view.getSceneGraph().removeChild(self.view_node)
+            except Exception:
+                pass
+        self.view_node = None
+
+    def _build_label_image(self):
+        try:
+            dpr = self._device_pixel_ratio()
+            image = self._paint_badge(self.text, dpr)
+            logical_w = image.width() / dpr
+            logical_h = image.height() / dpr
+
+            flipped = image.mirrored(False, True).convertToFormat(
+                QtGui.QImage.Format.Format_RGBA8888
+            )
+            buffer = bytes(flipped.constBits())[: flipped.sizeInBytes()]
+
+            image_node = coin.SoImage()
+            image_node.image.setValue(coin.SbVec2s(flipped.width(), flipped.height()), 4, buffer)
+            image_node.width.setValue(int(round(logical_w)))
+            image_node.height.setValue(int(round(logical_h)))
+
+            image_node.vertAlignment = coin.SoImage.HALF
+            image_node.horAlignment = coin.SoImage.LEFT
+
+            return image_node
+        except Exception:
+            return None
+
+    def _paint_badge(self, text: str, dpr: float) -> QtGui.QImage:
+        font = QtGui.QFont()
+        font.setPointSizeF(LABEL_FONT_POINT_SIZE)
+        font.setBold(True)
+
+        metrics = QtGui.QFontMetricsF(font)
+        badge_w = metrics.horizontalAdvance(text) + (LABEL_PADDING_X * 2.0)
+        badge_h = metrics.height() + (LABEL_PADDING_Y * 2.0)
+
+        img_w = badge_w + (LABEL_MARGIN * 2.0)
+        img_h = badge_h + (LABEL_MARGIN * 2.0)
+
+        image = QtGui.QImage(
+            int(math.ceil(img_w * dpr)),
+            int(math.ceil(img_h * dpr)),
+            QtGui.QImage.Format.Format_RGBA8888,
+        )
+        image.setDevicePixelRatio(dpr)
+        image.fill(QtCore.Qt.GlobalColor.transparent)
+
+        painter = QtGui.QPainter(image)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
+
+        rect = QtCore.QRectF(LABEL_MARGIN, LABEL_MARGIN, badge_w, badge_h)
+
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(QtGui.QColor(0, 0, 0, 70))
+        painter.drawRoundedRect(rect.translated(0.0, 1.0), LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS)
+
+        painter.setBrush(QtGui.QColor.fromRgbF(*self.color))
+        painter.drawRoundedRect(rect, LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS)
+
+        painter.setPen(QtGui.QColor(255, 255, 255))
+        painter.setFont(font)
+        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
+        painter.end()
+
+        return image
+
+    def _device_pixel_ratio(self) -> float:
+        try:
+            screen = QtGui.QGuiApplication.primaryScreen()
+            if screen:
+                return max(1.0, float(screen.devicePixelRatio()))
+        except Exception:
+            pass
+        return 1.0
+
+    def _camera_changed(self, userdata, sensor):
+        self._update_scale()
+
+    def _update_scale(self):
+        if not self.active_camera or not self.label_trans:
+            return
+
+        h = 0.0
+        if self.active_camera.isOfType(coin.SoOrthographicCamera.getClassTypeId()):
+            h = self.active_camera.height.getValue()
+        elif self.active_camera.isOfType(coin.SoPerspectiveCamera.getClassTypeId()):
+            cam_pos = self.active_camera.position.getValue()
+            dx = cam_pos[0] - self.point[0]
+            dy = cam_pos[1] - self.point[1]
+            dz = cam_pos[2] - self.point[2]
+            dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+            angle = self.active_camera.heightAngle.getValue()
+            h = 2.0 * dist * math.tan(angle / 2.0)
+
+        if self.viewport_height_px > 0:
+            self.world_per_px = h / float(self.viewport_height_px)
+
+        offset_world = 12.0 * self.world_per_px
+
+        try:
+            rotation = self.active_camera.orientation.getValue()
+            right = rotation.multVec(coin.SbVec3f(1, 0, 0)).getValue()
+            up = rotation.multVec(coin.SbVec3f(0, 1, 0)).getValue()
+
+            ox = (right[0] + up[0]) * offset_world
+            oy = (right[1] + up[1]) * offset_world
+            oz = (right[2] + up[2]) * offset_world
+
+            self.label_trans.translation.setValue(ox, oy, oz)
+        except Exception:
+            pass
+
+    def _viewport_height(self, view) -> int:
+        try:
+            size = view.getSize()
+            if size and len(size) >= 2 and size[1] > 0:
+                return int(size[1])
+        except Exception:
+            pass
+        return 0
