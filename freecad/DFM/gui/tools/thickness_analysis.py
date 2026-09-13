@@ -9,13 +9,13 @@ import FreeCADGui as Gui  # type: ignore
 from ..contour.panel import ContourTaskPanel
 from ...app.contour.measures import ThicknessMeasure
 
-_ICON = ":/icons/dfm_draft_contour.svg"
+_ICON = ":/icons/dfm_thickness.svg"
 
 
 class ThicknessAnalysisCommand:
     def GetResources(self):
         return {
-            # "Pixmap": _ICON,
+            "Pixmap": _ICON,
             "MenuText": "Thickness Analysis",
             "ToolTip": "Color the model by wall thickness on a uniform mesh.",
         }

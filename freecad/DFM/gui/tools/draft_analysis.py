@@ -9,13 +9,13 @@ import FreeCADGui as Gui  # type: ignore
 from ..contour.panel import ContourTaskPanel
 from ...app.contour.measures import DraftMeasure
 
-_ICON = ":/icons/dfm_draft_contour.svg"
+_ICON = ":/icons/dfm_draft.svg"
 
 
 class DraftAnalysisCommand:
     def GetResources(self):
         return {
-            # "Pixmap": _ICON,
+            "Pixmap": _ICON,
             "MenuText": "Draft Analysis",
             "ToolTip": "Color the model by draft angle on a uniform mesh.",
         }

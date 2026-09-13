@@ -22,9 +22,18 @@ _BAND_STEPS = {
 }
 
 _MEASURE_TITLES = {
-    "draft": ("Draft Analysis", ":/icons/dfm_draft_contour.svg"),
-    "thickness": ("Thickness Analysis", ":/icons/dfm_draft_contour.svg"),
+    "draft": ("Draft Analysis", ":/icons/dfm_draft.svg"),
+    "thickness": ("Thickness Analysis", ":/icons/dfm_thickness.svg"),
 }
+
+_DEFAULT_ANALYSIS_ICON = ":/icons/dfm_analysis.svg"
+
+
+def _measure_icon(measure_id):
+    """Tree/toolbar icon path for a measure id, falling back to the generic
+    analysis icon for anything unrecognised."""
+    entry = _MEASURE_TITLES.get(measure_id)
+    return entry[1] if entry else _DEFAULT_ANALYSIS_ICON
 
 
 def _band_names():
@@ -233,6 +242,10 @@ class ContourAnalysisViewProvider:
                 pass
         return True
 
+    def getIcon(self):
+        measure = getattr(getattr(self, "Object", None), "Measure", "")
+        return _measure_icon(measure)
+
     def __getstate__(self):
         return None
 
@@ -266,7 +279,8 @@ def open_panel_for(obj):
 
     measure_id = getattr(obj, "Measure", "draft")
     measure = ThicknessMeasure() if measure_id == "thickness" else DraftMeasure()
-    title, icon = _MEASURE_TITLES.get(measure_id, ("Analysis", ":/icons/dfm_draft_contour.svg"))
+    title = _MEASURE_TITLES.get(measure_id, ("Analysis", None))[0]
+    icon = _measure_icon(measure_id)
     Gui.Control.showDialog(ContourTaskPanel(measure, title, icon, analysis_obj=obj))
 
 

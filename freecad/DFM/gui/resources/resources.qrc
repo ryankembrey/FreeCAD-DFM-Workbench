@@ -12,5 +12,7 @@
     <file>icons/dfm_info.svg</file>
     <file>icons/flip_direction.svg</file>
     <file>icons/export_diff.svg</file>
+    <file>icons/dfm_draft.svg</file>
+    <file>icons/dfm_thickness.svg</file>
 </qresource>
 </RCC>
