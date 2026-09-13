@@ -2,15 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""FEM-style contour legend that floats over the 3D view.
-
-No background panel: the color bar and haloed labels sit directly on the
-viewport. The bar spans the measure's domain; the gradient is mapped to the
-active [low, high] window, whose ends are draggable handles (the range control).
-Right-click for colormap / bands / orientation / fit-to-data; double-click a
-handle to type its value. Works vertical or horizontal. The widget is a child of
-the view, movable by its body and resizable from the bottom-right corner.
-"""
 
 import math
 
@@ -22,6 +13,9 @@ from ...app.contour.colormap import value_to_color, COLORMAPS
 _RESIZE_ZONE = 16
 _HANDLE_GRAB = 9
 _BAR_W = 18
+
+_H_PAD_ALONG = 28  # horizontal
+_V_PAD_ALONG = 42  # vertical
 
 _BAND_OPTIONS = [
     ("Smooth", 0.0),
@@ -55,6 +49,7 @@ class ContourLegend(QtWidgets.QWidget):
     colormapChanged = QtCore.Signal(str)
     bandsChanged = QtCore.Signal(str)
     fitRequested = QtCore.Signal()
+    orientationChanged = QtCore.Signal(bool)  # emits horizontal=True/False
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -68,16 +63,20 @@ class ContourLegend(QtWidgets.QWidget):
         self._high = 1.0
         self._marker = None
         self._horizontal = False
+        self._text_rgb = (1.0, 1.0, 1.0)
 
         self._drag_mode = None
         self._press_global = None
         self._start_pos = None
         self._start_size = None
+        self._hovered = False
+        self._resize_edges_active = set()
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAutoFillBackground(False)
         self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        self.setMouseTracking(True)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.DefaultContextMenu)
         self._apply_min_size()
         self.resize(150, 280)
@@ -85,15 +84,20 @@ class ContourLegend(QtWidgets.QWidget):
             parent.installEventFilter(self)
         self._place_top_right()
 
+    def enterEvent(self, _event):
+        self._hovered = True
+        self.update()
+
+    def leaveEvent(self, _event):
+        self._hovered = False
+        self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        self.update()
+
     def orientation_horizontal(self):
         return self._horizontal
 
     def set_orientation(self, horizontal):
-        horizontal = bool(horizontal)
-        if horizontal != self._horizontal:
-            self._horizontal = horizontal
-            self._apply_min_size()
-            self.update()
+        self.set_orientation_animated(horizontal)
 
     def configure(
         self, title, unit, colormap, band, dom_lo, dom_hi, low, high, data_min=None, data_max=None
@@ -125,11 +129,21 @@ class ContourLegend(QtWidgets.QWidget):
             except Exception:
                 pass
 
+    def _title_text(self):
+        return f"{self._title} ({self._unit})" if self._unit else self._title
+
+    def _title_min_width(self):
+        font = QtGui.QFont(self.font())
+        font.setPointSize(12)
+        w = QtGui.QFontMetrics(font).horizontalAdvance(self._title_text())
+        return int(8 + w + 8)  # left x-offset + text + right margin
+
     def _apply_min_size(self):
         if self._horizontal:
             self.setMinimumSize(180, 84)
         else:
-            self.setMinimumSize(90, 160)
+            # Never narrower than the title needs, so it can't be cut off.
+            self.setMinimumSize(max(90, self._title_min_width()), 160)
 
     def _bar_rect(self):
         if self._horizontal:
@@ -208,6 +222,28 @@ class ContourLegend(QtWidgets.QWidget):
     def _localpt(event):
         return event.position().toPoint()
 
+    def _resize_edges(self, pos):
+        edges = set()
+        if pos.x() <= _RESIZE_ZONE:
+            edges.add("left")
+        elif pos.x() >= self.width() - _RESIZE_ZONE:
+            edges.add("right")
+        if pos.y() <= _RESIZE_ZONE:
+            edges.add("top")
+        elif pos.y() >= self.height() - _RESIZE_ZONE:
+            edges.add("bottom")
+        return edges
+
+    @staticmethod
+    def _edge_cursor(edges):
+        if edges in ({"left", "top"}, {"right", "bottom"}):
+            return QtCore.Qt.CursorShape.SizeFDiagCursor
+        if edges in ({"right", "top"}, {"left", "bottom"}):
+            return QtCore.Qt.CursorShape.SizeBDiagCursor
+        if "left" in edges or "right" in edges:
+            return QtCore.Qt.CursorShape.SizeHorCursor
+        return QtCore.Qt.CursorShape.SizeVerCursor
+
     def mousePressEvent(self, event):
         if event.button() != QtCore.Qt.MouseButton.LeftButton:
             return
@@ -216,20 +252,38 @@ class ContourLegend(QtWidgets.QWidget):
         self._start_size = self.size()
         pos = self._localpt(event)
 
-        if pos.x() >= self.width() - _RESIZE_ZONE and pos.y() >= self.height() - _RESIZE_ZONE:
-            self._drag_mode = "resize"
-            return
-
         bar = self._bar_rect()
         which = self._which_handle(pos, bar)
         if which is not None:
             self._drag_mode = which
             return
 
+        edges = self._resize_edges(pos)
+        if edges:
+            self._drag_mode = "resize"
+            self._resize_edges_active = edges
+            return
+
         self._drag_mode = "move"
+
+    def _update_hover_cursor(self, pos):
+        bar = self._bar_rect()
+        if self._which_handle(pos, bar) is not None:
+            self.setCursor(
+                QtCore.Qt.CursorShape.SplitHCursor
+                if self._horizontal
+                else QtCore.Qt.CursorShape.SplitVCursor
+            )
+            return
+        edges = self._resize_edges(pos)
+        if edges:
+            self.setCursor(self._edge_cursor(edges))
+            return
+        self.setCursor(QtCore.Qt.CursorShape.SizeAllCursor)
 
     def mouseMoveEvent(self, event):
         if self._drag_mode is None:
+            self._update_hover_cursor(self._localpt(event))
             return
         if self._drag_mode in ("low", "high"):
             bar = self._bar_rect()
@@ -248,12 +302,7 @@ class ContourLegend(QtWidgets.QWidget):
         delta = self._global(event) - self._press_global
         parent = self.parent()
         if self._drag_mode == "resize":
-            new_w = max(self.minimumWidth(), self._start_size.width() + delta.x())
-            new_h = max(self.minimumHeight(), self._start_size.height() + delta.y())
-            if parent is not None:
-                new_w = min(new_w, parent.width() - self.x())
-                new_h = min(new_h, parent.height() - self.y())
-            self.resize(new_w, new_h)
+            self._resize_by_edges(delta, parent)
         elif self._drag_mode == "move":
             new_pos = self._start_pos + delta
             if parent is not None:
@@ -263,6 +312,39 @@ class ContourLegend(QtWidgets.QWidget):
 
     def mouseReleaseEvent(self, _event):
         self._drag_mode = None
+        self._resize_edges_active = set()
+
+    def _resize_by_edges(self, delta, parent):
+        edges = getattr(self, "_resize_edges_active", set())
+        if not edges:
+            return
+        x0, y0 = self._start_pos.x(), self._start_pos.y()
+        w0, h0 = self._start_size.width(), self._start_size.height()
+        right0, bottom0 = x0 + w0, y0 + h0
+        min_w, min_h = self.minimumWidth(), self.minimumHeight()
+
+        left, top, right, bottom = x0, y0, right0, bottom0
+
+        if "right" in edges:
+            right = x0 + w0 + delta.x()
+            if parent is not None:
+                right = min(right, parent.width())
+            right = max(right, x0 + min_w)
+        if "bottom" in edges:
+            bottom = y0 + h0 + delta.y()
+            if parent is not None:
+                bottom = min(bottom, parent.height())
+            bottom = max(bottom, y0 + min_h)
+        if "left" in edges:
+            left = x0 + delta.x()
+            left = max(left, 0)
+            left = min(left, right0 - min_w)
+        if "top" in edges:
+            top = y0 + delta.y()
+            top = max(top, 0)
+            top = min(top, bottom0 - min_h)
+
+        self.setGeometry(int(left), int(top), int(right - left), int(bottom - top))
 
     def mouseDoubleClickEvent(self, event):
         if event.button() != QtCore.Qt.MouseButton.LeftButton:
@@ -325,22 +407,49 @@ class ContourLegend(QtWidgets.QWidget):
         menu.exec(event.globalPos())
 
     def _toggle_orientation(self):
-        self._horizontal = not self._horizontal
+        self.set_orientation_animated(not self._horizontal)
+        self.orientationChanged.emit(self._horizontal)
+
+    def set_orientation_animated(self, horizontal):
+        horizontal = bool(horizontal)
+        if horizontal == self._horizontal:
+            return
+        bar = self._bar_rect()
+        bar_len = bar.width() if self._horizontal else bar.height()
+
+        self._horizontal = horizontal
         self._apply_min_size()
-        # Swap the footprint so the bar keeps a sensible aspect.
-        self.resize(self.height(), self.width())
+        if horizontal:
+            new_w = max(self.minimumWidth(), bar_len + _H_PAD_ALONG)
+            new_h = self.minimumHeight()
+        else:
+            new_h = max(self.minimumHeight(), bar_len + _V_PAD_ALONG)
+            new_w = self.minimumWidth()
+        self.resize(new_w, new_h)
         self._clamp_into_parent()
         self.update()
+
+    def set_text_color(self, rgb):
+        self._text_rgb = (float(rgb[0]), float(rgb[1]), float(rgb[2]))
+        self.update()
+
+    def _text_qcolor(self):
+        r, g, b = self._text_rgb
+        return QtGui.QColor(int(r * 255), int(g * 255), int(b * 255))
 
     def _halo_text(self, p, x, baseline, text):
         p.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
         path = QtGui.QPainterPath()
         path.addText(float(x), float(baseline), p.font(), text)
+
+        fill = self._text_qcolor()
+        lum = (0.2126 * fill.redF()) + (0.7152 * fill.greenF()) + (0.0722 * fill.blueF())
+        outline = QtGui.QColor(255, 255, 255, 60) if lum < 0.5 else QtGui.QColor(0, 0, 0, 60)
         p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         p.setPen(
             QtGui.QPen(
-                QtGui.QColor(0, 0, 0, 235),
-                2.6,
+                outline,
+                1.2,
                 QtCore.Qt.PenStyle.SolidLine,
                 QtCore.Qt.PenCapStyle.RoundCap,
                 QtCore.Qt.PenJoinStyle.RoundJoin,
@@ -348,7 +457,7 @@ class ContourLegend(QtWidgets.QWidget):
         )
         p.drawPath(path)
         p.setPen(QtCore.Qt.PenStyle.NoPen)
-        p.setBrush(QtGui.QColor(245, 245, 245))
+        p.setBrush(fill)
         p.drawPath(path)
 
     def paintEvent(self, _event):
@@ -356,17 +465,18 @@ class ContourLegend(QtWidgets.QWidget):
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         bar = self._bar_rect()
 
+        if self._hovered:
+            self._paint_hover_chrome(p)
+
         tick_font = QtGui.QFont(p.font())
         tick_font.setPointSize(11)
         title_font = QtGui.QFont(tick_font)
         title_font.setPointSize(12)
-        title_font.setBold(True)
 
         p.setFont(title_font)
         title = f"{self._title} ({self._unit})" if self._unit else self._title
         self._halo_text(p, 8, 20, title)
 
-        # Color bar, mapped to the active window (flat outside it).
         if self._horizontal:
             for i in range(bar.width()):
                 value = self._pos_to_value(bar.left() + i, bar)
@@ -389,7 +499,10 @@ class ContourLegend(QtWidgets.QWidget):
                     1,
                     QtGui.QColor(int(r * 255), int(g * 255), int(b * 255)),
                 )
-        p.setPen(QtGui.QColor(20, 20, 20, 220))
+
+        self._paint_segment_dividers(p, bar)
+
+        p.setPen(QtGui.QPen(QtGui.QColor(30, 30, 30, 235), 1.4))
         p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         p.drawRect(bar)
 
@@ -397,7 +510,25 @@ class ContourLegend(QtWidgets.QWidget):
         self._paint_ticks(p, bar)
         self._paint_marker(p, bar)
         self._paint_handles(p, bar)
-        self._paint_resize_grip(p)
+        if self._hovered:
+            self._paint_resize_grip(p)
+
+    def _paint_segment_dividers(self, p, bar):
+        span = self._dom_hi - self._dom_lo
+        if span <= 0:
+            return
+        step = _nice_step(span / 8.0)
+        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 90), 1.0))
+        v = math.ceil(self._dom_lo / step) * step
+        guard = step * 0.25
+        while v <= self._dom_hi - 1e-9:
+            if (v - self._dom_lo) > guard and (self._dom_hi - v) > guard:
+                c = int(self._value_to_pos(v, bar))
+                if self._horizontal:
+                    p.drawLine(c, bar.top() + 1, c, bar.bottom() - 1)
+                else:
+                    p.drawLine(bar.left() + 1, c, bar.right() - 1, c)
+            v += step
 
     def _paint_ticks(self, p, bar):
         fm = QtGui.QFontMetrics(p.font())
@@ -484,6 +615,20 @@ class ContourLegend(QtWidgets.QWidget):
 
     def _paint_resize_grip(self, p):
         gx, gy = self.width() - 4, self.height() - 4
-        p.setPen(QtGui.QPen(QtGui.QColor(150, 150, 150, 170), 1))
+        # Brighter on hover so it clearly reads as a grabbable corner.
+        p.setPen(QtGui.QPen(QtGui.QColor(230, 230, 230, 220), 1.4))
         for off in (3, 7, 11):
             p.drawLine(gx - off, gy, gx, gy - off)
+
+    def _paint_hover_chrome(self, p):
+        rect = QtCore.QRectF(1.0, 1.0, self.width() - 2.0, self.height() - 2.0)
+        p.setBrush(QtGui.QColor(127, 127, 127, 28))
+        p.setPen(QtGui.QPen(QtGui.QColor(200, 200, 200, 130), 1.2))
+        p.drawRoundedRect(rect, 6.0, 6.0)
+
+        p.setPen(QtCore.Qt.PenStyle.NoPen)
+        p.setBrush(QtGui.QColor(220, 220, 220, 200))
+        ox, oy, gap, rdot = 6, 6, 4, 1.4
+        for dy in (0, 1):
+            for dx in (0, 1):
+                p.drawEllipse(QtCore.QPointF(ox + dx * gap, oy + dy * gap), rdot, rdot)

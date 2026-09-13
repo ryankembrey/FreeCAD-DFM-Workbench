@@ -62,8 +62,8 @@ LABEL_MARGIN = 1.0
 
 _PROBE_CROSS_BASE_COLOR = (1.0, 1.0, 1.0)
 _PROBE_BADGE_BASE_COLOR = (20 / 255.0, 20 / 255.0, 22 / 255.0)
-_PROBE_HOVER_DEFAULT = (1.0, 0.6, 0.0)
-_PROBE_SELECT_DEFAULT = (0.1, 0.8, 0.1)
+_PROBE_HOVER_DEFAULT = (1.0, 0.6, 0.0)  # FreeCAD colorHighlight default
+_PROBE_SELECT_DEFAULT = (0.1, 0.8, 0.1)  # FreeCAD colorSelection default
 
 
 class ProbeState(Enum):
@@ -123,6 +123,7 @@ class ContourAnalysisFeature:
         obj.Resolution = _resolution_names()
         obj.Options = {}
         obj.FieldData = None
+        self._init_done = True
 
     def store(self, obj, params, field):
         self._storing = True
@@ -172,7 +173,11 @@ def _probe_children(analysis_obj):
     doc = getattr(analysis_obj, "Document", None)
     if doc is None or analysis_obj is None:
         return []
-    return [o for o in doc.Objects if getattr(o, "Parent", None) == analysis_obj]
+    return [
+        o
+        for o in doc.Objects
+        if getattr(o, "Parent", None) == analysis_obj and not _is_legend_object(o)
+    ]
 
 
 class ContourAnalysisViewProvider:
@@ -183,8 +188,12 @@ class ContourAnalysisViewProvider:
         self.Object = vobj.Object
 
     def claimChildren(self):
-        """Shows each probe nested under its analysis in the tree."""
-        return _probe_children(getattr(self, "Object", None))
+        """Shows each probe and the legend nested under the analysis."""
+        children = list(_probe_children(getattr(self, "Object", None)))
+        legend = legend_child(getattr(self, "Object", None))
+        if legend is not None:
+            children.append(legend)
+        return children
 
     def getDisplayModes(self, vobj):
         return ["Contour"]
@@ -205,7 +214,11 @@ class ContourAnalysisViewProvider:
 
     def onDelete(self, vobj, subelements):
         doc = vobj.Object.Document
-        for child in _probe_children(vobj.Object):
+        children = list(_probe_children(vobj.Object))
+        legend = legend_child(vobj.Object)
+        if legend is not None:
+            children.append(legend)
+        for child in children:
             try:
                 doc.removeObject(child.Name)
             except Exception:
@@ -247,6 +260,181 @@ def open_panel_for(obj):
     measure = ThicknessMeasure() if measure_id == "thickness" else DraftMeasure()
     title, icon = _MEASURE_TITLES.get(measure_id, ("Analysis", ":/icons/dfm_draft_contour.svg"))
     Gui.Control.showDialog(ContourTaskPanel(measure, title, icon, analysis_obj=obj))
+
+
+_LEGEND_ORIENTATIONS = ["Horizontal", "Vertical"]
+
+
+class ContourLegendFeature:
+    def __init__(self, obj):
+        obj.Proxy = self
+        obj.addProperty("App::PropertyLink", "Parent", "DFM", "Owning analysis")
+        obj.addProperty("App::PropertyEnumeration", "Orientation", "DFM", "Legend orientation")
+        obj.addProperty(
+            "App::PropertyBool",
+            "AutoTextColor",
+            "DFM",
+            "Pick legend text color automatically from the viewport background",
+        )
+        obj.addProperty(
+            "App::PropertyColor", "TextColor", "DFM", "Legend text color (when not automatic)"
+        )
+        obj.Orientation = list(_LEGEND_ORIENTATIONS)
+        obj.AutoTextColor = True
+        obj.TextColor = auto_legend_text_rgb()
+        self._init_done = True
+
+    def execute(self, obj):
+        pass
+
+    def onChanged(self, obj, prop):
+        if (
+            prop == "TextColor"
+            and getattr(self, "_init_done", False)
+            and not getattr(self, "_setting_auto_flag", False)
+        ):
+            try:
+                if getattr(obj, "AutoTextColor", False):
+                    self._setting_auto_flag = True
+                    obj.AutoTextColor = False
+                    self._setting_auto_flag = False
+            except Exception:
+                self._setting_auto_flag = False
+
+        if prop not in ("Orientation", "TextColor", "AutoTextColor"):
+            return
+        panel = self._live_panel(obj)
+        if panel is None:
+            return
+        try:
+            if prop == "Orientation" and hasattr(panel, "apply_legend_orientation"):
+                panel.apply_legend_orientation(obj.Orientation == "Vertical")
+            elif prop in ("TextColor", "AutoTextColor") and hasattr(
+                panel, "apply_legend_text_color"
+            ):
+                panel.apply_legend_text_color()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _live_panel(obj):
+        parent = getattr(obj, "Parent", None)
+        proxy = getattr(parent, "Proxy", None) if parent is not None else None
+        return getattr(proxy, "_live_panel", None) if proxy is not None else None
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        return None
+
+
+class ContourLegendViewProvider:
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+        try:
+            vobj.addDisplayMode(coin.SoSeparator(), "Legend")
+        except Exception:
+            pass
+
+    def getDisplayModes(self, vobj):
+        return ["Legend"]
+
+    def getDefaultDisplayMode(self):
+        return "Legend"
+
+    def setDisplayMode(self, mode):
+        return mode
+
+    def onChanged(self, vobj, prop):
+        if prop == "Visibility":
+            panel = ContourLegendFeature._live_panel(vobj.Object)
+            if panel is not None and hasattr(panel, "apply_legend_visible"):
+                try:
+                    panel.apply_legend_visible(bool(vobj.Visibility))
+                except Exception:
+                    pass
+
+    def onDelete(self, vobj, subelements):
+        panel = ContourLegendFeature._live_panel(vobj.Object)
+        if panel is not None and hasattr(panel, "on_legend_deleted"):
+            try:
+                panel.on_legend_deleted()
+            except Exception:
+                pass
+        return True
+
+    def getIcon(self):
+        return _LEGEND_ICON_XPM
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        return None
+
+
+def legend_child(analysis_obj):
+    """The ContourLegendFeature child of analysis_obj, or None."""
+    doc = getattr(analysis_obj, "Document", None)
+    if doc is None or analysis_obj is None:
+        return None
+    for o in doc.Objects:
+        if getattr(o, "Parent", None) == analysis_obj and _is_legend_object(o):
+            return o
+    return None
+
+
+def _is_legend_object(o):
+    proxy = getattr(o, "Proxy", None)
+    return proxy is not None and proxy.__class__.__name__ == "ContourLegendFeature"
+
+
+def ensure_legend_object(analysis_obj, horizontal):
+    """Create the legend tree object under analysis_obj if absent, or return
+    the existing one. Orientation is initialised from `horizontal`."""
+    if analysis_obj is None:
+        return None
+    existing = legend_child(analysis_obj)
+    if existing is not None:
+        return existing
+    doc = analysis_obj.Document
+    obj = doc.addObject("App::FeaturePython", "ContourLegend")
+    ContourLegendFeature(obj)
+    obj.Parent = analysis_obj
+    obj.Label = "Legend"
+    obj.Orientation = "Horizontal" if horizontal else "Vertical"
+    if App.GuiUp and obj.ViewObject is not None:
+        ContourLegendViewProvider(obj.ViewObject)
+    return obj
+
+
+_LEGEND_ICON_XPM = """/* XPM */
+static char * dfm_legend_xpm[] = {
+"16 16 3 1",
+"  c None",
+". c #2E86C1",
+"+ c #F4D03F",
+"                ",
+" ..........+++  ",
+" ..........+++  ",
+"                ",
+" ..........+++  ",
+" ..........+++  ",
+"                ",
+" ..........+++  ",
+" ..........+++  ",
+"                ",
+" ..........+++  ",
+" ..........+++  ",
+"                ",
+" ..........+++  ",
+" ..........+++  ",
+"                "};
+"""
 
 
 class ContourProbeFeature:
@@ -325,6 +513,56 @@ def _probe_state_color(state: int, base_rgb) -> tuple:
     if state == ProbeState.HOVER:
         return _pref_color("HighlightColor", _PROBE_HOVER_DEFAULT)
     return base_rgb
+
+
+def _relative_luminance(rgb) -> float:
+    r, g, b = rgb
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def viewport_background_luminance() -> float:
+    try:
+        p = App.ParamGet("User parameter:BaseApp/Preferences/View")
+    except Exception:
+        return 0.5
+
+    def col(entry, default):
+        return _pref_color(entry, default)
+
+    try:
+        simple = p.GetBool("Simple", False)
+        gradient = p.GetBool("Gradient", True)
+        use_mid = p.GetBool("UseBackgroundColorMid", False)
+    except Exception:
+        simple, gradient, use_mid = False, True, False
+
+    if simple or not gradient:
+        # Solid background lives in BackgroundColor (col1).
+        return _relative_luminance(col("BackgroundColor", (0.9, 0.9, 0.95)))
+
+    # Gradient: average the active stops. Top=BackgroundColor2, bottom=3, mid=4.
+    top = col("BackgroundColor2", (0.2, 0.3, 0.5))
+    bottom = col("BackgroundColor3", (0.6, 0.6, 0.7))
+    stops = [top, bottom]
+    if use_mid:
+        stops.append(col("BackgroundColor4", (0.4, 0.45, 0.6)))
+    return sum(_relative_luminance(s) for s in stops) / len(stops)
+
+
+def auto_legend_text_rgb() -> tuple:
+    """Black text on a light viewport background, white on a dark one."""
+    return (0.0, 0.0, 0.0) if viewport_background_luminance() > 0.5 else (1.0, 1.0, 1.0)
+
+
+def legend_text_rgb(analysis_obj) -> tuple:
+    legend = legend_child(analysis_obj)
+    try:
+        if legend is None or getattr(legend, "AutoTextColor", True):
+            return auto_legend_text_rgb()
+        c = legend.TextColor
+        return (float(c[0]), float(c[1]), float(c[2]))
+    except Exception:
+        return auto_legend_text_rgb()
 
 
 def _paint_badge_text(text: str, dpr: float):
@@ -626,7 +864,7 @@ class ContourProbeViewProvider:
 
     def _object_alive(self):
         try:
-            _ = self.Object.Name
+            _ = self.Object.Name  # raises ReferenceError if deleted
             return True
         except Exception:
             if getattr(self, "camera_sensor", None) is not None:

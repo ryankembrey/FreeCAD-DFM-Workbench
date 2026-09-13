@@ -108,6 +108,7 @@ class ContourTaskPanel:
         self._title = title
         self._icon = icon
         self._analysis_obj = analysis_obj
+        self._analysis_persisted = analysis_obj is not None
         self._saved = False
         self._auto_range = False
         self._range_initialized = False
@@ -148,12 +149,17 @@ class ContourTaskPanel:
         self._hovered_probe = None
         self._selected_probes = set()
         self._suppress_prop_sync = False
+        self._legend_obj = None
+        self._suppress_legend_sync = False
+        self._applied_text_rgb = None  # last text color pushed to the legend
 
         self._build_form()
         Gui.Selection.addObserver(self)
         self._escape_filter = _EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
         if self._analysis_obj is not None:
+            # Let the analysis object's onChanged reach this live panel, so an
+            # edit in the property panel updates the open contour.
             try:
                 self._analysis_obj.Proxy._live_panel = self
             except Exception:
@@ -190,6 +196,7 @@ class ContourTaskPanel:
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(8)
 
+        # Object
         obj_box = QtWidgets.QGroupBox("Object")
         og = self._grid(obj_box)
         self.pb_object = QtWidgets.QPushButton("Select Object")
@@ -452,6 +459,9 @@ class ContourTaskPanel:
             self.picking_mode = None
             self._reset_pick_ui()
             return True
+        # With a probe selection active, Esc clears it (deselecting in the 3D
+        # view and resetting each probe's highlight via the selection
+        # observer).
         if self._selected_probes:
             try:
                 Gui.Selection.clearSelection()
@@ -636,6 +646,7 @@ class ContourTaskPanel:
             self._update_generate_state()
             return
         self._measure_and_render()
+        self._reset_text_color_override()
         self._update_generate_state()
 
     def _measure_and_render(self):
@@ -732,7 +743,7 @@ class ContourTaskPanel:
             elif prop == "Smooth":
                 val = bool(getattr(obj, "Smooth", False))
                 if val != self.cb_smooth.isChecked():
-                    self.cb_smooth.setChecked(val)
+                    self.cb_smooth.setChecked(val)  # toggled -> _on_smooth_changed
             elif prop in ("RangeLow", "RangeHigh"):
                 low = float(getattr(obj, "RangeLow", 0.0))
                 high = float(getattr(obj, "RangeHigh", 0.0))
@@ -770,6 +781,7 @@ class ContourTaskPanel:
 
         node = ContourNode(self.target_object)
         smooth = self.cb_smooth.isChecked()
+        # measure's own units: degrees for draft, mm for thickness).
         span = dom_hi - dom_lo
         value_gap = 0.5 * span if (smooth and span > 0) else None
         node.build(
@@ -810,6 +822,15 @@ class ContourTaskPanel:
             self._legend.show()
             self._legend.raise_()
             self._restore_legend_geometry()
+            # Mirror the widget's orientation changes (from its own right-click
+            # menu) onto the tree object.
+            try:
+                self._legend.orientationChanged.connect(
+                    lambda _h=False: self._sync_legend_object_orientation()
+                )
+            except Exception:
+                pass
+            self._ensure_legend_object()
         else:
             App.Console.PrintWarning("DFM contour: no 3D view widget found for the legend.\n")
 
@@ -865,7 +886,7 @@ class ContourTaskPanel:
         if parent is None:
             return
         try:
-            self._legend.set_orientation(True)
+            self._legend.set_orientation(True)  # horizontal
             pw = parent.width()
             w = min(max(320, pw // 3), max(200, pw - 40))
             h = 96
@@ -954,6 +975,7 @@ class ContourTaskPanel:
         if analysis is None:
             return
         self._saved = True
+        self._analysis_persisted = True
         self._teardown()
 
     def _load_from_object(self, obj):
@@ -1020,6 +1042,78 @@ class ContourTaskPanel:
         except Exception:
             return None
 
+    def _ensure_legend_object(self):
+        """Create the legend tree object (child of the analysis) if needed,
+        and apply its stored orientation/visibility to the live widget."""
+        analysis = self._ensure_analysis_object()
+        if analysis is None or self._legend is None:
+            return
+        from .document import ensure_legend_object
+
+        horizontal = self._legend.orientation_horizontal()
+        try:
+            self._legend_obj = ensure_legend_object(analysis, horizontal)
+        except Exception as exc:
+            App.Console.PrintWarning(f"DFM contour: could not create legend item. {exc}\n")
+            return
+        obj = self._legend_obj
+        if obj is None:
+            return
+        self._suppress_legend_sync = True
+        try:
+            self._legend.set_orientation(getattr(obj, "Orientation", "Horizontal") != "Vertical")
+            if App.GuiUp and obj.ViewObject is not None:
+                self._legend.setVisible(bool(obj.ViewObject.Visibility))
+        except Exception:
+            pass
+        finally:
+            self._suppress_legend_sync = False
+        self._apply_legend_text_color()
+
+    def _reset_text_color_override(self):
+        """Turn the auto text color back on after a new contour is generated,
+        so a manual override doesn't carry across regenerations. Writes the
+        legend object (which owns the color properties), then re-applies."""
+        obj = self._legend_obj
+        if obj is None:
+            self._apply_legend_text_color()
+            return
+        try:
+            from .document import auto_legend_text_rgb
+
+            proxy = obj.Proxy
+            proxy._setting_auto_flag = True
+            try:
+                obj.AutoTextColor = True
+                obj.TextColor = auto_legend_text_rgb()
+            finally:
+                proxy._setting_auto_flag = False
+        except Exception:
+            pass
+        self._apply_legend_text_color()
+
+    def apply_legend_text_color(self):
+        """Public entry point the legend tree object's onChanged calls when
+        its TextColor / AutoTextColor change."""
+        self._apply_legend_text_color()
+
+    def _apply_legend_text_color(self):
+        if self._legend is None or self._analysis_obj is None:
+            return
+        from .document import legend_text_rgb
+
+        try:
+            rgb = legend_text_rgb(self._analysis_obj)
+        except Exception:
+            return
+        if rgb == getattr(self, "_applied_text_rgb", None):
+            return
+        self._applied_text_rgb = rgb
+        try:
+            self._legend.set_text_color(rgb)
+        except Exception:
+            pass
+
     def _destroy_legend(self):
         if self._legend is not None:
             try:
@@ -1035,6 +1129,43 @@ class ContourTaskPanel:
             except Exception:
                 pass
             self._legend = None
+        self._applied_text_rgb = None
+
+    def apply_legend_orientation(self, vertical):
+        if self._suppress_legend_sync or self._legend is None:
+            return
+        self._suppress_legend_sync = True
+        try:
+            self._legend.set_orientation(not vertical)  # widget takes `horizontal`
+        except Exception:
+            pass
+        finally:
+            self._suppress_legend_sync = False
+
+    def apply_legend_visible(self, visible):
+        if self._legend is None:
+            return
+        try:
+            self._legend.setVisible(bool(visible))
+        except Exception:
+            pass
+
+    def on_legend_deleted(self):
+        self._legend_obj = None
+        self._destroy_legend()
+
+    def _sync_legend_object_orientation(self):
+        if self._suppress_legend_sync or self._legend_obj is None or self._legend is None:
+            return
+        self._suppress_legend_sync = True
+        try:
+            want = "Horizontal" if self._legend.orientation_horizontal() else "Vertical"
+            if getattr(self._legend_obj, "Orientation", None) != want:
+                self._legend_obj.Orientation = want
+        except Exception:
+            pass
+        finally:
+            self._suppress_legend_sync = False
 
     def _install_hover(self):
         if self._hover_cb is not None:
@@ -1186,6 +1317,9 @@ class ContourTaskPanel:
 
     def _on_hover(self, event_cb):
         now = time.monotonic()
+        if now - getattr(self, "_last_text_check_t", 0.0) > 0.5:
+            self._last_text_check_t = now
+            self._apply_legend_text_color()
         if now - self._last_hover_t < self._hover_interval:
             return
         self._last_hover_t = now
@@ -1427,9 +1561,41 @@ class ContourTaskPanel:
         self._hovered_probe = None
 
     def reject(self):
+        delete_unsaved = self._analysis_obj is not None and not self._analysis_persisted
+        obj = self._analysis_obj
         self._teardown()
+        if delete_unsaved and obj is not None:
+            self._delete_unsaved_analysis(obj)
+
+    def _delete_unsaved_analysis(self, analysis_obj):
+        from .document import _probe_children, legend_child
+
+        try:
+            doc = analysis_obj.Document
+        except Exception:
+            return
+        if doc is None:
+            return
+        try:
+            children = list(_probe_children(analysis_obj))
+            legend = legend_child(analysis_obj)
+            if legend is not None:
+                children.append(legend)
+            for child in children:
+                try:
+                    doc.removeObject(child.Name)
+                except Exception:
+                    pass
+            doc.removeObject(analysis_obj.Name)
+            doc.recompute()
+        except Exception as exc:
+            App.Console.PrintWarning(f"DFM contour: could not remove unsaved analysis. {exc}\n")
 
     def accept(self):
         self._on_save()
         if not self._saved:
+            delete_unsaved = self._analysis_obj is not None and not self._analysis_persisted
+            obj = self._analysis_obj
             self._teardown()
+            if delete_unsaved and obj is not None:
+                self._delete_unsaved_analysis(obj)
