@@ -274,7 +274,10 @@ class ContourLegend(QtWidgets.QWidget):
                 if self._horizontal
                 else QtCore.Qt.CursorShape.SplitVCursor
             )
+            self.setToolTip("Drag handles to adjust range, or double-click to set exact values.")
             return
+
+        self.setToolTip("")
         edges = self._resize_edges(pos)
         if edges:
             self.setCursor(self._edge_cursor(edges))
