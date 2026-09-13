@@ -26,6 +26,34 @@ _MEASURE_TITLES = {
     "thickness": ("Thickness Analysis", ":/icons/dfm_draft_contour.svg"),
 }
 
+
+def _band_names():
+    return list(_BAND_STEPS.keys())
+
+
+def _colormap_names():
+    from ...app.contour.colormap import COLORMAPS
+
+    return list(COLORMAPS.keys())
+
+
+def _resolution_names():
+    from ...app.contour.meshing import RESOLUTION_DIVISORS
+
+    return list(RESOLUTION_DIVISORS.keys()) + ["Custom"]
+
+
+def _set_enum(obj, prop, value, choices):
+    """Safely set an enumeration property to `value` if it's one of
+    `choices`; enumeration assignment raises on an unknown/empty string, so
+    unknown values are ignored (the property keeps its current selection)."""
+    if value and value in choices:
+        try:
+            setattr(obj, prop, value)
+        except Exception:
+            pass
+
+
 LABEL_FONT_POINT_SIZE = 10.0
 LABEL_PADDING_X = 4.0
 LABEL_PADDING_Y = 3.0
@@ -34,8 +62,8 @@ LABEL_MARGIN = 1.0
 
 _PROBE_CROSS_BASE_COLOR = (1.0, 1.0, 1.0)
 _PROBE_BADGE_BASE_COLOR = (20 / 255.0, 20 / 255.0, 22 / 255.0)
-_PROBE_HOVER_DEFAULT = (1.0, 0.6, 0.0)  # FreeCAD colorHighlight default
-_PROBE_SELECT_DEFAULT = (0.1, 0.8, 0.1)  # FreeCAD colorSelection default
+_PROBE_HOVER_DEFAULT = (1.0, 0.6, 0.0)
+_PROBE_SELECT_DEFAULT = (0.1, 0.8, 0.1)
 
 
 class ProbeState(Enum):
@@ -81,38 +109,57 @@ class ContourAnalysisFeature:
         obj.addProperty("App::PropertyString", "Measure", "DFM", "Measure id")
         obj.addProperty("App::PropertyVector", "PullDirection", "DFM", "Pull direction")
         obj.addProperty("App::PropertyString", "PullReference", "DFM", "Pull reference name")
-        obj.addProperty("App::PropertyString", "Resolution", "DFM", "Resolution preset")
+        obj.addProperty("App::PropertyEnumeration", "Resolution", "DFM", "Resolution preset")
         obj.addProperty("App::PropertyFloat", "ElementSize", "DFM", "Mesh element size (mm)")
-        obj.addProperty("App::PropertyString", "ColorMap", "DFM", "Color map name")
+        obj.addProperty("App::PropertyEnumeration", "ColorMap", "DFM", "Color map name")
         obj.addProperty("App::PropertyFloat", "RangeLow", "DFM", "Color range low")
         obj.addProperty("App::PropertyFloat", "RangeHigh", "DFM", "Color range high")
-        obj.addProperty("App::PropertyString", "Bands", "DFM", "Banding mode")
+        obj.addProperty("App::PropertyEnumeration", "Bands", "DFM", "Banding mode")
         obj.addProperty("App::PropertyBool", "Smooth", "DFM", "Smooth (blended) shading")
         obj.addProperty("App::PropertyPythonObject", "Options", "DFM", "Measure options")
         obj.addProperty("App::PropertyPythonObject", "FieldData", "DFM", "Computed field")
+        obj.ColorMap = _colormap_names()
+        obj.Bands = _band_names()
+        obj.Resolution = _resolution_names()
         obj.Options = {}
         obj.FieldData = None
 
     def store(self, obj, params, field):
-        obj.Source = params.get("source")
-        obj.Measure = params.get("measure", "")
-        pull = params.get("pull_direction")
-        if pull is not None:
-            obj.PullDirection = App.Vector(*pull)
-        obj.PullReference = params.get("pull_reference", "")
-        obj.Resolution = params.get("resolution", "")
-        obj.ElementSize = float(params.get("element_size") or 0.0)
-        obj.ColorMap = params.get("colormap", "")
-        obj.RangeLow = float(params.get("range_low", 0.0))
-        obj.RangeHigh = float(params.get("range_high", 0.0))
-        obj.Bands = params.get("bands", "Smooth")
-        obj.Smooth = bool(params.get("smooth", False))
-        obj.Options = dict(params.get("options", {}))
-        if field is not None:
-            obj.FieldData = field
+        self._storing = True
+        try:
+            obj.Source = params.get("source")
+            obj.Measure = params.get("measure", "")
+            pull = params.get("pull_direction")
+            if pull is not None:
+                obj.PullDirection = App.Vector(*pull)
+            obj.PullReference = params.get("pull_reference", "")
+            _set_enum(obj, "Resolution", params.get("resolution", ""), _resolution_names())
+            obj.ElementSize = float(params.get("element_size") or 0.0)
+            _set_enum(obj, "ColorMap", params.get("colormap", ""), _colormap_names())
+            obj.RangeLow = float(params.get("range_low", 0.0))
+            obj.RangeHigh = float(params.get("range_high", 0.0))
+            _set_enum(obj, "Bands", params.get("bands", "Smooth"), _band_names())
+            obj.Smooth = bool(params.get("smooth", False))
+            obj.Options = dict(params.get("options", {}))
+            if field is not None:
+                obj.FieldData = field
+        finally:
+            self._storing = False
 
     def execute(self, obj):
         pass
+
+    def onChanged(self, obj, prop):
+        if prop not in ("ColorMap", "Bands", "Smooth", "RangeLow", "RangeHigh"):
+            return
+        if getattr(self, "_storing", False):
+            return
+        panel = getattr(self, "_live_panel", None)
+        if panel is not None and hasattr(panel, "apply_property_change"):
+            try:
+                panel.apply_property_change(prop)
+            except Exception:
+                pass
 
     def __getstate__(self):
         return None
@@ -579,7 +626,7 @@ class ContourProbeViewProvider:
 
     def _object_alive(self):
         try:
-            _ = self.Object.Name  # raises ReferenceError if deleted
+            _ = self.Object.Name
             return True
         except Exception:
             if getattr(self, "camera_sensor", None) is not None:

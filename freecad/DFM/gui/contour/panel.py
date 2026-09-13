@@ -59,7 +59,7 @@ def _probe_ray_pick(view, event):
 
         action = coin.SoRayPickAction(viewport_region)
         action.setPoint(coin.SbVec2s(int(pos[0]), int(pos[1])))
-        action.setPickAll(True)  # all hits along the ray, nearest first
+        action.setPickAll(True)
         action.apply(scene)
 
         picked_list = action.getPickedPointList()
@@ -147,12 +147,17 @@ class ContourTaskPanel:
         self._consumed_button_downs = set()
         self._hovered_probe = None
         self._selected_probes = set()
+        self._suppress_prop_sync = False
 
         self._build_form()
         Gui.Selection.addObserver(self)
         self._escape_filter = _EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
         if self._analysis_obj is not None:
+            try:
+                self._analysis_obj.Proxy._live_panel = self
+            except Exception:
+                pass
             self._load_from_object(self._analysis_obj)
         else:
             self._auto_select()
@@ -185,7 +190,6 @@ class ContourTaskPanel:
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(8)
 
-        # Object
         obj_box = QtWidgets.QGroupBox("Object")
         og = self._grid(obj_box)
         self.pb_object = QtWidgets.QPushButton("Select Object")
@@ -448,6 +452,12 @@ class ContourTaskPanel:
             self.picking_mode = None
             self._reset_pick_ui()
             return True
+        if self._selected_probes:
+            try:
+                Gui.Selection.clearSelection()
+            except Exception:
+                pass
+            return True
         return False
 
     def _on_pick_object(self):
@@ -700,6 +710,40 @@ class ContourTaskPanel:
         if self._last is not None:
             self._render()
 
+    def apply_property_change(self, prop):
+        """Push a single property-panel edit into the live panel widgets, so
+        the open contour updates to match. Setting a widget's value fires its
+        normal change signal (which re-renders/recolors), so this reuses the
+        existing update paths. Guarded so the widgets' own edits -- which the
+        panel writes back to the object on Save -- don't recurse back here."""
+        if self._suppress_prop_sync or self._analysis_obj is None:
+            return
+        obj = self._analysis_obj
+        self._suppress_prop_sync = True
+        try:
+            if prop == "ColorMap":
+                val = getattr(obj, "ColorMap", "")
+                if val and val != self.cb_colormap.currentText():
+                    self.cb_colormap.setCurrentText(val)
+            elif prop == "Bands":
+                val = getattr(obj, "Bands", "")
+                if val and val != self.cb_bands.currentText():
+                    self.cb_bands.setCurrentText(val)
+            elif prop == "Smooth":
+                val = bool(getattr(obj, "Smooth", False))
+                if val != self.cb_smooth.isChecked():
+                    self.cb_smooth.setChecked(val)
+            elif prop in ("RangeLow", "RangeHigh"):
+                low = float(getattr(obj, "RangeLow", 0.0))
+                high = float(getattr(obj, "RangeHigh", 0.0))
+                if (low, high) != self._current_range():
+                    self._set_range_spins(low, high)
+                    self._on_range_spin()
+        except Exception as exc:
+            App.Console.PrintWarning(f"DFM contour: property sync failed. {exc}\n")
+        finally:
+            self._suppress_prop_sync = False
+
     def _render(self):
         if self._last is None:
             return
@@ -726,7 +770,6 @@ class ContourTaskPanel:
 
         node = ContourNode(self.target_object)
         smooth = self.cb_smooth.isChecked()
-        # measure's own units: degrees for draft, mm for thickness).
         span = dom_hi - dom_lo
         value_gap = 0.5 * span if (smooth and span > 0) else None
         node.build(
@@ -822,7 +865,7 @@ class ContourTaskPanel:
         if parent is None:
             return
         try:
-            self._legend.set_orientation(True)  # horizontal
+            self._legend.set_orientation(True)
             pw = parent.width()
             w = min(max(320, pw // 3), max(200, pw - 40))
             h = 96
@@ -890,6 +933,10 @@ class ContourTaskPanel:
 
             try:
                 self._analysis_obj = create_or_update_analysis(None, self._gather_params(), field)
+                try:
+                    self._analysis_obj.Proxy._live_panel = self
+                except Exception:
+                    pass
             except Exception as exc:
                 App.Console.PrintError(f"DFM contour: could not create analysis object. {exc}\n")
                 return None
@@ -1340,6 +1387,12 @@ class ContourTaskPanel:
     def _teardown(self):
         self._reset_pick_ui()
         self._deselect_all_probes()
+        if self._analysis_obj is not None:
+            try:
+                if getattr(self._analysis_obj.Proxy, "_live_panel", None) is self:
+                    self._analysis_obj.Proxy._live_panel = None
+            except Exception:
+                pass
         self._set_probes_visible(False)
         self._remove_hover()
         if self._hover_label is not None:
