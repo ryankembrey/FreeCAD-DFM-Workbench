@@ -186,6 +186,14 @@ class ContourAnalysisViewProvider:
 
     def attach(self, vobj):
         self.Object = vobj.Object
+        try:
+            vobj.addDisplayMode(coin.SoSeparator(), "Contour")
+        except Exception:
+            pass
+        try:
+            vobj.Visibility = True
+        except Exception:
+            pass
 
     def claimChildren(self):
         """Shows each probe and the legend nested under the analysis."""
