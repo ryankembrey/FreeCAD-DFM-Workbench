@@ -7,7 +7,7 @@ import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...app.contour.colormap import value_to_color, COLORMAPS
+from ...app.contour.colormap import value_to_color, COLORMAPS, HighlightSpec
 
 
 _RESIZE_ZONE = 16
@@ -57,6 +57,7 @@ class ContourLegend(QtWidgets.QWidget):
         self._unit = ""
         self._colormap = "Turbo"
         self._band = 0.0
+        self._highlight = HighlightSpec()
         self._dom_lo = -1.0
         self._dom_hi = 1.0
         self._low = -1.0
@@ -110,6 +111,10 @@ class ContourLegend(QtWidgets.QWidget):
 
     def set_style(self, colormap, band):
         self._colormap, self._band = colormap, band
+        self.update()
+
+    def set_highlight(self, highlight):
+        self._highlight = highlight if highlight is not None else HighlightSpec()
         self.update()
 
     def set_range(self, low, high):
@@ -483,7 +488,9 @@ class ContourLegend(QtWidgets.QWidget):
         if self._horizontal:
             for i in range(bar.width()):
                 value = self._pos_to_value(bar.left() + i, bar)
-                r, g, b = value_to_color(value, self._low, self._high, self._colormap, self._band)
+                r, g, b = value_to_color(
+                    value, self._low, self._high, self._colormap, self._band, self._highlight
+                )
                 p.fillRect(
                     bar.left() + i,
                     bar.top(),
@@ -494,7 +501,9 @@ class ContourLegend(QtWidgets.QWidget):
         else:
             for i in range(bar.height()):
                 value = self._pos_to_value(bar.top() + i, bar)
-                r, g, b = value_to_color(value, self._low, self._high, self._colormap, self._band)
+                r, g, b = value_to_color(
+                    value, self._low, self._high, self._colormap, self._band, self._highlight
+                )
                 p.fillRect(
                     bar.left(),
                     bar.top() + i,

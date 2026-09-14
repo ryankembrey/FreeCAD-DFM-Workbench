@@ -18,7 +18,7 @@ from collections import defaultdict
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from ...app.contour.colormap import value_to_color, DEFAULT_COLORMAP
+from ...app.contour.colormap import value_to_color, DEFAULT_COLORMAP, HighlightSpec
 
 
 _TARGET_PER_CHUNK = 2500
@@ -78,6 +78,7 @@ class ContourNode:
         self._smooth = False
         self._global_material = None
         self._vertex_values = None
+        self._highlight = HighlightSpec()
 
     @staticmethod
     def _split_for_smoothing(
@@ -177,8 +178,10 @@ class ContourNode:
         band_step=0.0,
         smooth=False,
         value_gap=None,
+        highlight=None,
     ):
         self._smooth = smooth
+        self._highlight = highlight if highlight is not None else HighlightSpec()
         root = coin.SoSeparator()
 
         hints = coin.SoShapeHints()
@@ -203,7 +206,8 @@ class ContourNode:
         if smooth:
             gmat = coin.SoMaterial()
             colors = [
-                value_to_color(v, vmin, vmax, colormap, band_step) for v in self._vertex_values
+                value_to_color(v, vmin, vmax, colormap, band_step, self._highlight)
+                for v in self._vertex_values
             ]
             gmat.diffuseColor.setValues(0, len(colors), colors)
             root.addChild(gmat)
@@ -235,7 +239,10 @@ class ContourNode:
         chunk_material = None
         if not smooth:
             material = coin.SoMaterial()
-            colors = [value_to_color(v, vmin, vmax, colormap, band_step) for v in chunk["values"]]
+            colors = [
+                value_to_color(v, vmin, vmax, colormap, band_step, self._highlight)
+                for v in chunk["values"]
+            ]
             material.diffuseColor.setValues(0, len(colors), colors)
             sep.addChild(material)
 
@@ -265,10 +272,13 @@ class ContourNode:
         self._name_to_chunk[name] = index
         return sep
 
-    def recolor(self, vmin, vmax, colormap=DEFAULT_COLORMAP, band_step=0.0):
+    def recolor(self, vmin, vmax, colormap=DEFAULT_COLORMAP, band_step=0.0, highlight=None):
+        if highlight is not None:
+            self._highlight = highlight
+        hl = self._highlight
         if self._smooth and self._global_material is not None:
             colors = [
-                value_to_color(v, vmin, vmax, colormap, band_step)
+                value_to_color(v, vmin, vmax, colormap, band_step, hl)
                 for v in (self._vertex_values or [])
             ]
             self._global_material.diffuseColor.setValues(0, len(colors), colors)
@@ -277,7 +287,7 @@ class ContourNode:
             material = chunk.get("material")
             if material is None:
                 continue
-            colors = [value_to_color(v, vmin, vmax, colormap, band_step) for v in chunk["values"]]
+            colors = [value_to_color(v, vmin, vmax, colormap, band_step, hl) for v in chunk["values"]]
             material.diffuseColor.setValues(0, len(colors), colors)
 
     def pick_value(self, picked):
@@ -346,6 +356,7 @@ def build_scene(
     band_step=0.0,
     smooth=False,
     value_gap=None,
+    highlight=None,
 ):
     """Build a standalone contour separator (for a view provider to own).
 
@@ -353,7 +364,8 @@ def build_scene(
     """
     node = ContourNode(None)
     return node.build(
-        vertices, triangles, values, normals, vmin, vmax, colormap, band_step, smooth, value_gap
+        vertices, triangles, values, normals, vmin, vmax, colormap, band_step, smooth, value_gap,
+        highlight,
     )
 
 
