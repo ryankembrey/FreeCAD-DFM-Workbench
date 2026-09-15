@@ -192,7 +192,9 @@ def _probe_children(analysis_obj):
     return [
         o
         for o in doc.Objects
-        if getattr(o, "Parent", None) == analysis_obj and not _is_legend_object(o)
+        if getattr(o, "Parent", None) == analysis_obj
+        and not _is_legend_object(o)
+        and not _is_direction_object(o)
     ]
 
 
@@ -217,6 +219,9 @@ class ContourAnalysisViewProvider:
         legend = legend_child(getattr(self, "Object", None))
         if legend is not None:
             children.append(legend)
+        direction = direction_child(getattr(self, "Object", None))
+        if direction is not None:
+            children.append(direction)
         return children
 
     def getDisplayModes(self, vobj):
@@ -242,6 +247,9 @@ class ContourAnalysisViewProvider:
         legend = legend_child(vobj.Object)
         if legend is not None:
             children.append(legend)
+        direction = direction_child(vobj.Object)
+        if direction is not None:
+            children.append(direction)
         for child in children:
             try:
                 doc.removeObject(child.Name)
@@ -397,7 +405,7 @@ class ContourLegendViewProvider:
         return True
 
     def getIcon(self):
-        return _LEGEND_ICON_XPM
+        return ":/icons/legend.svg"
 
     def __getstate__(self):
         return None
@@ -441,29 +449,105 @@ def ensure_legend_object(analysis_obj, horizontal):
     return obj
 
 
-_LEGEND_ICON_XPM = """/* XPM */
-static char * dfm_legend_xpm[] = {
-"16 16 3 1",
-"  c None",
-". c #2E86C1",
-"+ c #F4D03F",
-"                ",
-" ..........+++  ",
-" ..........+++  ",
-"                ",
-" ..........+++  ",
-" ..........+++  ",
-"                ",
-" ..........+++  ",
-" ..........+++  ",
-"                ",
-" ..........+++  ",
-" ..........+++  ",
-"                ",
-" ..........+++  ",
-" ..........+++  ",
-"                "};
-"""
+class ContourDirectionFeature:
+    def __init__(self, obj):
+        obj.Proxy = self
+        obj.addProperty("App::PropertyLink", "Parent", "DFM", "Owning analysis")
+        self._init_done = True
+
+    def execute(self, obj):
+        pass
+
+    @staticmethod
+    def _live_panel(obj):
+        parent = getattr(obj, "Parent", None)
+        proxy = getattr(parent, "Proxy", None) if parent is not None else None
+        return getattr(proxy, "_live_panel", None) if proxy is not None else None
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        return None
+
+
+class ContourDirectionViewProvider:
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+        try:
+            vobj.addDisplayMode(coin.SoSeparator(), "Direction")
+        except Exception:
+            pass
+
+    def getDisplayModes(self, vobj):
+        return ["Direction"]
+
+    def getDefaultDisplayMode(self):
+        return "Direction"
+
+    def setDisplayMode(self, mode):
+        return mode
+
+    def onChanged(self, vobj, prop):
+        if prop == "Visibility":
+            panel = ContourDirectionFeature._live_panel(vobj.Object)
+            if panel is not None and hasattr(panel, "apply_indicator_visible"):
+                try:
+                    panel.apply_indicator_visible(bool(vobj.Visibility))
+                except Exception:
+                    pass
+
+    def onDelete(self, vobj, subelements):
+        panel = ContourDirectionFeature._live_panel(vobj.Object)
+        if panel is not None and hasattr(panel, "on_indicator_deleted"):
+            try:
+                panel.on_indicator_deleted()
+            except Exception:
+                pass
+        return True
+
+    def getIcon(self):
+        return ":/icons/direction.svg"
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        return None
+
+
+def direction_child(analysis_obj):
+    doc = getattr(analysis_obj, "Document", None)
+    if doc is None or analysis_obj is None:
+        return None
+    for o in doc.Objects:
+        if getattr(o, "Parent", None) == analysis_obj and _is_direction_object(o):
+            return o
+    return None
+
+
+def _is_direction_object(o):
+    proxy = getattr(o, "Proxy", None)
+    return proxy is not None and proxy.__class__.__name__ == "ContourDirectionFeature"
+
+
+def ensure_direction_object(analysis_obj):
+    if analysis_obj is None:
+        return None
+    existing = direction_child(analysis_obj)
+    if existing is not None:
+        return existing
+    doc = analysis_obj.Document
+    obj = doc.addObject("App::FeaturePython", "PullDirection")
+    ContourDirectionFeature(obj)
+    obj.Parent = analysis_obj
+    obj.Label = "Pull Direction"
+    if App.GuiUp and obj.ViewObject is not None:
+        ContourDirectionViewProvider(obj.ViewObject)
+    return obj
 
 
 class ContourProbeFeature:

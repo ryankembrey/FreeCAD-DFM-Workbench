@@ -161,6 +161,7 @@ class ContourTaskPanel:
         self._selected_probes = set()
         self._suppress_prop_sync = False
         self._legend_obj = None
+        self._direction_obj = None
         self._suppress_legend_sync = False
         self._applied_text_rgb = None
 
@@ -879,6 +880,8 @@ class ContourTaskPanel:
         else:
             App.Console.PrintWarning("DFM contour: no 3D view widget found for the legend.\n")
 
+        self._ensure_direction_object()
+
         self._install_hover()
         self._set_probes_visible(True)
         self._has_contour = True
@@ -1197,6 +1200,44 @@ class ContourTaskPanel:
     def on_legend_deleted(self):
         self._legend_obj = None
         self._destroy_legend()
+
+    def _ensure_direction_object(self):
+        if self.indicator is None:
+            return
+        analysis = self._ensure_analysis_object()
+        if analysis is None:
+            return
+        from .document import ensure_direction_object
+
+        try:
+            self._direction_obj = ensure_direction_object(analysis)
+        except Exception as exc:
+            App.Console.PrintWarning(f"DFM contour: could not create direction item. {exc}\n")
+            return
+        obj = self._direction_obj
+        if obj is None:
+            return
+        if App.GuiUp and obj.ViewObject is not None:
+            try:
+                self.indicator.set_visible(bool(obj.ViewObject.Visibility))
+            except Exception:
+                pass
+
+    def apply_indicator_visible(self, visible):
+        if self.indicator is None:
+            return
+        try:
+            self.indicator.set_visible(bool(visible))
+        except Exception:
+            pass
+
+    def on_indicator_deleted(self):
+        self._direction_obj = None
+        if self.indicator is not None:
+            try:
+                self.indicator.remove()
+            except Exception:
+                pass
 
     def _sync_legend_object_orientation(self):
         if self._suppress_legend_sync or self._legend_obj is None or self._legend is None:
@@ -1612,7 +1653,7 @@ class ContourTaskPanel:
             self._delete_unsaved_analysis(obj)
 
     def _delete_unsaved_analysis(self, analysis_obj):
-        from .document import _probe_children, legend_child
+        from .document import _probe_children, legend_child, direction_child
 
         try:
             doc = analysis_obj.Document
@@ -1625,6 +1666,9 @@ class ContourTaskPanel:
             legend = legend_child(analysis_obj)
             if legend is not None:
                 children.append(legend)
+            direction = direction_child(analysis_obj)
+            if direction is not None:
+                children.append(direction)
             for child in children:
                 try:
                     doc.removeObject(child.Name)

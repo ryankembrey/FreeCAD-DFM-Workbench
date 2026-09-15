@@ -20,6 +20,9 @@ LABEL_GAP_PX = 7.0
 
 ARROW_HEIGHT = 28.0
 
+_SWITCH_ALL = -3
+_SWITCH_NONE = -1
+
 
 class DirectionIndicator:
     def __init__(self, color=(1.0, 0.0, 0.0), label=""):
@@ -28,6 +31,8 @@ class DirectionIndicator:
         self.view_node = None
         self.view_trans = None
         self.scale_node = None
+        self.visibility_switch = None
+        self._visible = True
 
         self.label_trans = None
         self.label_image = None
@@ -56,15 +61,24 @@ class DirectionIndicator:
         self.viewport_height_px = self._viewport_height(view)
 
         if self.view_node is None:
-            self.view_node = coin.SoSeparator()
+            self.view_node = coin.SoAnnotation()
+
+            self.visibility_switch = coin.SoSwitch()
+            self.visibility_switch.whichChild.setValue(
+                _SWITCH_ALL if self._visible else _SWITCH_NONE
+            )
+            self.view_node.addChild(self.visibility_switch)
+
+            content = coin.SoSeparator()
+            self.visibility_switch.addChild(content)
 
             lm = coin.SoLightModel()
             lm.model.setValue(coin.SoLightModel.BASE_COLOR)
-            self.view_node.addChild(lm)
+            content.addChild(lm)
 
             db = coin.SoDepthBuffer()
             db.test.setValue(False)
-            self.view_node.addChild(db)
+            content.addChild(db)
 
             arrow_sep = coin.SoSeparator()
 
@@ -106,10 +120,10 @@ class DirectionIndicator:
             arrow_group.addChild(cone)
             arrow_sep.addChild(arrow_group)
 
-            self.view_node.addChild(arrow_sep)
+            content.addChild(arrow_sep)
 
             if self.label:
-                self.view_node.addChild(self._build_label_node())
+                content.addChild(self._build_label_node())
 
             if hasattr(view, "getSceneGraph"):
                 view.getSceneGraph().addChild(self.view_node)  # type: ignore
@@ -361,6 +375,11 @@ class DirectionIndicator:
 
         self._update_label_position()
 
+    def set_visible(self, visible):
+        self._visible = bool(visible)
+        if self.visibility_switch is not None:
+            self.visibility_switch.whichChild.setValue(_SWITCH_ALL if self._visible else _SWITCH_NONE)
+
     def remove(self):
         if self.camera_sensor:
             self.camera_sensor.detach()
@@ -376,6 +395,7 @@ class DirectionIndicator:
             self.view_node = None
             self.view_trans = None
             self.scale_node = None
+            self.visibility_switch = None
             self.label_trans = None
             self.label_image = None
 
