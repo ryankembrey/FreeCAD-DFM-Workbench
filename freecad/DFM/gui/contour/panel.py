@@ -526,6 +526,14 @@ class ContourTaskPanel:
             self.picking_mode = None
             self._reset_pick_ui()
             return
+        # hide contour so user can select from model
+        if self._has_contour:
+            self._on_clear()
+            App.Console.PrintMessage(
+                "DFM contour: cleared so you can pick a new pull direction; regenerate when done.\n"
+            )
+            self._enter_pick("pull", self.pb_pull, "Click a face or edge")
+            return
         if self._apply_pull_from_selection():
             self._reset_pick_ui()
             Gui.Selection.clearSelection()
