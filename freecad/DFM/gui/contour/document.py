@@ -125,6 +125,12 @@ class ContourAnalysisFeature:
         obj.addProperty("App::PropertyFloat", "RangeHigh", "DFM", "Color range high")
         obj.addProperty("App::PropertyEnumeration", "Bands", "DFM", "Banding mode")
         obj.addProperty("App::PropertyBool", "Smooth", "DFM", "Smooth (blended) shading")
+        obj.addProperty(
+            "App::PropertyBool",
+            "HighlightActive",
+            "DFM",
+            "Highlight the Range as a red pass/fail band (grey elsewhere)",
+        )
         obj.addProperty("App::PropertyPythonObject", "Options", "DFM", "Measure options")
         obj.addProperty("App::PropertyPythonObject", "FieldData", "DFM", "Computed field")
         obj.ColorMap = _colormap_names()
@@ -150,6 +156,7 @@ class ContourAnalysisFeature:
             obj.RangeHigh = float(params.get("range_high", 0.0))
             _set_enum(obj, "Bands", params.get("bands", "Smooth"), _band_names())
             obj.Smooth = bool(params.get("smooth", False))
+            obj.HighlightActive = bool(params.get("highlight_active", False))
             obj.Options = dict(params.get("options", {}))
             if field is not None:
                 obj.FieldData = field
@@ -160,7 +167,7 @@ class ContourAnalysisFeature:
         pass
 
     def onChanged(self, obj, prop):
-        if prop not in ("ColorMap", "Bands", "Smooth", "RangeLow", "RangeHigh"):
+        if prop not in ("ColorMap", "Bands", "Smooth", "RangeLow", "RangeHigh", "HighlightActive"):
             return
         if getattr(self, "_storing", False):
             return
@@ -559,10 +566,8 @@ def viewport_background_luminance() -> float:
         simple, gradient, use_mid = False, True, False
 
     if simple or not gradient:
-        # Solid background lives in BackgroundColor (col1).
         return _relative_luminance(col("BackgroundColor", (0.9, 0.9, 0.95)))
 
-    # Gradient: average the active stops. Top=BackgroundColor2, bottom=3, mid=4.
     top = col("BackgroundColor2", (0.2, 0.3, 0.5))
     bottom = col("BackgroundColor3", (0.6, 0.6, 0.7))
     stops = [top, bottom]

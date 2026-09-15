@@ -223,12 +223,40 @@ def quantize(value: float, step: float) -> float:
     return (round(value / step)) * step
 
 
+_HIGHLIGHT_IN = (0.85, 0.15, 0.15)  # red
+_HIGHLIGHT_OUT = (0.62, 0.62, 0.62)  # gray
+
+
+class HighlightSpec:
+    def __init__(self, active=False, lo=None, hi=None):
+        self.active = bool(active)
+        self.lo = lo
+        self.hi = hi
+
+    def in_band(self, value: float) -> bool:
+        if self.lo is not None and value < self.lo:
+            return False
+        if self.hi is not None and value > self.hi:
+            return False
+        return True
+
+    def color(self, value: float) -> tuple:
+        return _HIGHLIGHT_IN if self.in_band(value) else _HIGHLIGHT_OUT
+
+
 def value_to_color(
     value: float,
     vmin: float,
     vmax: float,
     colormap: str = DEFAULT_COLORMAP,
     band_step: float = 0.0,
+    highlight: "HighlightSpec | None" = None,
 ) -> tuple:
+    """Map a value to an rgb. With an active HighlightSpec, the raw value is
+    classified against its band and painted red (in) or gray (out), replacing
+    the colormap entirely. The band test uses the raw value, before
+    quantization/normalization, so it's independent of the legend window."""
+    if highlight is not None and highlight.active:
+        return highlight.color(value)
     v = quantize(value, band_step)
     return get_colormap(colormap)(normalize(v, vmin, vmax))

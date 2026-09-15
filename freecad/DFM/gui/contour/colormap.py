@@ -223,40 +223,20 @@ def quantize(value: float, step: float) -> float:
     return (round(value / step)) * step
 
 
-# Highlight modes.
-HIGHLIGHT_OFF = "off"
-HIGHLIGHT_ISOLATE = "isolate"  # in-band: colormap; out-of-band: grayed
-HIGHLIGHT_FLAG = "flag"  # in-band: flag color; out-of-band: base color
-
-_GRAY_DESAT = 0.82  # how far out-of-band colors are pulled toward gray (0..1)
-
-
 class HighlightSpec:
-    """A raw-value band and a mode for emphasising part of a contour, for DFM
-    "isolate/flag a range" overlays.
-
-    The band [lo, hi] is in the measure's own raw units (mm, degrees), and is
-    independent of the legend's low/high display window -- either bound may be
-    None for an open side (e.g. lo=None, hi=2.0 means "at or below 2").
-
-    Modes:
-      isolate -- in-band keeps the real colormap; out-of-band is desaturated to
-                 gray but keeps its luminance, so muted geometry still shades.
-      flag    -- in-band is a solid flag color; out-of-band a solid base color.
-                 (No colormap; a pass/fail style view.)
-    """
-
-    def __init__(self, mode=HIGHLIGHT_OFF, lo=None, hi=None,
-                 flag_color=(0.85, 0.15, 0.15), base_color=(0.30, 0.65, 0.30)):
-        self.mode = mode
+    def __init__(
+        self,
+        active=False,
+        lo=None,
+        hi=None,
+        flag_color=(0.85, 0.15, 0.15),
+        base_color=(0.30, 0.65, 0.30),
+    ):
+        self.active = bool(active)
         self.lo = lo
         self.hi = hi
         self.flag_color = tuple(flag_color)
         self.base_color = tuple(base_color)
-
-    @property
-    def active(self):
-        return self.mode in (HIGHLIGHT_ISOLATE, HIGHLIGHT_FLAG)
 
     def in_band(self, value: float) -> bool:
         if self.lo is not None and value < self.lo:
@@ -264,13 +244,6 @@ class HighlightSpec:
         if self.hi is not None and value > self.hi:
             return False
         return True
-
-
-def _to_gray(rgb, amount=_GRAY_DESAT):
-    """Pull an rgb toward its own gray (equal-luminance) by `amount`, so
-    out-of-band regions read as muted but still shaded, not flat."""
-    lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
-    return tuple(c + (lum - c) * amount for c in rgb)
 
 
 def value_to_color(
@@ -282,18 +255,12 @@ def value_to_color(
     highlight: "HighlightSpec | None" = None,
 ) -> tuple:
     """Map a value to an rgb. With an active HighlightSpec, the raw value is
-    classified against its band first: isolate mode grays out-of-band colors,
-    flag mode replaces the colormap entirely with flag/base colors. The band
-    test uses the raw value, before quantization/normalization, so it's
-    independent of the legend window."""
+    classified against its band and painted with the flag color (in-band) or
+    base color (out-of-band), replacing the colormap. The band test uses the
+    raw value, before quantization/normalization, so it's independent of the
+    legend window."""
     if highlight is not None and highlight.active:
-        inside = highlight.in_band(value)
-        if highlight.mode == HIGHLIGHT_FLAG:
-            return highlight.flag_color if inside else highlight.base_color
-        # isolate
-        v = quantize(value, band_step)
-        base = get_colormap(colormap)(normalize(v, vmin, vmax))
-        return base if inside else _to_gray(base)
+        return highlight.flag_color if highlight.in_band(value) else highlight.base_color
 
     v = quantize(value, band_step)
     return get_colormap(colormap)(normalize(v, vmin, vmax))

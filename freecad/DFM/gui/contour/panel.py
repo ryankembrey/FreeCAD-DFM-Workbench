@@ -17,7 +17,7 @@ import Part  # type: ignore
 from ..visuals import DirectionIndicator
 
 try:
-    from .. import DFM_rc  # noqa: F401  (registers the icon resources)
+    from .. import DFM_rc  # noqa: F401
 except Exception:
     pass
 
@@ -102,6 +102,17 @@ class _EscapeFilter(QtCore.QObject):
         return False
 
 
+class _SpinBoxEnterFilter(QtCore.QObject):
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.Type.KeyPress:
+            if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+                if hasattr(obj, "interpretText"):
+                    obj.interpretText()
+                obj.clearFocus()
+                return True
+        return False
+
+
 class ContourTaskPanel:
     def __init__(self, measure, title, icon=":/icons/dfm_analysis.svg", analysis_obj=None):
         self.measure = measure
@@ -151,15 +162,13 @@ class ContourTaskPanel:
         self._suppress_prop_sync = False
         self._legend_obj = None
         self._suppress_legend_sync = False
-        self._applied_text_rgb = None  # last text color pushed to the legend
+        self._applied_text_rgb = None
 
         self._build_form()
         Gui.Selection.addObserver(self)
         self._escape_filter = _EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
         if self._analysis_obj is not None:
-            # Let the analysis object's onChanged reach this live panel, so an
-            # edit in the property panel updates the open contour.
             try:
                 self._analysis_obj.Proxy._live_panel = self
             except Exception:
@@ -196,7 +205,6 @@ class ContourTaskPanel:
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(8)
 
-        # Object
         obj_box = QtWidgets.QGroupBox("Object")
         og = self._grid(obj_box)
         self.pb_object = QtWidgets.QPushButton("Select Object")
@@ -294,7 +302,8 @@ class ContourTaskPanel:
         self.cb_colormap.currentIndexChanged.connect(self._on_style_changed)
         cg.addWidget(self.cb_colormap, 1, 1)
 
-        cg.addWidget(QtWidgets.QLabel("Range"), 2, 0)
+        self.lbl_range = QtWidgets.QLabel("Range")
+        cg.addWidget(self.lbl_range, 2, 0)
         default_opts = {o.id: o.default for o in self.measure.options}
         lo0, hi0 = self.measure.initial_range(default_opts) or (0.0, 1.0)
         bmin, bmax = self.measure.value_limits(default_opts) or (-1.0e6, 1.0e6)
@@ -303,10 +312,13 @@ class ContourTaskPanel:
         range_row.setSpacing(4)
         self.sb_range_lo = QtWidgets.QDoubleSpinBox()
         self.sb_range_hi = QtWidgets.QDoubleSpinBox()
+        self._spinbox_enter_filter = _SpinBoxEnterFilter(self.form)
+        range_decimals = max(int(self.measure.range_decimals), 2)
+        range_step = min(self.measure.range_step, 0.1)
         for sb, val in ((self.sb_range_lo, lo0), (self.sb_range_hi, hi0)):
             sb.setRange(bmin, bmax)
-            sb.setDecimals(self.measure.range_decimals)
-            sb.setSingleStep(self.measure.range_step)
+            sb.setDecimals(range_decimals)
+            sb.setSingleStep(range_step)
             if self.measure.unit:
                 sb.setSuffix(f" {self.measure.unit}")
             sb.setValue(val)
@@ -314,6 +326,7 @@ class ContourTaskPanel:
             sb.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
             )
+            sb.installEventFilter(self._spinbox_enter_filter)
             sb.valueChanged.connect(self._on_range_spin)
         range_row.addWidget(self.sb_range_lo, 1)
         range_row.addWidget(QtWidgets.QLabel("to"), 0)
@@ -322,13 +335,13 @@ class ContourTaskPanel:
         range_w.setLayout(range_row)
         cg.addWidget(range_w, 2, 1)
 
-        cg.addWidget(QtWidgets.QLabel("Bands"), 3, 0)
+        cg.addWidget(QtWidgets.QLabel("Bands"), 4, 0)
         self.cb_bands = QtWidgets.QComboBox()
         self.cb_bands.addItems(list(_BAND_STEPS.keys()))
         self.cb_bands.setToolTip("Quantize colors into fixed steps of the measured value.")
         self._compact_combo(self.cb_bands)
         self.cb_bands.currentIndexChanged.connect(self._on_style_changed)
-        cg.addWidget(self.cb_bands, 3, 1)
+        cg.addWidget(self.cb_bands, 4, 1)
 
         self.cb_smooth = QtWidgets.QCheckBox("Smooth shading")
         self.cb_smooth.setToolTip(
@@ -336,88 +349,17 @@ class ContourTaskPanel:
             "Off shows one flat color per triangle."
         )
         self.cb_smooth.toggled.connect(self._on_smooth_changed)
-        cg.addWidget(self.cb_smooth, 4, 0, 1, 2)
-        root.addWidget(cont_box)
+        cg.addWidget(self.cb_smooth, 5, 0, 1, 2)
 
-        # Highlight (isolate / flag a value range, for DFM pass-fail views)
-        hl_box = QtWidgets.QGroupBox("Highlight")
-        hg = self._grid(hl_box)
-
-        hg.addWidget(QtWidgets.QLabel("Mode"), 0, 0)
-        self.cb_hl_mode = QtWidgets.QComboBox()
-        self.cb_hl_mode.addItems(["Off", "Isolate range", "Flag range"])
-        self.cb_hl_mode.setToolTip(
-            "Off: normal colour map.\n"
-            "Isolate range: keep the colour map inside the band, grey out the rest.\n"
-            "Flag range: solid flag colour inside the band, base colour outside "
-            "(a pass/fail view)."
+        self.cb_highlight = QtWidgets.QCheckBox("Highlight range")
+        self.cb_highlight.setToolTip(
+            "Show a pass/fail view: values within the Range above are flagged "
+            "red, everything else muted gray. The Range spin boxes and the "
+            "legend handles set the flagged band."
         )
-        self._compact_combo(self.cb_hl_mode)
-        self.cb_hl_mode.currentIndexChanged.connect(self._on_highlight_changed)
-        hg.addWidget(self.cb_hl_mode, 0, 1)
-
-        # Band bounds. Each side has an enable-checkbox so it can be left open
-        # (e.g. only an upper bound for "below 2 mm").
-        unit = self.measure.unit
-        lo_row = QtWidgets.QHBoxLayout()
-        lo_row.setContentsMargins(0, 0, 0, 0)
-        lo_row.setSpacing(4)
-        self.cx_hl_lo = QtWidgets.QCheckBox("Min")
-        self.cx_hl_lo.setToolTip("Enable a lower bound for the highlight band.")
-        self.cx_hl_lo.toggled.connect(self._on_highlight_changed)
-        self.sb_hl_lo = QtWidgets.QDoubleSpinBox()
-        self.sb_hl_lo.setRange(-1.0e6, 1.0e6)
-        self.sb_hl_lo.setDecimals(self.measure.range_decimals)
-        self.sb_hl_lo.setSingleStep(self.measure.range_step)
-        if unit:
-            self.sb_hl_lo.setSuffix(f" {unit}")
-        self.sb_hl_lo.valueChanged.connect(self._on_highlight_changed)
-        lo_row.addWidget(self.cx_hl_lo, 0)
-        lo_row.addWidget(self.sb_hl_lo, 1)
-        lo_w = QtWidgets.QWidget()
-        lo_w.setLayout(lo_row)
-        hg.addWidget(lo_w, 1, 0, 1, 2)
-
-        hi_row = QtWidgets.QHBoxLayout()
-        hi_row.setContentsMargins(0, 0, 0, 0)
-        hi_row.setSpacing(4)
-        self.cx_hl_hi = QtWidgets.QCheckBox("Max")
-        self.cx_hl_hi.setToolTip("Enable an upper bound for the highlight band.")
-        self.cx_hl_hi.toggled.connect(self._on_highlight_changed)
-        self.sb_hl_hi = QtWidgets.QDoubleSpinBox()
-        self.sb_hl_hi.setRange(-1.0e6, 1.0e6)
-        self.sb_hl_hi.setDecimals(self.measure.range_decimals)
-        self.sb_hl_hi.setSingleStep(self.measure.range_step)
-        if unit:
-            self.sb_hl_hi.setSuffix(f" {unit}")
-        self.sb_hl_hi.valueChanged.connect(self._on_highlight_changed)
-        hi_row.addWidget(self.cx_hl_hi, 0)
-        hi_row.addWidget(self.sb_hl_hi, 1)
-        hi_w = QtWidgets.QWidget()
-        hi_w.setLayout(hi_row)
-        hg.addWidget(hi_w, 2, 0, 1, 2)
-
-        # Flag / base colours (only meaningful in Flag mode).
-        self._hl_flag_rgb = (0.85, 0.15, 0.15)
-        self._hl_base_rgb = (0.30, 0.65, 0.30)
-        col_row = QtWidgets.QHBoxLayout()
-        col_row.setContentsMargins(0, 0, 0, 0)
-        col_row.setSpacing(4)
-        self.pb_hl_flag = QtWidgets.QPushButton("Flag colour")
-        self.pb_hl_flag.setToolTip("In-band colour used by Flag mode.")
-        self.pb_hl_flag.clicked.connect(lambda: self._pick_highlight_color("flag"))
-        self.pb_hl_base = QtWidgets.QPushButton("Base colour")
-        self.pb_hl_base.setToolTip("Out-of-band colour used by Flag mode.")
-        self.pb_hl_base.clicked.connect(lambda: self._pick_highlight_color("base"))
-        col_row.addWidget(self.pb_hl_flag, 1)
-        col_row.addWidget(self.pb_hl_base, 1)
-        col_w = QtWidgets.QWidget()
-        col_w.setLayout(col_row)
-        hg.addWidget(col_w, 3, 0, 1, 2)
-        self._refresh_highlight_color_buttons()
-
-        root.addWidget(hl_box)
-        self._update_highlight_enabled()
+        self.cb_highlight.toggled.connect(self._on_highlight_toggled)
+        cg.addWidget(self.cb_highlight, 3, 0, 1, 2)
+        root.addWidget(cont_box)
 
         row = QtWidgets.QHBoxLayout()
         self.pb_generate = QtWidgets.QPushButton("Generate Contour")
@@ -539,9 +481,6 @@ class ContourTaskPanel:
             self.picking_mode = None
             self._reset_pick_ui()
             return True
-        # With a probe selection active, Esc clears it (deselecting in the 3D
-        # view and resetting each probe's highlight via the selection
-        # observer).
         if self._selected_probes:
             try:
                 Gui.Selection.clearSelection()
@@ -648,69 +587,26 @@ class ContourTaskPanel:
         return _BAND_STEPS.get(self.cb_bands.currentText(), 0.0)
 
     def _highlight_spec(self):
-        """Build a HighlightSpec from the Highlight widgets."""
-        from ...app.contour.colormap import (
-            HighlightSpec,
-            HIGHLIGHT_OFF,
-            HIGHLIGHT_ISOLATE,
-            HIGHLIGHT_FLAG,
-        )
+        from ...app.contour.colormap import HighlightSpec
 
-        idx = self.cb_hl_mode.currentIndex()
-        mode = (HIGHLIGHT_OFF, HIGHLIGHT_ISOLATE, HIGHLIGHT_FLAG)[idx] if 0 <= idx < 3 else HIGHLIGHT_OFF
-        lo = self.sb_hl_lo.value() if self.cx_hl_lo.isChecked() else None
-        hi = self.sb_hl_hi.value() if self.cx_hl_hi.isChecked() else None
-        return HighlightSpec(
-            mode=mode, lo=lo, hi=hi,
-            flag_color=self._hl_flag_rgb, base_color=self._hl_base_rgb,
-        )
+        if not getattr(self, "cb_highlight", None) or not self.cb_highlight.isChecked():
+            return HighlightSpec(active=False)
+        lo, hi = self._current_range()
+        return HighlightSpec(active=True, lo=lo, hi=hi)
 
-    def _update_highlight_enabled(self):
-        """Enable/disable the highlight sub-widgets by mode: bounds matter for
-        Isolate and Flag; colours only for Flag."""
-        active = self.cb_hl_mode.currentIndex() != 0
-        flag = self.cb_hl_mode.currentIndex() == 2
-        for w in (self.cx_hl_lo, self.cx_hl_hi):
-            w.setEnabled(active)
-        self.sb_hl_lo.setEnabled(active and self.cx_hl_lo.isChecked())
-        self.sb_hl_hi.setEnabled(active and self.cx_hl_hi.isChecked())
-        for w in (self.pb_hl_flag, self.pb_hl_base):
-            w.setEnabled(flag)
-
-    def _on_highlight_changed(self, *_):
-        self._update_highlight_enabled()
-        # Highlight is a pure recolour -- no re-mesh, no re-measure.
+    def _on_highlight_toggled(self, _checked=False):
+        spec = self._highlight_spec()
         if self._node is not None:
             low, high = self._current_range()
-            self._node.recolor(
-                low, high, self.cb_colormap.currentText(), self._band(), self._highlight_spec()
-            )
+            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
         if self._legend is not None:
-            self._legend.set_highlight(self._highlight_spec())
+            self._legend.set_highlight(spec)
+        self._update_range_label()
 
-    def _pick_highlight_color(self, which):
-        cur = self._hl_flag_rgb if which == "flag" else self._hl_base_rgb
-        initial = QtGui.QColor.fromRgbF(*cur)
-        chosen = QtWidgets.QColorDialog.getColor(
-            initial, self.form, "Flag colour" if which == "flag" else "Base colour"
-        )
-        if not chosen.isValid():
-            return
-        rgb = (chosen.redF(), chosen.greenF(), chosen.blueF())
-        if which == "flag":
-            self._hl_flag_rgb = rgb
-        else:
-            self._hl_base_rgb = rgb
-        self._refresh_highlight_color_buttons()
-        self._on_highlight_changed()
-
-    def _refresh_highlight_color_buttons(self):
-        for btn, rgb in ((self.pb_hl_flag, self._hl_flag_rgb), (self.pb_hl_base, self._hl_base_rgb)):
-            r, g, b = (int(c * 255) for c in rgb)
-            # Contrasting text so the label stays readable on the swatch.
-            lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
-            fg = "#000000" if lum > 0.6 else "#ffffff"
-            btn.setStyleSheet(f"QPushButton {{ background: rgb({r},{g},{b}); color: {fg}; }}")
+    def _update_range_label(self):
+        on = bool(getattr(self, "cb_highlight", None) and self.cb_highlight.isChecked())
+        if hasattr(self, "lbl_range"):
+            self.lbl_range.setText("Flagged band" if on else "Range")
 
     def _options(self):
         out = {}
@@ -842,15 +738,20 @@ class ContourTaskPanel:
 
     def _on_range_spin(self):
         low, high = self._current_range()
+        spec = self._highlight_spec()
         if self._node is not None:
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band())
+            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
         if self._legend is not None:
             self._legend.set_range(low, high)
+            self._legend.set_highlight(spec)
 
     def _on_range_changed(self, low, high):
         self._set_range_spins(low, high)
+        spec = self._highlight_spec()
         if self._node is not None:
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band())
+            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
+        if self._legend is not None:
+            self._legend.set_highlight(spec)
 
     def _on_style_changed(self):
         if self._node is None:
@@ -867,11 +768,6 @@ class ContourTaskPanel:
             self._render()
 
     def apply_property_change(self, prop):
-        """Push a single property-panel edit into the live panel widgets, so
-        the open contour updates to match. Setting a widget's value fires its
-        normal change signal (which re-renders/recolors), so this reuses the
-        existing update paths. Guarded so the widgets' own edits -- which the
-        panel writes back to the object on Save -- don't recurse back here."""
         if self._suppress_prop_sync or self._analysis_obj is None:
             return
         obj = self._analysis_obj
@@ -888,13 +784,17 @@ class ContourTaskPanel:
             elif prop == "Smooth":
                 val = bool(getattr(obj, "Smooth", False))
                 if val != self.cb_smooth.isChecked():
-                    self.cb_smooth.setChecked(val)  # toggled -> _on_smooth_changed
+                    self.cb_smooth.setChecked(val)
             elif prop in ("RangeLow", "RangeHigh"):
                 low = float(getattr(obj, "RangeLow", 0.0))
                 high = float(getattr(obj, "RangeHigh", 0.0))
                 if (low, high) != self._current_range():
                     self._set_range_spins(low, high)
                     self._on_range_spin()
+            elif prop == "HighlightActive":
+                val = bool(getattr(obj, "HighlightActive", False))
+                if val != self.cb_highlight.isChecked():
+                    self.cb_highlight.setChecked(val)
         except Exception as exc:
             App.Console.PrintWarning(f"DFM contour: property sync failed. {exc}\n")
         finally:
@@ -921,23 +821,11 @@ class ContourTaskPanel:
         if low > high:
             low, high = high, low
         self._set_range_spins(low, high)
-        # Seed the highlight band spinboxes once, to sensible values near the
-        # data, so they don't sit at 0 when the user first enables a bound.
-        if not getattr(self, "_highlight_seeded", False):
-            self._highlight_seeded = True
-            mid = (dmin + dmax) * 0.5
-            self.sb_hl_lo.blockSignals(True)
-            self.sb_hl_hi.blockSignals(True)
-            self.sb_hl_lo.setValue(dmin)
-            self.sb_hl_hi.setValue(mid)
-            self.sb_hl_lo.blockSignals(False)
-            self.sb_hl_hi.blockSignals(False)
         colormap = self.cb_colormap.currentText()
         band = self._band()
 
         node = ContourNode(self.target_object)
         smooth = self.cb_smooth.isChecked()
-        # measure's own units: degrees for draft, mm for thickness).
         span = dom_hi - dom_lo
         value_gap = 0.5 * span if (smooth and span > 0) else None
         node.build(
@@ -977,11 +865,10 @@ class ContourTaskPanel:
                 dmax,
             )
             self._legend.set_highlight(self._highlight_spec())
+            self._update_range_label()
             self._legend.show()
             self._legend.raise_()
             self._restore_legend_geometry()
-            # Mirror the widget's orientation changes (from its own right-click
-            # menu) onto the tree object.
             try:
                 self._legend.orientationChanged.connect(
                     lambda _h=False: self._sync_legend_object_orientation()
@@ -1016,10 +903,12 @@ class ContourTaskPanel:
         if low > high:
             low, high = high, low
         self._set_range_spins(low, high)
+        spec = self._highlight_spec()
         if self._node is not None:
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band())
+            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
         if self._legend is not None:
             self._legend.set_range(low, high)
+            self._legend.set_highlight(spec)
 
     def _restore_legend_geometry(self):
         if self._legend is None:
@@ -1044,7 +933,7 @@ class ContourTaskPanel:
         if parent is None:
             return
         try:
-            self._legend.set_orientation(True)  # horizontal
+            self._legend.set_orientation(True)
             pw = parent.width()
             w = min(max(320, pw // 3), max(200, pw - 40))
             h = 96
@@ -1087,6 +976,7 @@ class ContourTaskPanel:
             "range_high": high,
             "bands": self.cb_bands.currentText(),
             "smooth": self.cb_smooth.isChecked(),
+            "highlight_active": self.cb_highlight.isChecked(),
             "options": self._options(),
         }
 
@@ -1149,6 +1039,9 @@ class ContourTaskPanel:
             if obj.Bands:
                 self.cb_bands.setCurrentText(obj.Bands)
             self.cb_smooth.setChecked(bool(getattr(obj, "Smooth", False)))
+            self.cb_highlight.blockSignals(True)
+            self.cb_highlight.setChecked(bool(getattr(obj, "HighlightActive", False)))
+            self.cb_highlight.blockSignals(False)
             for oid, w in self._option_widgets.items():
                 if oid in (obj.Options or {}):
                     val = obj.Options[oid]
@@ -1201,8 +1094,6 @@ class ContourTaskPanel:
             return None
 
     def _ensure_legend_object(self):
-        """Create the legend tree object (child of the analysis) if needed,
-        and apply its stored orientation/visibility to the live widget."""
         analysis = self._ensure_analysis_object()
         if analysis is None or self._legend is None:
             return
@@ -1229,9 +1120,6 @@ class ContourTaskPanel:
         self._apply_legend_text_color()
 
     def _reset_text_color_override(self):
-        """Turn the auto text color back on after a new contour is generated,
-        so a manual override doesn't carry across regenerations. Writes the
-        legend object (which owns the color properties), then re-applies."""
         obj = self._legend_obj
         if obj is None:
             self._apply_legend_text_color()
@@ -1251,8 +1139,6 @@ class ContourTaskPanel:
         self._apply_legend_text_color()
 
     def apply_legend_text_color(self):
-        """Public entry point the legend tree object's onChanged calls when
-        its TextColor / AutoTextColor change."""
         self._apply_legend_text_color()
 
     def _apply_legend_text_color(self):
@@ -1294,7 +1180,7 @@ class ContourTaskPanel:
             return
         self._suppress_legend_sync = True
         try:
-            self._legend.set_orientation(not vertical)  # widget takes `horizontal`
+            self._legend.set_orientation(not vertical)
         except Exception:
             pass
         finally:

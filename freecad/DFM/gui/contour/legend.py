@@ -297,8 +297,8 @@ class ContourLegend(QtWidgets.QWidget):
             bar = self._bar_rect()
             pt = self._localpt(event)
             coord = pt.x() if self._horizontal else pt.y()
-            value = round(self._pos_to_value(coord, bar))
-            gap = max((self._dom_hi - self._dom_lo) * 0.02, 1.0)
+            value = self._pos_to_value(coord, bar)
+            gap = max((self._dom_hi - self._dom_lo) * 0.02, 1e-5)
             if self._drag_mode == "low":
                 self._low = min(value, self._high - gap)
             else:
@@ -368,17 +368,22 @@ class ContourLegend(QtWidgets.QWidget):
             "Set color range",
             label,
             float(current),
-            float(self._dom_lo),
-            float(self._dom_hi),
+            -1e6,
+            1e6,
             3,
         )
         if not ok:
             return
-        gap = max((self._dom_hi - self._dom_lo) * 0.02, 1.0)
+
         if which == "low":
-            self._low = min(value, self._high - gap)
+            self._low = value
+            if self._low >= self._high:
+                self._high = self._low + 1e-5
         else:
-            self._high = max(value, self._low + gap)
+            self._high = value
+            if self._high <= self._low:
+                self._low = self._high - 1e-5
+
         self.update()
         self.rangeChanged.emit(self._low, self._high)
 
@@ -627,7 +632,6 @@ class ContourLegend(QtWidgets.QWidget):
 
     def _paint_resize_grip(self, p):
         gx, gy = self.width() - 4, self.height() - 4
-        # Brighter on hover so it clearly reads as a grabbable corner.
         p.setPen(QtGui.QPen(QtGui.QColor(230, 230, 230, 220), 1.4))
         for off in (3, 7, 11):
             p.drawLine(gx - off, gy, gx, gy - off)
