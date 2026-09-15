@@ -186,7 +186,7 @@ class DraftMeasure(ContourMeasure):
     label = "Draft Angle"
     unit = "°"
     default_colormap = "Cool-Warm"
-    default_range = (-90.0, 90.0)
+    default_range = (-3.0, 3.0)
     range_limits = (-90.0, 90.0)
     needs_pull_direction = True
     options = [
@@ -203,8 +203,7 @@ class DraftMeasure(ContourMeasure):
         return (0.0, 90.0) if opts.get("magnitude") else (-90.0, 90.0)
 
     def initial_range(self, opts):
-        # Full scale by default; the user narrows it on the legend if wanted.
-        return (0.0, 90.0) if opts.get("magnitude") else (-90.0, 90.0)
+        return (0.0, 3.0) if opts.get("magnitude") else (-3.0, 3.0)
 
     def measure(self, shape, mesh, pull=None, options=None, progress_cb=None, check_abort=None):
         options = options or {}

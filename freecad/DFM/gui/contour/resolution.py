@@ -41,21 +41,23 @@ class ResolutionField(QtWidgets.QWidget):
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.5)
         self.spin.setSuffix(" mm")
-        self.spin.setToolTip("Explicit element size. Smaller is finer and slower.")
+        self.spin.setToolTip("Explicit element size. Smaller is finer and slower. Editing switches to Custom.")
         self.spin.valueChanged.connect(self._on_spin)
-        self.spin.hide()
         layout.addWidget(self.spin)
+
+        self._sync_spin_to_combo()
+
+    def _sync_spin_to_combo(self):
+        if self.combo.currentText() == _CUSTOM or self._shape is None:
+            return
+        size = element_size_for(self._shape, self.combo.currentText())
+        self.spin.blockSignals(True)
+        self.spin.setValue(size)
+        self.spin.blockSignals(False)
 
     def set_shape(self, shape):
         self._shape = shape
-        if (
-            self.combo.currentText() == _CUSTOM
-            and self._shape is not None
-            and self.spin.value() <= MIN_ELEMENT_SIZE
-        ):
-            self.spin.blockSignals(True)
-            self.spin.setValue(element_size_for(shape, DEFAULT_RESOLUTION))
-            self.spin.blockSignals(False)
+        self._sync_spin_to_combo()
         self._refresh_safe()
 
     def element_size(self):
@@ -78,24 +80,27 @@ class ResolutionField(QtWidgets.QWidget):
             self.combo.setCurrentText(resolution)
         self.combo.blockSignals(False)
         custom = self.combo.currentText() == _CUSTOM
-        self.spin.setVisible(custom)
         if custom and element_size:
             self.spin.blockSignals(True)
             self.spin.setValue(element_size)
             self.spin.blockSignals(False)
+        else:
+            self._sync_spin_to_combo()
         self._refresh_safe()
 
     def _on_combo(self):
-        custom = self.combo.currentText() == _CUSTOM
-        self.spin.setVisible(custom)
-        if custom and self._shape is not None:
-            self.spin.blockSignals(True)
-            self.spin.setValue(element_size_for(self._shape, DEFAULT_RESOLUTION))
-            self.spin.blockSignals(False)
+        # Switching to a preset drives the spin box to that preset's size;
+        # Custom leaves the current spin value in place for the user to edit.
+        self._sync_spin_to_combo()
         self._refresh_safe()
         self.changed.emit()
 
     def _on_spin(self):
+        # A manual edit means the value is no longer a preset: flip to Custom.
+        if self.combo.currentText() != _CUSTOM:
+            self.combo.blockSignals(True)
+            self.combo.setCurrentText(_CUSTOM)
+            self.combo.blockSignals(False)
         self._refresh_safe()
         self.changed.emit()
 
