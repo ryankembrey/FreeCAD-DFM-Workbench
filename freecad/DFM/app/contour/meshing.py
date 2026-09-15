@@ -60,6 +60,116 @@ def _normalize3(x, y, z):
     return (x / length, y / length, z / length)
 
 
+def _candidate_gmsh_lib_dirs():
+    dirs = []
+    env = os.environ.get("GMSH_LIB_DIR")
+    if env:
+        dirs.append(env)
+    try:
+        import gmsh as _gmsh_probe
+
+        mod_dir = os.path.dirname(os.path.abspath(_gmsh_probe.__file__))
+        dirs.append(mod_dir)
+        dirs.append(os.path.join(mod_dir, "lib"))
+        dirs.append(os.path.join(os.path.dirname(mod_dir), "lib"))
+        for entry in os.listdir(mod_dir):
+            full = os.path.join(mod_dir, entry)
+            if os.path.isdir(full) and entry.lower().startswith("gmsh"):
+                dirs.append(full)
+                dirs.append(os.path.join(full, "lib"))
+    except Exception:
+        pass
+    for base in list(getattr(__import__("site"), "getsitepackages", lambda: [])() or []):
+        dirs.append(base)
+        dirs.append(os.path.join(base, "gmsh"))
+        dirs.append(os.path.join(base, "lib"))
+    dirs.extend(
+        [
+            "/usr/lib/x86_64-linux-gnu",
+            "/usr/lib64",
+            "/usr/lib",
+            "/usr/local/lib",
+        ]
+    )
+    seen = set()
+    out = []
+    for d in dirs:
+        if d and d not in seen and os.path.isdir(d):
+            seen.add(d)
+            out.append(d)
+    return out
+
+
+def _find_libgmsh(dirs):
+    import re
+
+    pattern = re.compile(r"^libgmsh\.so(\.\d+)*$")
+    exact = []
+    for d in dirs:
+        try:
+            entries = os.listdir(d)
+        except Exception:
+            continue
+        for name in entries:
+            if pattern.match(name) or name == "gmsh.dll" or name.startswith("libgmsh"):
+                exact.append(os.path.join(d, name))
+    exact.sort(key=len, reverse=True)
+    return exact
+
+
+def _preload_libgmsh():
+    import ctypes
+
+    for path in _find_libgmsh(_candidate_gmsh_lib_dirs()):
+        try:
+            ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+            return path
+        except Exception:
+            continue
+    return None
+
+
+def _import_gmsh():
+    try:
+        import gmsh
+    except ImportError as exc:
+        raise RuntimeError(
+            "The 'gmsh' Python module is required for contour meshing but is not "
+            "installed in FreeCAD's Python environment. Install it with "
+            "'pip install gmsh' into the same environment FreeCAD uses."
+        ) from exc
+
+    try:
+        gmsh.initialize()
+        return gmsh
+    except Exception:
+        pass
+
+    preloaded = _preload_libgmsh()
+    try:
+        gmsh.initialize()
+        return gmsh
+    except Exception as exc:
+        detail = str(exc)
+        hint = (
+            "The 'gmsh' Python wrapper is installed, but its native library "
+            "(libgmsh.so) could not be loaded, so meshing can't run. This is a "
+            "packaging problem,  it is common in sandboxed "
+            "FreeCAD installs (e.g. Flatpak/Snap) where the pip 'gmsh' wheel's "
+            "shared library isn't found.\n"
+            "Fixes:\n"
+            "  - Install a gmsh build that bundles its library, e.g. reinstall "
+            "with 'pip install --force-reinstall gmsh' into FreeCAD's Python.\n"
+            "  - Or download the Gmsh SDK from gmsh.info and point the "
+            "GMSH_LIB_DIR environment variable at its 'lib' folder before "
+            "starting FreeCAD.\n"
+            f"Underlying error: {detail}"
+        )
+        if preloaded:
+            hint += f"\n(Tried preloading {preloaded}.)"
+        raise RuntimeError(hint) from exc
+
+
 def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
     """Mesh `shape` with gmsh at a uniform element size (mm).
 
@@ -77,14 +187,7 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
             f"the {TRIANGLE_HARD_CAP:,} safety limit. Choose a coarser resolution."
         )
 
-    try:
-        import gmsh
-    except ImportError as exc:
-        raise RuntimeError(
-            "The 'gmsh' Python module is required for contour meshing but is not "
-            "installed in FreeCAD's Python environment. Install it with "
-            "'pip install gmsh' into the same environment FreeCAD uses."
-        ) from exc
+    gmsh = _import_gmsh()
 
     tmp = tempfile.NamedTemporaryFile(suffix=".brep", delete=False)
     tmp.close()
@@ -92,7 +195,6 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
 
     try:
         shape.exportBrep(brep_path)
-        gmsh.initialize()
         try:
             gmsh.option.setNumber("General.Terminal", 0)
             gmsh.option.setNumber("General.NumThreads", 0)
