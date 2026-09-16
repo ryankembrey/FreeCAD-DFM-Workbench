@@ -25,6 +25,11 @@ materials are fully configurable to support any manufacturing workflow.
 - [x] **Customisation:** add manufacturing processes and edit materials
 - [x] **Export:** analysis results exportable to CSV
 
+## Contours
+Analyse wall thickness or draft angles of your parts, and create nice graphics.
+
+![Thickness Analysis](.github/images/thickness_analysis.png)
+
 ## Installation
 
 Install directly from the **FreeCAD Addon Manager**.
