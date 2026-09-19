@@ -118,7 +118,7 @@ Note that built-in processes and the Default material cannot be deleted.</string
           <item>
            <widget class="QToolButton" name="tbRestore">
             <property name="toolTip">
-             <string>Restores the selected manufacturing process to the default parameters defined by the built-in configuation.</string>
+             <string>Restores the selected manufacturing process to the default parameters defined by the built-in configuration.</string>
             </property>
             <property name="text">
              <string>...</string>
