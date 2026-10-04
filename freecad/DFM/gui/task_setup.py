@@ -37,17 +37,6 @@ QPushButton:checked {
 """
 
 
-# =============================================================================
-# Requirement handlers
-#
-# Each ProcessRequirement that needs user input owns a handler. The handler
-# holds its own state (value / point / reference / flipped) and builds its own
-# row of widgets (pick button, status line-edit, optional flip button). This
-# keeps all the per-requirement branching in one place and makes adding a new
-# requirement a matter of writing one small subclass.
-# =============================================================================
-
-
 class RequirementHandler(QtCore.QObject):
     """Base handler: owns the widgets and state for one ProcessRequirement."""
 
@@ -197,24 +186,12 @@ class VectorRequirement(RequirementHandler):
             sub_obj = sel[0].SubObjects[0]
             sub_name = sel[0].SubElementNames[0] if sel[0].SubElementNames else "Selected"
 
-            if isinstance(sub_obj, Part.Face):
-                u0, u1, v0, v1 = sub_obj.ParameterRange
-                u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
-                pnt = sub_obj.valueAt(u, v)
-                dir_vec = sub_obj.normalAt(u, v).normalize()
-
-            elif isinstance(sub_obj, Part.Edge):
-                p0, p1 = sub_obj.ParameterRange
-                p_mid = (p0 + p1) * 0.5
-                pnt = sub_obj.valueAt(p_mid)
-                tangent = sub_obj.tangentAt(p_mid)
-                if tangent.Length == 0:
-                    App.Console.PrintError("Selected edge is degenerate.\n")
-                    return False
-                dir_vec = tangent.normalize()
-            else:
+            result = self._compute_direction(sub_obj)
+            if result is None:
                 App.Console.PrintError("Selected element must be a Face or an Edge.\n")
                 return False
+
+            pnt, dir_vec = result
 
             self.pnt = pnt
             self.value = gp_Dir(dir_vec.x, dir_vec.y, dir_vec.z)
@@ -232,6 +209,57 @@ class VectorRequirement(RequirementHandler):
         except Exception as e:
             App.Console.PrintError(f"Visualizing {self.label.lower()} failed: {e}\n")
             return False
+
+    @staticmethod
+    def _axis_from_face_edges(face) -> "App.Vector | None":
+        """Extract an axis from arc/circle edges on a face (e.g. fillet faces)."""
+        for edge in face.Edges:
+            curve = edge.Curve
+            if hasattr(curve, "Axis"):
+                return App.Vector(curve.Axis).normalize()
+        return None
+
+    @staticmethod
+    def _compute_direction(sub_obj) -> "tuple[App.Vector, App.Vector] | None":
+        """Compute (point, direction) from a face or edge. Returns None on failure."""
+        if isinstance(sub_obj, Part.Face):
+            surface = sub_obj.Surface
+            if isinstance(surface, (Part.Cylinder, Part.Cone, Part.Toroid)):
+                dir_vec = surface.Axis.normalize()
+                pnt = sub_obj.CenterOfMass
+            elif not isinstance(surface, (Part.Plane, Part.Sphere)):
+                axis = VectorRequirement._axis_from_face_edges(sub_obj)
+                if axis is not None:
+                    dir_vec = axis
+                    pnt = sub_obj.CenterOfMass
+                else:
+                    u0, u1, v0, v1 = sub_obj.ParameterRange
+                    u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
+                    pnt = sub_obj.valueAt(u, v)
+                    dir_vec = sub_obj.normalAt(u, v).normalize()
+            else:
+                u0, u1, v0, v1 = sub_obj.ParameterRange
+                u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
+                pnt = sub_obj.valueAt(u, v)
+                dir_vec = sub_obj.normalAt(u, v).normalize()
+
+        elif isinstance(sub_obj, Part.Edge):
+            curve = sub_obj.Curve
+            if hasattr(curve, "Axis"):
+                dir_vec = App.Vector(curve.Axis).normalize()
+                pnt = App.Vector(curve.Center) if hasattr(curve, "Center") else sub_obj.CenterOfMass
+            else:
+                p0, p1 = sub_obj.ParameterRange
+                p_mid = (p0 + p1) * 0.5
+                pnt = sub_obj.valueAt(p_mid)
+                tangent = sub_obj.tangentAt(p_mid)
+                if tangent.Length == 0:
+                    return None
+                dir_vec = tangent.normalize()
+        else:
+            return None
+
+        return (pnt, dir_vec)
 
     def flip(self) -> None:
         if not self.value or not self.pnt:
@@ -335,6 +363,7 @@ class TaskSetup:
         self.abort_requested = False
         self.picking_mode: Any = None
         self.cursor_overridden = False
+        self._preview_indicator: Optional[DirectionIndicator] = None
 
         self.orig_model_text = self.form.pbSelectModel.text()
 
@@ -376,9 +405,12 @@ class TaskSetup:
     def _populate_categories(self):
         self.form.cbManCategory.blockSignals(True)
         self.form.cbManCategory.clear()
-        self.form.cbManCategory.addItems(self.registry.get_categories())
-        self.form.cbManCategory.setCurrentIndex(-1)
+        categories = self.registry.get_categories()
+        self.form.cbManCategory.addItems(categories)
+        self.form.cbManCategory.setCurrentIndex(0 if len(categories) == 1 else -1)
         self.form.cbManCategory.blockSignals(False)
+        if len(categories) == 1:
+            self.on_category_changed()
 
     def _connect_signals(self):
         self.form.pbRunAnalysis.clicked.connect(self.on_run_clicked)
@@ -391,6 +423,12 @@ class TaskSetup:
     def _on_escape(self) -> bool:
         """Cancel picking mode on Escape. Returns True if handled."""
         if self.picking_mode:
+            self._cleanup_preview()
+            # Restore committed indicator if the handler already had a value
+            if self.picking_mode in self.handlers:
+                handler = self.handlers[self.picking_mode]
+                if isinstance(handler, VectorRequirement) and handler.is_satisfied():
+                    handler.indicator.set_visible(True)
             self.picking_mode = None
             self._reset_picking_ui()
             return True
@@ -401,17 +439,67 @@ class TaskSetup:
             return
         QtCore.QTimer.singleShot(50, self._process_picked_selection)
 
+    def _ensure_preview_indicator(self):
+        """Create the preview indicator once for the current picking session."""
+        if self._preview_indicator is not None:
+            return
+        handler = self.handlers.get(self.picking_mode)
+        if isinstance(handler, VectorRequirement):
+            color = VectorRequirement._COLORS.get(handler.requirement, (1.0, 0.15, 0.15))
+            self._preview_indicator = DirectionIndicator(color, "")
+
+    def setPreselection(self, doc_name, obj_name, sub_name):
+        """Show a live direction preview arrow when hovering over geometry during pick mode."""
+        if not self.picking_mode or self.picking_mode == "model":
+            return
+        handler = self.handlers.get(self.picking_mode)
+        if not isinstance(handler, VectorRequirement) or not sub_name:
+            return
+
+        try:
+            doc = App.getDocument(doc_name)
+            obj = doc.getObject(obj_name)
+            sub_shape = obj.Shape.getElement(sub_name)
+        except Exception:
+            return
+
+        result = VectorRequirement._compute_direction(sub_shape)
+        if result is None:
+            return
+        pnt, dir_vec = result
+
+        if self._preview_indicator is None:
+            return
+        self._preview_indicator.show(pnt, dir_vec)
+        self._preview_indicator.set_visible(True)
+
+    def removePreselection(self, *args):
+        """Hide the direction preview when the mouse leaves geometry."""
+        if self._preview_indicator:
+            self._preview_indicator.set_visible(False)
+
+    def _cleanup_preview(self):
+        """Remove the preview indicator from the scene graph."""
+        if self._preview_indicator:
+            self._preview_indicator.remove()
+            self._preview_indicator = None
+
     def _process_picked_selection(self):
         if not self.picking_mode:
             return
 
         if self.picking_mode == "model":
             success = self._apply_model_selection()
+            picked_handler = None
         else:
-            handler = self.handlers.get(self.picking_mode)
-            success = handler.apply_selection() if handler else False
+            picked_handler = self.handlers.get(self.picking_mode)
+            success = picked_handler.apply_selection() if picked_handler else False
 
         if success:
+            self._cleanup_preview()
+            # Restore committed indicator visibility (was hidden while picking)
+            if picked_handler and isinstance(picked_handler, VectorRequirement):
+                picked_handler.indicator.set_visible(True)
             self.picking_mode = None
             self._reset_picking_ui()
             Gui.Selection.clearSelection()
@@ -467,6 +555,10 @@ class TaskSetup:
         """Pick-button handler shared by every dynamic requirement row."""
         # A second click on the active button cancels picking.
         if self.picking_mode == handler.requirement:
+            self._cleanup_preview()
+            # Restore the committed indicator if the handler already had a value
+            if isinstance(handler, VectorRequirement) and handler.is_satisfied():
+                handler.indicator.set_visible(True)
             self.picking_mode = None
             self._reset_picking_ui()
             return
@@ -480,15 +572,96 @@ class TaskSetup:
         self._reset_picking_ui()
         self.picking_mode = handler.requirement
         handler.enter_picking_ui()
+        # Hide the committed indicator while picking a new direction
+        if isinstance(handler, VectorRequirement):
+            if handler.is_satisfied():
+                handler.indicator.set_visible(False)
+            self._ensure_preview_indicator()
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
         self.cursor_overridden = True
 
+    def _set_target(self, obj):
+        """Set the target object for analysis."""
+        self.target_object = obj
+        self.target_shape = obj.Shape
+        self.form.leSelectModel.setText(obj.Label)
+        App.Console.PrintMessage(f"DFM: auto-selected {obj.Label}\n")
+
+    @staticmethod
+    def _is_effectively_visible(obj) -> bool:
+        """Check if an object is visible, accounting for parent folder visibility."""
+        try:
+            if not obj.ViewObject.Visibility:
+                return False
+        except Exception:
+            return False
+        # Walk up the full container chain (App::Part / folder nesting)
+        _CONTAINER_TYPES = ("App::Part", "App::DocumentObjectGroup")
+        current = obj
+        seen = {id(current)}
+        while True:
+            parent = None
+            for candidate in current.InList:
+                if candidate.TypeId in _CONTAINER_TYPES and id(candidate) not in seen:
+                    parent = candidate
+                    break
+            if parent is None:
+                break
+            seen.add(id(parent))
+            try:
+                if not parent.ViewObject.Visibility:
+                    return False
+            except Exception:
+                return False
+            current = parent
+        return True
+
     def _auto_select_model(self):
+        # 1. If something is already selected in the viewport, use that
         if len(Gui.Selection.getSelection()) > 0:
             if self._apply_model_selection():
-                assert self.target_object is not None
                 Gui.Selection.clearSelection()
                 App.Console.PrintMessage(f"DFM: auto-selected {self.target_object.Label}\n")
+                return
+
+        # 2. Find candidate bodies in the document
+        doc = App.ActiveDocument
+        if not doc:
+            return
+
+        # Prefer PartDesign::Body objects (the typical DFM target).
+        # Fall back to any solid-bearing object if no Bodies exist.
+        _SKIP = {"App::Origin", "App::Line", "App::Plane", "App::DocumentObjectGroup"}
+        bodies = []
+        fallback = []
+        for obj in doc.Objects:
+            if not hasattr(obj, "Shape") or obj.Shape.isNull():
+                continue
+            if not obj.Shape.Faces:
+                continue
+            type_id = obj.TypeId
+            if type_id in _SKIP:
+                continue
+            if any(skip in type_id for skip in ("Datum", "Sketch", "Origin", "ShapeBinder")):
+                continue
+            if type_id == "PartDesign::Body":
+                bodies.append(obj)
+            elif not type_id.startswith("PartDesign::"):
+                # App::Part containers, Part WB solids, imported STEPs, etc.
+                fallback.append(obj)
+
+        candidates = bodies if bodies else fallback
+
+        # Single body in document: auto-select it
+        if len(candidates) == 1:
+            self._set_target(candidates[0])
+            return
+
+        # Multiple bodies but only one visible: auto-select the visible one
+        if len(candidates) > 1:
+            visible = [obj for obj in candidates if self._is_effectively_visible(obj)]
+            if len(visible) == 1:
+                self._set_target(visible[0])
 
     def _remove_all_indicators(self):
         for handler in self.handlers.values():
@@ -508,7 +681,7 @@ class TaskSetup:
         else:
             self.form.cbManProcess.setEnabled(False)
             self.form.cbManProcess.setPlaceholderText("No processes in this category")
-        self.form.cbManProcess.setCurrentIndex(-1)
+        self.form.cbManProcess.setCurrentIndex(0 if len(processes) == 1 else -1)
         self.form.cbManProcess.blockSignals(False)
 
         self.on_process_changed()
@@ -538,7 +711,7 @@ class TaskSetup:
         else:
             self.form.cbMaterial.setEnabled(False)
             self.form.cbMaterial.setPlaceholderText("No materials defined")
-        self.form.cbMaterial.setCurrentIndex(-1)
+        self.form.cbMaterial.setCurrentIndex(0 if len(materials) == 1 else -1)
         self.form.cbMaterial.blockSignals(False)
 
         self._update_options_visibility()
@@ -576,12 +749,18 @@ class TaskSetup:
         return [req for req in REQUIREMENT_HANDLER_TYPES if req in active]
 
     def _update_options_visibility(self):
+        active_reqs = self._active_requirements()
+
+        # Remove indicators for requirements that are no longer active
+        for req, handler in self.handlers.items():
+            if req not in active_reqs:
+                handler.remove_indicator()
+
         self._clear_options_ui()
         if not self.process:
             self.form.gbOptions.hide()
             return
 
-        active_reqs = self._active_requirements()
         if not active_reqs:
             self.form.gbOptions.hide()
             return
@@ -593,6 +772,28 @@ class TaskSetup:
         title = "Parameters" if len(active_reqs) > 1 else self.handlers[active_reqs[0]].label
         self.form.gbOptions.setTitle(title)
         self.form.gbOptions.show()
+
+        # Auto-default pull direction to +Z (the most common pull direction)
+        if ProcessRequirement.PULL_DIRECTION in active_reqs:
+            handler = self.handlers[ProcessRequirement.PULL_DIRECTION]
+            if not handler.is_satisfied():
+                self._set_default_pull_direction(handler)
+
+    def _set_default_pull_direction(self, handler: "VectorRequirement"):
+        """Default to +Z pull direction, with the arrow at the target's bounding box center."""
+        handler.value = gp_Dir(0, 0, 1)
+        handler.ref = "+Z (default)"
+        handler.flipped = False
+
+        if self.target_object and self.target_shape:
+            center = self.target_shape.BoundBox.Center
+            handler.pnt = center
+            handler.indicator.show(center, App.Vector(0, 0, 1))
+        else:
+            handler.pnt = App.Vector(0, 0, 0)
+
+        handler.refresh_display()
+        self._update_run_button_state()
 
     def get_active_requirements(self) -> set[ProcessRequirement]:
         requirements = set()
@@ -784,6 +985,7 @@ class TaskSetup:
     def reject(self):
         if self.is_running:
             self.abort_requested = True
+        self._cleanup_preview()
         self._reset_picking_ui()
         self._remove_all_indicators()
         try:
@@ -793,6 +995,7 @@ class TaskSetup:
         Gui.Control.closeDialog()
 
     def accept(self):
+        self._cleanup_preview()
         self._reset_picking_ui()
         self._remove_all_indicators()
         try:
