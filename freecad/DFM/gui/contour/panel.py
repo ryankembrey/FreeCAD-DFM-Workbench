@@ -212,7 +212,7 @@ class ContourTaskPanel:
         self.pb_object.setCheckable(True)
         self.pb_object.setMinimumHeight(28)
         self.pb_object.setStyleSheet(PICK_BUTTON_STYLE)
-        self.pb_object.setToolTip("Pick the object, or pre-select it before opening the tool.")
+        self.pb_object.setToolTip("Pick the object, or preselect it before opening the tool.")
         self.pb_object.clicked.connect(self._on_pick_object)
         self.le_object = QtWidgets.QLineEdit()
         self.le_object.setReadOnly(True)
