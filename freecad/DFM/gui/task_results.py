@@ -35,12 +35,7 @@ class TaskResults(QtCore.QObject):
         self.form.leProcess.setReadOnly(True)
         self.form.leMaterial.setReadOnly(True)
         self.form.leVerdict.setReadOnly(True)
-        self.form.tbDetails.setReadOnly(True)
         self.form.pbExportDiff.setIcon(QtGui.QIcon(":/icons/export_diff.svg"))
-
-        self.form.tbDetails.setHtml(
-            "Select a result in the tree to view details of the DFM issues."
-        )
 
         self._save_clicked = False
 
@@ -60,21 +55,6 @@ class TaskResults(QtCore.QObject):
         self.form.tvResults.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.form.tvResults.customContextMenuRequested.connect(self._show_context_menu)
         self.form.tvResults.selectionModel().currentChanged.connect(self._handle_selection_change)
-        self.form.gbDetails.setCheckable(True)
-        self.form.gbDetails.setChecked(True)
-        self.form.gbDetails.toggled.connect(self._on_details_toggled)
-
-    def _on_details_toggled(self, checked: bool):
-        self.form.tbDetails.setVisible(checked)
-        if checked:
-            self.adjust_details_height()
-
-    def adjust_details_height(self):
-        """Dynamic resizing of the description box based on content."""
-        doc = self.form.tbDetails.document()
-        content_height = doc.documentLayout().documentSize().height()
-        final_height = int(content_height) + 10
-        self.form.tbDetails.setFixedHeight(max(60, min(final_height, 300)))
 
     def render_tree(self, grouped_data: dict, all_process_rules: list, get_criticality=None):
         expanded_labels = set()
