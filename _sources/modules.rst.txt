@@ -1,0 +1,6 @@
+FreeCAD-DFM-Workbench
+=====================
+
+.. toctree::
+   :maxdepth: 4
+
