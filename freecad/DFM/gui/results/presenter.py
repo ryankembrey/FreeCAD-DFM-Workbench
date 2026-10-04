@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-import html
 import csv
 
 import FreeCAD as App  # type: ignore
@@ -17,7 +16,7 @@ from ...core.models import CheckResult, Severity
 from ...gui.results.bridge import DFMViewProvider
 from ...gui.results.delegates import HistoryRowDelegate
 from ...gui.results.models import DFMReportModel
-from ...gui.results.utils import CSVResultExporter, CSVExportConfig, icon_to_html
+from ...gui.results.utils import CSVResultExporter, CSVExportConfig
 from ...gui.results.visuals import severity_color
 from ...gui.results.widgets import DFMSparkline
 from ...gui.task_results import TaskResults
@@ -54,8 +53,6 @@ class TaskResultsPresenter:
 
         self.build_history_tab()
 
-        self.view.adjust_details_height()
-
         self.refresh_ui()
         Gui.Control.showDialog(self.view)
 
@@ -77,52 +74,12 @@ class TaskResultsPresenter:
             self.model.process.get_criticality,
         )
 
-        if not self.model.active_results:
-            self.view.form.tbDetails.setHtml(
-                "<b>No issues found.</b><br>"
-                f"This design passed all active checks for <i>{self.model.process.name}</i> "
-                f"with material <i>{self.model.material}</i>. "
-                "It meets the manufacturing requirements as configured."
-            )
-            self.view.adjust_details_height()
-
     def handle_selection(self, data: CheckResult | list[CheckResult]):
         Gui.Selection.clearSelection()
         if isinstance(data, list) and len(data) == 0:
             self.bridge.highlight_faces_and_edges_by_index([], [])
-            icon = self.view._get_icon(Severity.SUCCESS)
-            icon_html = icon_to_html(icon, size=16)
-            self.view.form.tbDetails.setHtml(
-                f"<table cellspacing='0' cellpadding='0'><tr>"
-                f"<td valign='middle' style='padding-right:4px'>{icon_html}</td>"
-                f"<td valign='middle'><b>No issues found.</b></td>"
-                f"</tr></table>"
-                f"<p style='margin-top:4px'>This rule passed all checks with the current process settings.</p>"
-            )
-            self.view.adjust_details_height()
             return
         elif isinstance(data, list):
-            unique_rules = set(f.rule_id for f in data)
-            rule_name = (
-                "All findings"
-                if len(unique_rules) > 1
-                else (data[0].rule_id.label if data else "Rule")
-            )
-            active = [r for r in data if not r.ignore]
-            worst_severity = max(
-                (r.severity for r in active), key=lambda s: s.value, default=Severity.SUCCESS
-            )
-            icon = self.view._get_icon(worst_severity)
-            icon_html = icon_to_html(icon, size=16)
-
-            self.view.form.tbDetails.setHtml(
-                f"<table cellspacing='0' cellpadding='0'><tr>"
-                f"<td valign='middle' style='padding-right:4px'>{icon_html}</td>"
-                f"<td valign='middle'><b>{rule_name}</b></td>"
-                f"</tr></table>"
-                f"<p style='margin-top:4px'>Showing all {len(active)} finding{'s' if len(active) != 1 else ''}.</p>"
-            )
-
             face_pairs = [
                 (ref.index, severity_color(r.severity))
                 for r in data
@@ -140,17 +97,7 @@ class TaskResultsPresenter:
             self.bridge.highlight_faces_and_edges_by_index(face_pairs, edge_pairs)
 
         elif isinstance(data, CheckResult):
-            overview = html.escape(data.overview)
             color = severity_color(data.severity)
-            icon = self.view._get_icon(data.severity)
-            icon_html = icon_to_html(icon, size=16)
-            self.view.form.tbDetails.setHtml(
-                f"<table cellspacing='0' cellpadding='0'><tr>"
-                f"<td valign='middle' style='padding-right:4px'>{icon_html}</td>"
-                f"<td valign='middle'><b>{overview}</b></td>"
-                f"</tr></table>"
-                f"<p style='margin-top:4px'>{data.message}</p>"
-            )
 
             face_refs = [ref for ref in data.refs if ref.type == "Face"]
             edge_refs = [ref for ref in data.refs if ref.type == "Edge"]
@@ -160,13 +107,8 @@ class TaskResultsPresenter:
                 [(ref.index, color) for ref in edge_refs],
             )
 
-            # Annotate — prefer face, fall back to edge
-            if face_refs:
-                self.bridge.annotate_by_index(face_refs[0].index, data.overview, color)
-            elif edge_refs:
-                self.bridge.annotate_edge_by_index(edge_refs[0].index, data.overview, color)
-
-        self.view.adjust_details_height()
+            # Show the viewport overlay card
+            self.bridge.show_finding_overlay(data, color)
 
     def handle_zoom_to_rule(self, findings: list[CheckResult]):
         face_pairs = [
@@ -183,11 +125,8 @@ class TaskResultsPresenter:
             for ref in r.refs
             if ref.type == "Edge"
         ]
-        rule_name = findings[0].rule_id.label if findings else "Rule"
-        self.view.form.tbDetails.setHtml(f"<b>Rule: {rule_name}</b><br>Showing all findings.")
         self.bridge.highlight_faces_and_edges_by_index(face_pairs, edge_pairs)
         self.bridge.zoom_to_selection()
-        self.view.adjust_details_height()
 
     def handle_zoom(self, result: CheckResult):
         self.handle_selection(result)

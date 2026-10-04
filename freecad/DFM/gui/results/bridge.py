@@ -12,9 +12,12 @@ from PySide6.QtCore import QTimer
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
+from ...core.models import CheckResult
+from ...gui.results.overlay import FindingOverlay
+
 
 class DFMViewProvider:
-    """Manages 3D visual feedback, including face/edge highlighting and annotations."""
+    """Manages 3D visual feedback, including face/edge highlighting and overlay cards."""
 
     OVERLAY_HIGHLIGHT_COLORS = {
         "#E24B4A": (0.886, 0.294, 0.290, 0.0),
@@ -26,11 +29,10 @@ class DFMViewProvider:
     OVERLAY_TRANSPARENCY = 30
     OVERLAY_EDGE_WIDTH = 3
     OVERLAY_NAME = "DFM_Highlight_Overlay"
-    ANNOTATION_OFFSET = App.Vector(15, 15, 15)
 
     def __init__(self, target_object):
         self.target_object = target_object
-        self.anno = DFMAnnotation()
+        self._overlay = FindingOverlay()
         self._cam_animator = CameraAnimator()
         self._highlighted_faces: list[str] = []
         self._highlighted_edges: list[str] = []
@@ -38,7 +40,7 @@ class DFMViewProvider:
 
     def highlight_faces_by_index(self, index_color_pairs: list[tuple[int, str]]):
         """Highlights faces by their 0-based index. Clears any previous highlights."""
-        self.anno.remove(App.ActiveDocument)
+        self._overlay.remove()
         Gui.Selection.clearSelection()
         self._highlighted_edges = []
 
@@ -61,7 +63,7 @@ class DFMViewProvider:
 
     def highlight_edges_by_index(self, index_color_pairs: list[tuple[int, str]]):
         """Highlights edges by their 0-based index. Clears any previous highlights."""
-        self.anno.remove(App.ActiveDocument)
+        self._overlay.remove()
         Gui.Selection.clearSelection()
         self._highlighted_faces = []
 
@@ -88,7 +90,7 @@ class DFMViewProvider:
         edge_color_pairs: list[tuple[int, str]],
     ):
         """Highlights both faces and edges simultaneously."""
-        self.anno.remove(App.ActiveDocument)
+        self._overlay.remove()
         Gui.Selection.clearSelection()
 
         face_color_map: dict[int, str] = {}
@@ -115,50 +117,37 @@ class DFMViewProvider:
         self.target_object.ViewObject.Visibility = True
         self._update_overlay(face_color_map=face_color_map, edge_color_map=edge_color_map)
 
-    def annotate_by_index(
+    def show_finding_overlay(
         self,
-        face_index: Optional[int],
-        text: str,
+        finding: CheckResult,
         color_hex: str = "#E24B4A",
     ):
-        """Places an annotation on the face at the given 0-based index."""
-        if face_index is None:
+        """Shows the viewport overlay card for a finding, anchored to its geometry."""
+        face_refs = [ref for ref in finding.refs if ref.type == "Face"]
+        edge_refs = [ref for ref in finding.refs if ref.type == "Edge"]
+
+        anchor = None
+        if face_refs:
+            try:
+                face = self.target_object.Shape.Faces[face_refs[0].index]
+                anchor = self._find_on_surface_point(face)
+            except (IndexError, Exception):
+                pass
+        elif edge_refs:
+            try:
+                edge = self.target_object.Shape.Edges[edge_refs[0].index]
+                mid = edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * 0.5
+                anchor = edge.valueAt(mid)
+            except Exception:
+                try:
+                    anchor = edge.CenterOfMass
+                except Exception:
+                    pass
+
+        if anchor is None:
             return
 
-        face = self.target_object.Shape.Faces[face_index]
-        base_pos = self._find_on_surface_point(face)
-        self._place_annotation(base_pos, text, color_hex)
-
-    def annotate_edge_by_index(
-        self,
-        edge_index: Optional[int],
-        text: str,
-        color_hex: str = "#E24B4A",
-    ):
-        """Places an annotation at the midpoint of the edge at the given 0-based index."""
-        if edge_index is None:
-            return
-
-        edge = self.target_object.Shape.Edges[edge_index]
-        try:
-            mid = edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * 0.5
-            base_pos = edge.valueAt(mid)
-        except Exception:
-            base_pos = edge.CenterOfMass
-
-        self._place_annotation(base_pos, text, color_hex)
-
-    def _place_annotation(self, base_pos: App.Vector, text: str, color_hex: str):
-        h = color_hex.lstrip("#")
-        r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
-        self.anno.create(
-            doc=App.ActiveDocument,
-            base_pos=base_pos,
-            text_pos=base_pos.add(self.ANNOTATION_OFFSET),
-            text=text,
-            style_cfg={"bg_color": (r, g, b)},
-        )
-        App.ActiveDocument.recompute()  # type: ignore
+        self._overlay.show(anchor, finding, color_hex)
 
     def _update_overlay(
         self,
@@ -241,8 +230,8 @@ class DFMViewProvider:
             self._cam_animator.zoom_to_subelements(overlay, targets)
 
     def restore(self):
-        """Removes the overlay and annotation, returning the viewport to its original state."""
-        self.anno.remove(App.ActiveDocument)
+        """Removes the overlay card and highlight, returning the viewport to its original state."""
+        self._overlay.remove()
         self._remove_overlay()
         self.target_object.ViewObject.Visibility = True
 
@@ -265,59 +254,6 @@ class DFMViewProvider:
             return App.ActiveDocument.getObject(self.OVERLAY_NAME)  # type: ignore
         return None
 
-
-class DFMAnnotation:
-    """Annotation class for DFM issues in FreeCAD."""
-
-    # Default Styles
-    TEXT_COLOR = (0.95, 0.95, 0.95)
-    BG_COLOR = (0.6, 0.0, 0.0)
-    FONT_SIZE = 14
-    DISPLAY_MODE = "Line"
-
-    def __init__(self, name="DFM_Issue_Annotation"):
-        self.name = name
-        self._active_name = None
-
-    def remove(self, doc):
-        """Removes the current annotation from the document."""
-        if self._active_name:
-            try:
-                if obj := doc.getObject(self._active_name):
-                    doc.removeObject(obj.Name)
-            except Exception:
-                pass
-            self._active_name = None
-
-    def create(self, doc, base_pos, text_pos, text, style_cfg=None):
-        """Creates a new annotation with leader lines."""
-        style = style_cfg or {}
-        self.remove(doc)
-
-        label = doc.addObject("App::AnnotationLabel", self.name)
-        self._active_name = label.Name
-
-        label.LabelText = [text]
-        label.BasePosition = base_pos
-        label.TextPosition = text_pos
-
-        if vo := label.ViewObject:
-            vo.TextColor = style.get("text_color", self.TEXT_COLOR)
-            vo.BackgroundColor = style.get("bg_color", self.BG_COLOR)
-
-            if hasattr(vo, "ShowInTree"):
-                vo.ShowInTree = False
-
-            if "DisplayMode" in vo.PropertiesList:
-                vo.DisplayMode = self.DISPLAY_MODE
-
-            f_size = style.get("font_size", self.FONT_SIZE)
-            if hasattr(vo, "FontSize"):
-                vo.FontSize = f_size
-            if hasattr(label, "FontSize"):
-                label.FontSize = f_size
-
-        return label
 
 
 class CameraAnimator:
