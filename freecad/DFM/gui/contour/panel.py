@@ -28,6 +28,7 @@ from ...app.contour.measures import BoolOption, ChoiceOption
 
 from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend
+from .colormap_combo import populate_colormap_combo
 from .resolution import ResolutionField
 from . import document  # noqa: F401
 
@@ -297,7 +298,7 @@ class ContourTaskPanel:
 
         cg.addWidget(QtWidgets.QLabel("Color map"), 1, 0)
         self.cb_colormap = QtWidgets.QComboBox()
-        self.cb_colormap.addItems(list(COLORMAPS.keys()))
+        populate_colormap_combo(self.cb_colormap, COLORMAPS.keys())
         self.cb_colormap.setCurrentText(self.measure.default_colormap)
         self._compact_combo(self.cb_colormap)
         self.cb_colormap.currentIndexChanged.connect(self._on_style_changed)
