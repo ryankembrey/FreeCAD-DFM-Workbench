@@ -14,6 +14,7 @@ import FreeCADGui as Gui  # type: ignore
 
 from ...core.models import CheckResult
 from ...gui.results.overlay import FindingOverlay
+from ...gui.utils.view import get_active_view
 
 
 class DFMViewProvider:
@@ -313,7 +314,7 @@ class CameraAnimator:
             return None
 
     def _zoom_to_boundbox(self, bb: App.BoundBox) -> None:
-        view = Gui.ActiveDocument.ActiveView  # type: ignore[union-attr]
+        view = get_active_view()
         if view is None:
             return
 

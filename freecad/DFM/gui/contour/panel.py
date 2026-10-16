@@ -12,15 +12,21 @@ from pivy import coin
 
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
-import Part  # type: ignore
 
 from ..visuals import DirectionIndicator
-
-try:
-    from .. import DFM_rc  # noqa: F401
-except Exception:
-    pass
-
+from ..utils import resources  # noqa: F401
+from ..utils.body_select import auto_select_body
+from ..utils.colormap_combo import populate_colormap_combo
+from ..utils.picking import (
+    PICK_BUTTON_STYLE,
+    CrossCursorOverride,
+    first_selected_subelement,
+)
+from ..utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
+from ..utils.pull_preview import PullPreview
+from ..utils.qt_filters import EnterKeyFilter, EscapeFilter
+from ..utils.view import get_active_view, get_view_widget, pick_document_object
+from ..utils.widgets import make_flip_button
 
 from ...app.contour.meshing import generate_uniform_mesh
 from ...app.contour.colormap import COLORMAPS
@@ -28,14 +34,8 @@ from ...app.contour.measures import BoolOption, ChoiceOption
 
 from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend
-from .colormap_combo import populate_colormap_combo
 from .resolution import ResolutionField
 from . import document  # noqa: F401
-
-PICK_BUTTON_STYLE = """
-QPushButton:checked { border: 2px solid palette(highlight); font-weight: bold; }
-"""
-
 
 _LEGEND_STATE = {"pos": None, "size": None, "horizontal": False}
 
@@ -46,72 +46,6 @@ _BAND_STEPS = {
     "5 unit bands": 5.0,
     "10 unit bands": 10.0,
 }
-
-
-def _probe_ray_pick(view, event):
-    try:
-        pos = event.getPosition()
-        size = view.getSize()
-        if not size or size[0] <= 0 or size[1] <= 0:
-            return None
-        render_manager = view.getViewer().getSoRenderManager()
-        viewport_region = render_manager.getViewportRegion()
-        scene = render_manager.getSceneGraph()
-
-        action = coin.SoRayPickAction(viewport_region)
-        action.setPoint(coin.SbVec2s(int(pos[0]), int(pos[1])))
-        action.setPickAll(True)
-        action.apply(scene)
-
-        picked_list = action.getPickedPointList()
-        try:
-            count = picked_list.getLength()
-        except Exception:
-            count = len(picked_list)
-        for i in range(count):
-            path = picked_list[i].getPath()
-            if path is None:
-                continue
-            for j in range(path.getLength()):
-                node = path.getNode(j)
-                try:
-                    type_name = node.getTypeId().getName().getString()
-                except Exception:
-                    continue
-                if type_name == "SoFCSelection":
-                    try:
-                        doc_name = node.documentName.getValue().getString()
-                        obj_name = node.objectName.getValue().getString()
-                    except Exception:
-                        continue
-                    if doc_name and obj_name:
-                        return (doc_name, obj_name)
-    except Exception:
-        return None
-    return None
-
-
-class _EscapeFilter(QtCore.QObject):
-    def __init__(self, callback):
-        super().__init__()
-        self._callback = callback
-
-    def eventFilter(self, obj, event):
-        if event.type() == QtCore.QEvent.Type.KeyPress:
-            if event.key() == QtCore.Qt.Key.Key_Escape and self._callback():
-                return True
-        return False
-
-
-class _SpinBoxEnterFilter(QtCore.QObject):
-    def eventFilter(self, obj, event):
-        if event.type() == QtCore.QEvent.Type.KeyPress:
-            if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
-                if hasattr(obj, "interpretText"):
-                    obj.interpretText()
-                obj.clearFocus()
-                return True
-        return False
 
 
 class ContourTaskPanel:
@@ -132,14 +66,16 @@ class ContourTaskPanel:
         self.pull_ref = "+Z (default)"
         self.pull_flipped = False
         self.pull_anchor = None
+        self._preview: Optional[PullPreview] = None
+        self._pull_indicator_hidden = False
         self.indicator = (
-            DirectionIndicator((1.0, 0.15, 0.15), "Pull Direction")
+            DirectionIndicator(PULL_DIRECTION_COLOR, "Pull Direction")
             if measure.needs_pull_direction
             else None
         )
 
         self.picking_mode: Optional[str] = None
-        self.cursor_overridden = False
+        self._cursor = CrossCursorOverride()
 
         self._has_contour = False
         self._dirty = False
@@ -168,7 +104,7 @@ class ContourTaskPanel:
 
         self._build_form()
         Gui.Selection.addObserver(self)
-        self._escape_filter = _EscapeFilter(self._on_escape)
+        self._escape_filter = EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
         if self._analysis_obj is not None:
             try:
@@ -230,7 +166,11 @@ class ContourTaskPanel:
             self.pb_pull.setCheckable(True)
             self.pb_pull.setMinimumHeight(28)
             self.pb_pull.setStyleSheet(PICK_BUTTON_STYLE)
-            self.pb_pull.setToolTip("Set from a planar face normal or an edge. Defaults to +Z.")
+            self.pb_pull.setToolTip(
+                "Pick a face or edge. Planar faces give their normal, cylindrical, conical "
+                "and toroidal faces and circular edges give their axis, other edges their "
+                "tangent. Defaults to +Z."
+            )
             self.pb_pull.clicked.connect(self._on_pick_pull)
             field = QtWidgets.QHBoxLayout()
             field.setContentsMargins(0, 0, 0, 0)
@@ -239,18 +179,9 @@ class ContourTaskPanel:
             self.le_pull.setReadOnly(True)
             self.le_pull.setMinimumHeight(28)
             self.le_pull.setText(self.pull_ref)
-            self.flip_btn = QtWidgets.QToolButton()
-            self.flip_btn.setIcon(QtGui.QIcon(":/icons/flip_direction.svg"))
-            self.flip_btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
-            self.flip_btn.setIconSize(QtCore.QSize(18, 18))
-            self.flip_btn.setFixedSize(28, 28)
-            self.flip_btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-            self.flip_btn.setStyleSheet(
-                "QToolButton { border: none; background: transparent; padding: 0px; }"
-                "QToolButton:hover { background: rgba(127,127,127,40); border-radius: 3px; }"
+            self.flip_btn = make_flip_button(
+                self._on_flip_pull, tooltip="Flip the pull direction 180 degrees."
             )
-            self.flip_btn.setToolTip("Flip the pull direction 180 degrees.")
-            self.flip_btn.clicked.connect(self._on_flip_pull)
             field.addWidget(self.le_pull, 1)
             field.addWidget(self.flip_btn, 0)
             fw = QtWidgets.QWidget()
@@ -314,7 +245,7 @@ class ContourTaskPanel:
         range_row.setSpacing(4)
         self.sb_range_lo = QtWidgets.QDoubleSpinBox()
         self.sb_range_hi = QtWidgets.QDoubleSpinBox()
-        self._spinbox_enter_filter = _SpinBoxEnterFilter(self.form)
+        self._spinbox_enter_filter = EnterKeyFilter(self.form)
         range_decimals = max(int(self.measure.range_decimals), 2)
         range_step = min(self.measure.range_step, 0.1)
         for sb, val in ((self.sb_range_lo, lo0), (self.sb_range_hi, hi0)):
@@ -383,10 +314,7 @@ class ContourTaskPanel:
         root.addStretch(1)
 
     def _auto_select(self):
-        sel = Gui.Selection.getSelection()
-        if sel:
-            self._apply_object(sel[0])
-            Gui.Selection.clearSelection()
+        auto_select_body(self._apply_object)
 
     def addSelection(self, *args):
         if self.picking_mode:
@@ -401,6 +329,42 @@ class ContourTaskPanel:
 
     def setSelection(self, *args):
         self._observe_selection_resync()
+
+    def setPreselection(self, doc_name, obj_name, sub_name, *_):
+        """Show a live direction arrow when hovering a face or edge while picking the pull direction."""
+        if self.picking_mode == "pull" and self._preview is not None:
+            self._preview.show_for(doc_name, obj_name, sub_name)
+
+    def removePreselection(self, *args):
+        """Hide the direction preview when the mouse leaves the geometry."""
+        if self._preview is not None:
+            self._preview.hide()
+
+    def _begin_pull_preview(self):
+        # Hide the committed arrow while picking so it doesn't clash with the preview.
+        if self.indicator is not None and not self._pull_indicator_hidden:
+            self.indicator.set_visible(False)
+            self._pull_indicator_hidden = True
+        if self._preview is None:
+            self._preview = PullPreview(PULL_DIRECTION_COLOR)
+        self._preview.begin()
+
+    def _end_pull_preview(self):
+        if self._preview is not None:
+            self._preview.end()
+            self._preview = None
+        if self._pull_indicator_hidden:
+            self._pull_indicator_hidden = False
+            visible = True
+            obj = self._direction_obj
+            if obj is not None:
+                try:
+                    if App.GuiUp and obj.ViewObject is not None:
+                        visible = bool(obj.ViewObject.Visibility)
+                except Exception:
+                    pass
+            if self.indicator is not None:
+                self.indicator.set_visible(visible)
 
     def _selection_key_from_args(self, args):
         if len(args) >= 2 and args[0] and args[1]:
@@ -465,18 +429,18 @@ class ContourTaskPanel:
         self.picking_mode = mode
         button.setChecked(True)
         button.setText(hint)
-        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
-        self.cursor_overridden = True
+        if mode == "pull":
+            self._begin_pull_preview()
+        self._cursor.push()
 
     def _reset_pick_ui(self):
+        self._end_pull_preview()
         self.pb_object.setChecked(False)
         self.pb_object.setText("Select Object")
         if self.pb_pull is not None:
             self.pb_pull.setChecked(False)
             self.pb_pull.setText("Select Pull Direction")
-        if self.cursor_overridden:
-            QtWidgets.QApplication.restoreOverrideCursor()
-            self.cursor_overridden = False
+        self._cursor.pop()
 
     def _on_escape(self):
         if self.picking_mode:
@@ -543,26 +507,17 @@ class ContourTaskPanel:
 
     def _apply_pull_from_selection(self):
         try:
-            sel = Gui.Selection.getSelectionEx()
-            if not sel or not sel[0].SubObjects:
+            picked = first_selected_subelement()
+            if picked is None:
                 return False
-            sub = sel[0].SubObjects[0]
-            name = sel[0].SubElementNames[0] if sel[0].SubElementNames else "Selected"
-            if isinstance(sub, Part.Face):
-                u0, u1, v0, v1 = sub.ParameterRange
-                pnt = sub.valueAt((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-                direction = sub.normalAt((u0 + u1) * 0.5, (v0 + v1) * 0.5).normalize()
-            elif isinstance(sub, Part.Edge):
-                p0, p1 = sub.ParameterRange
-                pm = (p0 + p1) * 0.5
-                pnt = sub.valueAt(pm)
-                tangent = sub.tangentAt(pm)
-                if tangent.Length == 0:
-                    return False
-                direction = tangent.normalize()
-            else:
+            sub, name = picked
+            # Same rules as task setup: cylinder/cone/torus faces and circle/arc edges
+            # give their axis; planar faces give the normal; other edges the tangent.
+            result = compute_direction(sub)
+            if result is None:
                 App.Console.PrintWarning("DFM contour: pick a face or an edge.\n")
                 return False
+            pnt, direction = result
             self.pull_dir = App.Vector(direction.x, direction.y, direction.z)
             self.pull_anchor = App.Vector(pnt.x, pnt.y, pnt.z)
             self.pull_ref = name
@@ -855,7 +810,7 @@ class ContourTaskPanel:
         register(node)
         self._node = node
 
-        view_widget = self._view_widget()
+        view_widget = get_view_widget()
         if view_widget is not None:
             self._legend = ContourLegend(view_widget)
             self._legend.rangeChanged.connect(self._on_range_changed)
@@ -1094,17 +1049,6 @@ class ContourTaskPanel:
         except Exception as exc:
             App.Console.PrintError(f"DFM analysis: could not load. {exc}\n")
 
-    def _view_widget(self) -> Optional[QtWidgets.QWidget]:
-        try:
-            mw = Gui.getMainWindow()
-            mdi = mw.findChild(QtWidgets.QMdiArea)
-            if mdi is None:
-                return None
-            sub = mdi.activeSubWindow() or mdi.currentSubWindow()
-            return sub.widget() if sub is not None else None
-        except Exception:
-            return None
-
     def _ensure_legend_object(self):
         analysis = self._ensure_analysis_object()
         if analysis is None or self._legend is None:
@@ -1264,10 +1208,9 @@ class ContourTaskPanel:
     def _install_hover(self):
         if self._hover_cb is not None:
             return
-        gui_doc = Gui.ActiveDocument
-        if gui_doc is None or gui_doc.ActiveView is None:
+        view = get_active_view()
+        if view is None:
             return
-        view = gui_doc.ActiveView
         try:
             self._last_hover_t = 0.0
             self._last_face_key = None
@@ -1310,7 +1253,7 @@ class ContourTaskPanel:
     def _hover_label_widget(self):
         if self._hover_label is not None:
             return self._hover_label
-        view_widget = self._view_widget()
+        view_widget = get_view_widget()
         if view_widget is None:
             return None
         label = QtWidgets.QLabel(view_widget)
@@ -1337,7 +1280,7 @@ class ContourTaskPanel:
             self._hover_label.hide()
 
     def _gl_widget(self):
-        vw = self._view_widget()
+        vw = get_view_widget()
         if vw is None:
             return None
         try:
@@ -1407,7 +1350,7 @@ class ContourTaskPanel:
         view = self._hover_view
         if view is None:
             return None
-        return _probe_ray_pick(view, event_cb.getEvent())
+        return pick_document_object(view, event_cb.getEvent())
 
     def _on_hover(self, event_cb):
         now = time.monotonic()

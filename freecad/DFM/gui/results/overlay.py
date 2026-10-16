@@ -14,6 +14,8 @@ import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
 from ...core.models import CheckResult, Severity
+from ..utils.theme import qcolor_luminance
+from ..utils.view import get_active_view, get_view_widget
 
 
 _SEVERITY_BG = {
@@ -206,7 +208,7 @@ class FindingCard(QtWidgets.QFrame):
         # FreeCAD dark themes set text colour via QSS but don't update the
         # QPalette WindowText role, so it stays black even on a dark bg.
         # Derive text colour from the background luminance instead.
-        lum = 0.299 * base.redF() + 0.587 * base.greenF() + 0.114 * base.blueF()
+        lum = qcolor_luminance(base)
         fg_hex = "#e8e8e8" if lum < 0.45 else "#1a1a1a"
 
         # Header: darker shade from palette; Feedback: lighter shade
@@ -333,17 +335,14 @@ class FindingOverlay:
         """
         self.remove()
 
-        active_doc = Gui.ActiveDocument
-        if not active_doc or not hasattr(active_doc, "ActiveView"):
-            return
-        self._view = active_doc.ActiveView
+        self._view = get_active_view()
         if not self._view:
             return
 
         self._anchor = anchor
 
         # Find the viewport widget to parent the card to
-        self._viewport_widget = self._find_gl_widget(self._view)
+        self._viewport_widget = get_view_widget()
         if not self._viewport_widget:
             App.Console.PrintWarning("DFM overlay: could not find viewport widget\n")
             return
@@ -667,21 +666,6 @@ class FindingOverlay:
 
     def _on_camera_changed(self, userdata, sensor):
         self._reposition()
-
-    @staticmethod
-    def _find_gl_widget(view) -> Optional[QtWidgets.QWidget]:
-        """Find the 3D viewport widget via the MDI sub-window."""
-        try:
-            mw = Gui.getMainWindow()
-            mdi = mw.findChild(QtWidgets.QMdiArea)
-            if mdi is None:
-                return None
-            sub = mdi.activeSubWindow() or mdi.currentSubWindow()
-            if sub is None:
-                return None
-            return sub.widget()
-        except Exception:
-            return None
 
 
 class _ResizeFilter(QtCore.QObject):

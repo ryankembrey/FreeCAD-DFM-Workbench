@@ -16,9 +16,9 @@ import math
 from collections import defaultdict
 
 import FreeCAD as App  # type: ignore
-import FreeCADGui as Gui  # type: ignore
 
 from ...app.contour.colormap import value_to_color, DEFAULT_COLORMAP, HighlightSpec
+from ..utils.view import get_active_view
 
 
 _TARGET_PER_CHUNK = 2500
@@ -316,10 +316,10 @@ class ContourNode:
     def attach(self):
         if self._sep is None:
             return
-        gui_doc = Gui.ActiveDocument
-        if gui_doc is None or gui_doc.ActiveView is None:
+        view = get_active_view()
+        if view is None:
             raise RuntimeError("No active 3D view to display the contour in.")
-        self._view = gui_doc.ActiveView
+        self._view = view
         self._view.getSceneGraph().addChild(self._sep)
         try:
             self._original_visibility = self.target_object.ViewObject.Visibility

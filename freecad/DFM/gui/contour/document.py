@@ -7,10 +7,19 @@ from enum import Enum
 import math
 
 from pivy import coin
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
+
+from ..utils.badge import flipped_rgba, paint_badge
+from ..utils.theme import pref_color, viewport_background_luminance
+from ..utils.view import (
+    device_pixel_ratio,
+    get_active_view,
+    get_view_widget,
+    project_to_screen,
+)
 
 
 _BAND_STEPS = {
@@ -67,7 +76,12 @@ LABEL_FONT_POINT_SIZE = 10.0
 LABEL_PADDING_X = 3.0
 LABEL_PADDING_Y = 1.0
 LABEL_CORNER_RADIUS = 3.0
-LABEL_MARGIN = 1.0
+
+_BADGE_STYLE = dict(
+    font_pt=LABEL_FONT_POINT_SIZE,
+    pad_x=LABEL_PADDING_X,
+    pad_y=LABEL_PADDING_Y,
+)
 
 _PROBE_CROSS_BASE_COLOR = (1.0, 1.0, 1.0)
 _PROBE_BADGE_BASE_COLOR = (20 / 255.0, 20 / 255.0, 22 / 255.0)
@@ -596,68 +610,12 @@ def default_display_text(value, unit):
     return f"{value:.1f} {unit}"
 
 
-def _device_pixel_ratio() -> float:
-    try:
-        screen = QtGui.QGuiApplication.primaryScreen()
-        if screen:
-            return max(1.0, float(screen.devicePixelRatio()))
-    except Exception:
-        pass
-    return 1.0
-
-
-def _pref_color(entry: str, default_rgb: tuple) -> tuple:
-    try:
-        param = App.ParamGet("User parameter:BaseApp/Preferences/View")
-        packed = param.GetUnsigned(entry, 0)
-        if packed:
-            r = ((packed >> 24) & 0xFF) / 255.0
-            g = ((packed >> 16) & 0xFF) / 255.0
-            b = ((packed >> 8) & 0xFF) / 255.0
-            return (r, g, b)
-    except Exception:
-        pass
-    return default_rgb
-
-
 def _probe_state_color(state: int, base_rgb) -> tuple:
     if state == ProbeState.SELECTED:
-        return _pref_color("SelectionColor", _PROBE_SELECT_DEFAULT)
+        return pref_color("SelectionColor", _PROBE_SELECT_DEFAULT)
     if state == ProbeState.HOVER:
-        return _pref_color("HighlightColor", _PROBE_HOVER_DEFAULT)
+        return pref_color("HighlightColor", _PROBE_HOVER_DEFAULT)
     return base_rgb
-
-
-def _relative_luminance(rgb) -> float:
-    r, g, b = rgb
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-def viewport_background_luminance() -> float:
-    try:
-        p = App.ParamGet("User parameter:BaseApp/Preferences/View")
-    except Exception:
-        return 0.5
-
-    def col(entry, default):
-        return _pref_color(entry, default)
-
-    try:
-        simple = p.GetBool("Simple", False)
-        gradient = p.GetBool("Gradient", True)
-        use_mid = p.GetBool("UseBackgroundColorMid", False)
-    except Exception:
-        simple, gradient, use_mid = False, True, False
-
-    if simple or not gradient:
-        return _relative_luminance(col("BackgroundColor", (0.9, 0.9, 0.95)))
-
-    top = col("BackgroundColor2", (0.2, 0.3, 0.5))
-    bottom = col("BackgroundColor3", (0.6, 0.6, 0.7))
-    stops = [top, bottom]
-    if use_mid:
-        stops.append(col("BackgroundColor4", (0.4, 0.45, 0.6)))
-    return sum(_relative_luminance(s) for s in stops) / len(stops)
 
 
 def auto_legend_text_rgb() -> tuple:
@@ -674,37 +632,6 @@ def legend_text_rgb(analysis_obj) -> tuple:
         return (float(c[0]), float(c[1]), float(c[2]))
     except Exception:
         return auto_legend_text_rgb()
-
-
-def _paint_badge_text(text: str, dpr: float):
-    font = QtGui.QFont()
-    font.setPointSizeF(LABEL_FONT_POINT_SIZE)
-    font.setBold(True)
-
-    metrics = QtGui.QFontMetricsF(font)
-    badge_w = metrics.horizontalAdvance(text) + (LABEL_PADDING_X * 2.0)
-    badge_h = metrics.height() + (LABEL_PADDING_Y * 2.0)
-
-    image = QtGui.QImage(
-        int(math.ceil(badge_w * dpr)),
-        int(math.ceil(badge_h * dpr)),
-        QtGui.QImage.Format.Format_RGBA8888,
-    )
-    image.setDevicePixelRatio(dpr)
-    image.fill(QtCore.Qt.GlobalColor.transparent)
-
-    painter = QtGui.QPainter(image)
-    painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
-    painter.setPen(QtGui.QColor(255, 255, 255))
-    painter.setFont(font)
-    painter.drawText(
-        QtCore.QRectF(0.0, 0.0, badge_w, badge_h),
-        QtCore.Qt.AlignmentFlag.AlignCenter,
-        text,
-    )
-    painter.end()
-
-    return image, badge_w, badge_h
 
 
 def _rounded_rect_loop(width, height, radius, right, up, segments=4):
@@ -731,24 +658,6 @@ def _rounded_rect_loop(width, height, radius, right, up, segments=4):
             a = a0 + (math.pi / 2) * (s / segments)
             loop.append(pt(cx + r * math.cos(a), cy + r * math.sin(a)))
     return loop
-
-
-def _project_to_screen(view, point):
-    try:
-        camera = view.getCameraNode()
-        size = view.getSize()
-        if not camera or not size or size[0] <= 0 or size[1] <= 0:
-            return None
-        aspect = float(size[0]) / float(size[1])
-        volume = camera.getViewVolume(aspect)
-        matrix = volume.getMatrix()
-        dst = matrix.multVecMatrix(coin.SbVec3f(point.x, point.y, point.z))
-        nx, ny, _nz = dst.getValue()
-        nx01 = (nx + 1.0) * 0.5
-        ny01 = (ny + 1.0) * 0.5
-        return nx01 * size[0], (1.0 - ny01) * size[1]
-    except Exception:
-        return None
 
 
 def _create_fc_selection_node():
@@ -905,17 +814,12 @@ class ContourProbeViewProvider:
     def _repaint_text(self):
         obj = self.Object
         try:
-            dpr = _device_pixel_ratio()
-            image, logical_w, logical_h = _paint_badge_text(
-                getattr(obj, "DisplayText", "") or "", dpr
+            dpr = device_pixel_ratio()
+            image, logical_w, logical_h = paint_badge(
+                getattr(obj, "DisplayText", "") or "", dpr, **_BADGE_STYLE
             )
-            flipped = image.mirrored(False, True).convertToFormat(
-                QtGui.QImage.Format.Format_RGBA8888
-            )
-            buffer = bytes(flipped.constBits())[: flipped.sizeInBytes()]
-            self.badge_texture.image.setValue(
-                coin.SbVec2s(flipped.width(), flipped.height()), 4, buffer
-            )
+            width_px, height_px, buffer = flipped_rgba(image)
+            self.badge_texture.image.setValue(coin.SbVec2s(width_px, height_px), 4, buffer)
             self.logical_w = logical_w
             self.logical_h = logical_h
         except Exception:
@@ -947,10 +851,7 @@ class ContourProbeViewProvider:
         self._update_scale()
 
     def _view(self):
-        gui_doc = Gui.ActiveDocument
-        if gui_doc is None:
-            return None
-        return gui_doc.ActiveView
+        return get_active_view()
 
     def _attach_camera_sensor(self):
         view = self._view()
@@ -1198,17 +1099,11 @@ class _InlineRenameEdit(QtWidgets.QLineEdit):
 
 def _start_inline_rename(vobj):
     obj = vobj.Object
-    gui_doc = Gui.ActiveDocument
-    if gui_doc is None or gui_doc.ActiveView is None:
+    view = get_active_view()
+    if view is None:
         return
-    view = gui_doc.ActiveView
 
-    mw = Gui.getMainWindow()
-    mdi = mw.findChild(QtWidgets.QMdiArea)
-    if mdi is None:
-        return
-    sub = mdi.activeSubWindow() or mdi.currentSubWindow()
-    parent_widget = sub.widget() if sub is not None else None
+    parent_widget = get_view_widget()
     if parent_widget is None:
         return
 
@@ -1236,7 +1131,7 @@ def _start_inline_rename(vobj):
     editor.setMinimumWidth(140)
     editor.editingFinished.connect(commit)
 
-    screen_pt = _project_to_screen(view, getattr(obj, "Position", App.Vector(0, 0, 0)))
+    screen_pt = project_to_screen(view, getattr(obj, "Position", App.Vector(0, 0, 0)))
     if screen_pt is not None:
         x, y = screen_pt
         editor.move(max(0, int(x) - 8), max(0, int(y) - 12))

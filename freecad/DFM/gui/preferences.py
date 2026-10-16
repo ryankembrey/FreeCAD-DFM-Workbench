@@ -7,10 +7,10 @@ from typing import Any, Optional, TypeVar
 
 from PySide6 import QtGui, QtWidgets, QtCore
 
-import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from ..gui.widgets import ToleranceSpinBox
+from ..app.prefs import dfm_params
+from .utils.widgets import ToleranceSpinBox
 
 _PREF_PATH = "Mod/DFM"
 
@@ -391,13 +391,13 @@ class DFMPreferencesGeneral:
         layout.addStretch()
 
     def loadSettings(self):
-        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        params = dfm_params()
         self.print_timing_report.setChecked(
             params.GetBool("GeneralPrintTimingReport", self.DEFAULT_PRINT_TIMING_REPORT)
         )
 
     def saveSettings(self):
-        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        params = dfm_params()
         params.SetBool("GeneralPrintTimingReport", self.print_timing_report.isChecked())
 
 
@@ -429,11 +429,11 @@ class DFMPreferencesAnalyzers:
         self.panels.append(panel)
 
     def loadSettings(self):
-        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        params = dfm_params()
         for p in self.panels:
             p.load(params)
 
     def saveSettings(self):
-        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        params = dfm_params()
         for p in self.panels:
             p.save(params)
