@@ -12,9 +12,9 @@ from pivy import coin
 
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
-import Part  # type: ignore
 
 from ..visuals import DirectionIndicator
+from ..pull_direction import compute_direction
 
 try:
     from .. import DFM_rc  # noqa: F401
@@ -36,6 +36,8 @@ PICK_BUTTON_STYLE = """
 QPushButton:checked { border: 2px solid palette(highlight); font-weight: bold; }
 """
 
+
+_PULL_COLOR = (1.0, 0.15, 0.15)
 
 _LEGEND_STATE = {"pos": None, "size": None, "horizontal": False}
 
@@ -132,8 +134,10 @@ class ContourTaskPanel:
         self.pull_ref = "+Z (default)"
         self.pull_flipped = False
         self.pull_anchor = None
+        self._preview_indicator: Optional[DirectionIndicator] = None
+        self._pull_indicator_hidden = False
         self.indicator = (
-            DirectionIndicator((1.0, 0.15, 0.15), "Pull Direction")
+            DirectionIndicator(_PULL_COLOR, "Pull Direction")
             if measure.needs_pull_direction
             else None
         )
@@ -230,7 +234,11 @@ class ContourTaskPanel:
             self.pb_pull.setCheckable(True)
             self.pb_pull.setMinimumHeight(28)
             self.pb_pull.setStyleSheet(PICK_BUTTON_STYLE)
-            self.pb_pull.setToolTip("Set from a planar face normal or an edge. Defaults to +Z.")
+            self.pb_pull.setToolTip(
+                "Pick a face or edge. Planar faces give their normal, cylindrical, conical "
+                "and toroidal faces and circular edges give their axis, other edges their "
+                "tangent. Defaults to +Z."
+            )
             self.pb_pull.clicked.connect(self._on_pick_pull)
             field = QtWidgets.QHBoxLayout()
             field.setContentsMargins(0, 0, 0, 0)
@@ -402,6 +410,56 @@ class ContourTaskPanel:
     def setSelection(self, *args):
         self._observe_selection_resync()
 
+    def setPreselection(self, doc_name, obj_name, sub_name, *_):
+        """Show a live direction arrow when hovering a face or edge while picking the pull direction."""
+        if self.picking_mode != "pull" or self._preview_indicator is None or not sub_name:
+            return
+        try:
+            obj = App.getDocument(doc_name).getObject(obj_name)
+            sub_shape = obj.Shape.getElement(sub_name)
+        except Exception:
+            return
+        try:
+            result = compute_direction(sub_shape)
+        except Exception:
+            result = None
+        if result is None:
+            self._preview_indicator.set_visible(False)
+            return
+        pnt, dir_vec = result
+        self._preview_indicator.show(pnt, dir_vec)
+        self._preview_indicator.set_visible(True)
+
+    def removePreselection(self, *args):
+        """Hide the direction preview when the mouse leaves the geometry."""
+        if self._preview_indicator is not None:
+            self._preview_indicator.set_visible(False)
+
+    def _begin_pull_preview(self):
+        # Hide the committed arrow while picking so it doesn't clash with the preview.
+        if self.indicator is not None and not self._pull_indicator_hidden:
+            self.indicator.set_visible(False)
+            self._pull_indicator_hidden = True
+        if self._preview_indicator is None:
+            self._preview_indicator = DirectionIndicator(_PULL_COLOR, "")
+
+    def _end_pull_preview(self):
+        if self._preview_indicator is not None:
+            self._preview_indicator.remove()
+            self._preview_indicator = None
+        if self._pull_indicator_hidden:
+            self._pull_indicator_hidden = False
+            visible = True
+            obj = self._direction_obj
+            if obj is not None:
+                try:
+                    if App.GuiUp and obj.ViewObject is not None:
+                        visible = bool(obj.ViewObject.Visibility)
+                except Exception:
+                    pass
+            if self.indicator is not None:
+                self.indicator.set_visible(visible)
+
     def _selection_key_from_args(self, args):
         if len(args) >= 2 and args[0] and args[1]:
             return (str(args[0]), str(args[1]))
@@ -465,10 +523,13 @@ class ContourTaskPanel:
         self.picking_mode = mode
         button.setChecked(True)
         button.setText(hint)
+        if mode == "pull":
+            self._begin_pull_preview()
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
         self.cursor_overridden = True
 
     def _reset_pick_ui(self):
+        self._end_pull_preview()
         self.pb_object.setChecked(False)
         self.pb_object.setText("Select Object")
         if self.pb_pull is not None:
@@ -548,21 +609,13 @@ class ContourTaskPanel:
                 return False
             sub = sel[0].SubObjects[0]
             name = sel[0].SubElementNames[0] if sel[0].SubElementNames else "Selected"
-            if isinstance(sub, Part.Face):
-                u0, u1, v0, v1 = sub.ParameterRange
-                pnt = sub.valueAt((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-                direction = sub.normalAt((u0 + u1) * 0.5, (v0 + v1) * 0.5).normalize()
-            elif isinstance(sub, Part.Edge):
-                p0, p1 = sub.ParameterRange
-                pm = (p0 + p1) * 0.5
-                pnt = sub.valueAt(pm)
-                tangent = sub.tangentAt(pm)
-                if tangent.Length == 0:
-                    return False
-                direction = tangent.normalize()
-            else:
+            # Same rules as task setup: cylinder/cone/torus faces and circle/arc edges
+            # give their axis; planar faces give the normal; other edges the tangent.
+            result = compute_direction(sub)
+            if result is None:
                 App.Console.PrintWarning("DFM contour: pick a face or an edge.\n")
                 return False
+            pnt, direction = result
             self.pull_dir = App.Vector(direction.x, direction.y, direction.z)
             self.pull_anchor = App.Vector(pnt.x, pnt.y, pnt.z)
             self.pull_ref = name

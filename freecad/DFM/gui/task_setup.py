@@ -27,6 +27,7 @@ from ..gui.results.models import DFMReportModel
 from ..gui.results.presenter import TaskResultsPresenter
 from ..gui.task_results import TaskResults
 from ..gui.visuals import DirectionIndicator
+from ..gui.pull_direction import compute_direction
 
 
 PICK_BUTTON_STYLE = """
@@ -211,55 +212,9 @@ class VectorRequirement(RequirementHandler):
             return False
 
     @staticmethod
-    def _axis_from_face_edges(face) -> "App.Vector | None":
-        """Extract an axis from arc/circle edges on a face (e.g. fillet faces)."""
-        for edge in face.Edges:
-            curve = edge.Curve
-            if hasattr(curve, "Axis"):
-                return App.Vector(curve.Axis).normalize()
-        return None
-
-    @staticmethod
     def _compute_direction(sub_obj) -> "tuple[App.Vector, App.Vector] | None":
         """Compute (point, direction) from a face or edge. Returns None on failure."""
-        if isinstance(sub_obj, Part.Face):
-            surface = sub_obj.Surface
-            if isinstance(surface, (Part.Cylinder, Part.Cone, Part.Toroid)):
-                dir_vec = surface.Axis.normalize()
-                pnt = sub_obj.CenterOfMass
-            elif not isinstance(surface, (Part.Plane, Part.Sphere)):
-                axis = VectorRequirement._axis_from_face_edges(sub_obj)
-                if axis is not None:
-                    dir_vec = axis
-                    pnt = sub_obj.CenterOfMass
-                else:
-                    u0, u1, v0, v1 = sub_obj.ParameterRange
-                    u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
-                    pnt = sub_obj.valueAt(u, v)
-                    dir_vec = sub_obj.normalAt(u, v).normalize()
-            else:
-                u0, u1, v0, v1 = sub_obj.ParameterRange
-                u, v = (u0 + u1) * 0.5, (v0 + v1) * 0.5
-                pnt = sub_obj.valueAt(u, v)
-                dir_vec = sub_obj.normalAt(u, v).normalize()
-
-        elif isinstance(sub_obj, Part.Edge):
-            curve = sub_obj.Curve
-            if hasattr(curve, "Axis"):
-                dir_vec = App.Vector(curve.Axis).normalize()
-                pnt = App.Vector(curve.Center) if hasattr(curve, "Center") else sub_obj.CenterOfMass
-            else:
-                p0, p1 = sub_obj.ParameterRange
-                p_mid = (p0 + p1) * 0.5
-                pnt = sub_obj.valueAt(p_mid)
-                tangent = sub_obj.tangentAt(p_mid)
-                if tangent.Length == 0:
-                    return None
-                dir_vec = tangent.normalize()
-        else:
-            return None
-
-        return (pnt, dir_vec)
+        return compute_direction(sub_obj)
 
     def flip(self) -> None:
         if not self.value or not self.pnt:
