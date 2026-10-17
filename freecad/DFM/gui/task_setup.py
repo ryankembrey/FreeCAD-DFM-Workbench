@@ -265,7 +265,12 @@ REQUIREMENT_HANDLER_TYPES: dict[ProcessRequirement, type[RequirementHandler]] = 
 
 
 class TaskSetup:
-    def __init__(self):
+    def __init__(
+        self,
+        preset_process: Optional[str] = None,
+        preset_material: Optional[str] = None,
+        auto_run: bool = False,
+    ):
         self.form = Gui.PySideUic.loadUi(":/ui/task_setup.ui")  # type: ignore
         if not self.form:
             raise RuntimeError("Failed to load task_setup.ui from resources.")
@@ -302,6 +307,9 @@ class TaskSetup:
         self._connect_signals()
         self._auto_select_model()
         self._update_run_button_state()
+
+        if preset_process:
+            self._apply_presets(preset_process, preset_material, auto_run)
 
     def _setup_widgets(self):
         self.form.cbManCategory.setPlaceholderText("Select a category")
@@ -667,6 +675,34 @@ class TaskSetup:
             btn.setEnabled(True)
             btn.setToolTip("Starts the analysis for the selected model")
 
+    def _apply_presets(self, process_name: str, material_name: Optional[str], auto_run: bool):
+        """Pre-fill the setup form with a known process/material and optionally auto-run."""
+        # Find the category that contains this process
+        for cat_idx in range(self.form.cbManCategory.count()):
+            cat_name = self.form.cbManCategory.itemText(cat_idx)
+            processes = self.registry.get_processes_for_category(cat_name)
+            if any(p.name == process_name for p in processes):
+                self.form.cbManCategory.setCurrentIndex(cat_idx)
+                break
+
+        # Select the process
+        for proc_idx in range(self.form.cbManProcess.count()):
+            if self.form.cbManProcess.itemData(proc_idx) == process_name:
+                self.form.cbManProcess.setCurrentIndex(proc_idx)
+                break
+
+        # Select the material
+        if material_name:
+            mat_idx = self.form.cbMaterial.findText(material_name)
+            if mat_idx >= 0:
+                self.form.cbMaterial.setCurrentIndex(mat_idx)
+
+        self._update_run_button_state()
+
+        if auto_run:
+            # Defer so the dialog is shown before the analysis starts
+            QtCore.QTimer.singleShot(200, self.on_run_clicked)
+
     def on_run_clicked(self):
         self.picking_mode = None
         self._reset_picking_ui()
@@ -702,13 +738,13 @@ class TaskSetup:
         self.form.gbAnalysis.show()
 
         try:
-            results = self._execute_analysis(kwargs)
+            results, runner = self._execute_analysis(kwargs)
             if self.abort_requested:
                 App.Console.PrintMessage("DFM Analysis aborted by user.\n")
                 self.form.pbRunAnalysis.show()
                 self._update_run_button_state()
             else:
-                self._finish_analysis(results)
+                self._finish_analysis(results, runner, kwargs)
         except Exception as e:
             App.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
             import traceback
@@ -719,7 +755,7 @@ class TaskSetup:
         finally:
             self._cleanup_after_run()
 
-    def _execute_analysis(self, kwargs) -> list[CheckResult]:
+    def _execute_analysis(self, kwargs) -> tuple[list[CheckResult], AnalysisRunner]:
         assert self.target_shape is not None
 
         def progress_callback(current: int, total: int, message: str = ""):
@@ -740,7 +776,7 @@ class TaskSetup:
         process_name = self.form.cbManProcess.currentData()
         material_name = self.form.cbMaterial.currentText()
         runner = AnalysisRunner()
-        return runner.run_analysis(
+        results = runner.run_analysis(
             process_name=process_name,
             material_name=material_name,
             shape=self.target_shape,
@@ -748,8 +784,9 @@ class TaskSetup:
             check_abort=check_abort,
             **kwargs,
         )
+        return results, runner
 
-    def _finish_analysis(self, results: list[CheckResult]):
+    def _finish_analysis(self, results: list[CheckResult], runner: AnalysisRunner, run_kwargs: dict):
         assert self.target_object is not None
         assert self.process is not None
         self.form.lProgress.setText("Mapping results to 3D model")
@@ -762,15 +799,14 @@ class TaskSetup:
         process_name = self.form.cbManProcess.currentData()
 
         history_manager = HistoryManager(Path(App.getUserAppDataDir()))
-        verdict_text, _ = DFMReportModel(results, self.process, material_name).get_verdict()
-        history_manager.save_run(
-            results=results,
-            doc_name=App.ActiveDocument.Name,  # type: ignore
-            shape_name=self.target_object.Label,  # type: ignore
-            process_name=process_name,
-            material=material_name,
-            verdict=verdict_text,
-        )
+
+        # Build run_settings for persistence and material switching
+        run_settings = dict(run_kwargs)
+        # Remove non-serialisable OCP objects before storing
+        run_settings.pop(ProcessRequirement.PULL_DIRECTION.name, None)
+        run_settings.pop(ProcessRequirement.PRINT_ORIENTATION.name, None)
+        run_settings.pop(ProcessRequirement.NEUTRAL_PLANE.name, None)
+        run_settings.pop("prefs", None)
 
         report_model = DFMReportModel(results=results, process=self.process, material=material_name)
         view_bridge = DFMViewProvider(self.target_object)
@@ -791,6 +827,8 @@ class TaskSetup:
                 history_manager=history_manager,
                 doc_name=App.ActiveDocument.Name,  # type: ignore
                 shape_name=self.target_object.Label,  # type: ignore
+                runner=runner,
+                run_settings=run_settings,
             )
         except Exception as e:
             App.Console.PrintError(f"Failed to open results panel: {e}\n")

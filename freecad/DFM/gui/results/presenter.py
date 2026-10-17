@@ -11,8 +11,13 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from ...app.history import HistoryManager
+from ...app.document_object import (
+    save_results_to_document,
+    find_dfm_results_object,
+)
 
 from ...core.models import CheckResult, Severity
+from ...core.registries.process_registry import ProcessRegistry
 from ...gui.results.bridge import DFMViewProvider
 from ...gui.results.delegates import HistoryRowDelegate
 from ...gui.results.models import DFMReportModel
@@ -33,10 +38,14 @@ class TaskResultsPresenter:
         history_manager: HistoryManager,
         doc_name="",
         shape_name="",
+        runner=None,
+        run_settings: dict | None = None,
     ):
         self.view = view
         self.model = model
         self.bridge = bridge
+        self.runner = runner
+        self.run_settings = run_settings or {}
 
         self.view.on_row_selected = self.handle_selection
         self.view.on_row_double_clicked = self.handle_zoom
@@ -46,23 +55,53 @@ class TaskResultsPresenter:
         self.view.on_save_clicked = self.handle_save
         self.view.on_toggle_ignore_all = self.handle_ignore_all
         self.view.on_zoom_to_rule = self.handle_zoom_to_rule
+        self.view.on_material_changed = self.handle_material_changed
 
         self.history_manager = history_manager
         self.doc_name = doc_name
         self.shape_name = shape_name
 
+        # Material switching cache: material_name -> list[CheckResult]
+        self._material_cache: dict[str, list[CheckResult]] = {}
+        self._current_material = model.material
+        # Cache the initial results
+        self._material_cache[self._current_material] = list(model.results)
+
+        self._populate_material_combo()
         self.build_history_tab()
 
         self.refresh_ui()
         Gui.Control.showDialog(self.view)
 
+    def _populate_material_combo(self):
+        """Fill the material combo box with available materials for this process."""
+        combo = self.view.form.cbMaterialSwitch
+        combo.blockSignals(True)
+        combo.clear()
+
+        process = self.model.process
+        materials = list(process.materials.keys())
+        combo.addItems(materials)
+
+        # Select the current material
+        idx = combo.findText(self._current_material)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        else:
+            combo.setCurrentIndex(0)
+
+        combo.blockSignals(False)
+        combo.currentTextChanged.connect(self._on_material_combo_changed)
+
+    def _on_material_combo_changed(self, text: str):
+        if self.view.on_material_changed:
+            self.view.on_material_changed(text)
+
     def refresh_ui(self):
         self.view.form.leTarget.setText(self.bridge.target_object.Label)
         self.view.form.leProcess.setText(self.model.process.name)
-        self.view.form.leMaterial.setText(self.model.material)
         self.view.form.leTarget.setCursorPosition(0)
         self.view.form.leProcess.setCursorPosition(0)
-        self.view.form.leMaterial.setCursorPosition(0)
 
         text, color = self.model.get_verdict()
         self.view.form.leVerdict.setText(text)
@@ -162,9 +201,143 @@ class TaskResultsPresenter:
         Gui.Selection.clearSelection()
 
     def handle_save(self):
-        QMessageBox.information(
-            self.view.form, "Not Implemented", "Save Results is not yet implemented."
+        """Save results to the FreeCAD document as a tree object."""
+        doc = App.ActiveDocument
+        if not doc:
+            QMessageBox.warning(
+                self.view.form, "No Document", "No active document to save results to."
+            )
+            return
+
+        verdict_text, _ = self.model.get_verdict()
+
+        obj = save_results_to_document(
+            doc=doc,
+            target_object=self.bridge.target_object,
+            process_name=self.model.process.name,
+            material_name=self._current_material,
+            verdict=verdict_text,
+            results=self.model.results,
+            run_settings=self.run_settings,
         )
+
+        # Also save to legacy history for the history tab
+        self.history_manager.save_run(
+            results=self.model.results,
+            doc_name=self.doc_name,
+            shape_name=self.shape_name,
+            process_name=self.model.process.name,
+            material=self._current_material,
+            verdict=verdict_text,
+        )
+
+        App.Console.PrintNotification(f"DFM results saved to '{obj.Label}'.")
+
+    def handle_material_changed(self, new_material: str):
+        """Switch material: rerun checkers only (not analyzers), with caching."""
+        if new_material == self._current_material:
+            return
+
+        # Check cache first
+        if new_material in self._material_cache:
+            self._switch_to_cached_material(new_material)
+            return
+
+        # Need to rerun checks with the new material
+        if not self.runner or not self.runner.analyzer_cache:
+            reply = QMessageBox.question(
+                self.view.form,
+                "Rerun Required",
+                f"Analyzer cache is not available.\n\n"
+                f"Run a full analysis with material '{new_material}'?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._launch_rerun(new_material)
+                return
+            # Reset combo to current material
+            combo = self.view.form.cbMaterialSwitch
+            combo.blockSignals(True)
+            idx = combo.findText(self._current_material)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            combo.blockSignals(False)
+            return
+
+        # Rerun checks only
+        process_name = self.model.process.name
+
+        try:
+            new_results = self.runner.rerun_checks_only(
+                process_name=process_name,
+                material_name=new_material,
+                **self.run_settings,
+            )
+
+            # Resolve geometry refs for new results
+            from ...gui.task_setup import _resolve_geometry_refs
+
+            _resolve_geometry_refs(new_results)
+
+            # Cache the results
+            self._material_cache[new_material] = new_results
+            self._switch_to_cached_material(new_material)
+
+        except Exception as e:
+            App.Console.PrintError(f"Failed to rerun checks for material '{new_material}': {e}\n")
+            import traceback
+
+            App.Console.PrintError(traceback.format_exc())
+
+            # Reset combo
+            combo = self.view.form.cbMaterialSwitch
+            combo.blockSignals(True)
+            idx = combo.findText(self._current_material)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            combo.blockSignals(False)
+
+    def _launch_rerun(self, material_name: str | None = None):
+        """Close results and launch a full analysis with presets.
+
+        Deferred to the next event-loop tick so the current signal handler
+        and any open message box have fully unwound before the dialog is
+        torn down and replaced.
+        """
+        process_name = self.model.process.name
+        material = material_name or self._current_material
+        target = self.bridge.target_object
+
+        def _do_rerun():
+            from ...gui.task_setup import TaskSetup
+
+            self.bridge.restore()
+            Gui.Selection.clearSelection()
+            Gui.Selection.addSelection(target)
+            Gui.Control.closeDialog()
+
+            task = TaskSetup(
+                preset_process=process_name,
+                preset_material=material,
+                auto_run=True,
+            )
+            Gui.Control.showDialog(task)
+
+        QtCore.QTimer.singleShot(0, _do_rerun)
+
+    def _switch_to_cached_material(self, material_name: str):
+        """Switch the display to a cached material's results."""
+        self._current_material = material_name
+        cached_results = self._material_cache[material_name]
+
+        # Update the model
+        self.model = DFMReportModel(
+            results=cached_results,
+            process=self.model.process,
+            material=material_name,
+        )
+
+        self.refresh_ui()
 
     def handle_ignore_all(self, findings: list[CheckResult]):
         for finding in findings:
@@ -343,7 +516,7 @@ class TaskResultsPresenter:
         if not path.lower().endswith(".csv"):
             path += ".csv"
 
-        from app.history import diff_runs
+        from ...app.history import diff_runs
 
         diffs = diff_runs(run_a, run_b)
 
