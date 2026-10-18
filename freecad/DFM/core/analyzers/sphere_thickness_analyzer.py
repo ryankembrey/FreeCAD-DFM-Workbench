@@ -60,6 +60,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         self.resolve_prefs(kwargs.get("prefs", {}))
         self._setup_kernel_tools(shape)
         self.face_index = face_index
+        self._check_abort = check_abort
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
@@ -130,11 +131,16 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         # Check coarse grid
         for u, v in yield_face_uv_grid(face, adaptive_samples, margin=self.margin):
+            if self._check_abort and self._check_abort():
+                return thicknesses
             t = eval_thickness(u, v, max_t)
             if t is not None and t != float("inf"):
                 thicknesses.append(t)
                 if t > max_t:
                     max_t, best_uv = t, (u, v)
+
+        if self._check_abort and self._check_abort():
+            return thicknesses
 
         # Iterative hill climb
         best_uv, max_t, climb_results = optimize_face_uv_search(
@@ -143,6 +149,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             start_val=max_t,
             eval_func=eval_thickness,
             classifier=classifier,
+            check_abort=self._check_abort,
         )
         thicknesses.extend(climb_results)
 

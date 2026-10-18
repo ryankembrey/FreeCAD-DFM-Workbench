@@ -231,6 +231,7 @@ def optimize_face_uv_search(
     classifier: BRepTopAdaptor_FClass2d,
     max_iterations: int = 50,
     max_step_mm: float = 5.0,
+    check_abort: Optional[Callable[[], bool]] = None,
 ) -> tuple[tuple[float, float], float, list[float]]:
     """
     A generic Hill-Climbing algorithm that searches a face's UV space to find the
@@ -267,6 +268,9 @@ def optimize_face_uv_search(
     diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
 
     for _ in range(max_iterations):
+        if check_abort and check_abort():
+            break
+
         improved = False
         prev_val = current_max_val
 
