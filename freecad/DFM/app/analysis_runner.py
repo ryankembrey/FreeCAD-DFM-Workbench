@@ -57,8 +57,7 @@ class AnalysisRunner:
 
         shape_occ: TopoDS_Shape = freecad_to_ocp(shape)
         pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
-        num_faces = len(shape.Faces)
-        active_rules, total_steps = self._calculate_total_steps(process, num_faces)
+        active_rules, analyzer_counts, total_steps = self._calculate_total_steps(process, shape_occ)
 
         self.face_index = FaceIndex(shape_occ)
         self.edge_index = EdgeIndex(shape_occ)
@@ -87,13 +86,14 @@ class AnalysisRunner:
                 if timing:
                     timing.start(analyzer_id)
 
+                iter_count = analyzer_counts.get(analyzer_id, 0)
                 success = self._run_analyzer(
                     analyzer_id,
                     shape_occ,
                     pull_direction,
                     current_step,
                     total_steps,
-                    num_faces,
+                    iter_count,
                     progress_cb,
                     check_abort,
                     **kwargs,
@@ -104,7 +104,7 @@ class AnalysisRunner:
 
                 if not success:
                     continue
-                current_step += num_faces
+                current_step += iter_count
 
             rule_config = self._resolve_rule_config(process, target_material, rule_id)
 
@@ -206,19 +206,27 @@ class AnalysisRunner:
             return {}
         return {key: value for _, key, value in contents}
 
-    def _calculate_total_steps(self, process: Any, num_faces: int) -> tuple[list, int]:
-        """Return the ordered list of active rule IDs and the total progress step count."""
+    def _calculate_total_steps(
+        self, process: Any, shape_occ: TopoDS_Shape,
+    ) -> tuple[list, dict[str, int], int]:
+        """Return active rule IDs, per-analyzer iteration counts, and total step count."""
         active_rules = []
-        unique_analyzers = set()
+        analyzer_counts: dict[str, int] = {}
 
         for rule_id in process.active_rules:
             check_class = get_check_class(rule_id)
             if check_class:
-                unique_analyzers.add(check_class().required_analyzer_id)
+                analyzer_id = check_class().required_analyzer_id
+                if analyzer_id not in analyzer_counts:
+                    analyzer_class = get_analyzer_class(analyzer_id)
+                    if analyzer_class:
+                        analyzer_counts[analyzer_id] = analyzer_class().iteration_count(shape_occ)
+                    else:
+                        analyzer_counts[analyzer_id] = 0
                 active_rules.append(rule_id)
 
-        total_steps = (len(unique_analyzers) * num_faces) + len(active_rules)
-        return active_rules, total_steps
+        total_steps = sum(analyzer_counts.values()) + len(active_rules)
+        return active_rules, analyzer_counts, total_steps
 
     def _resolve_rule_config(self, process: Any, target_material: Any, rule_id: Any) -> RuleLimit:
         """Build a RuleLimit by layering the Default material config with any material override."""
@@ -252,7 +260,7 @@ class AnalysisRunner:
         pull_direction: Any,
         step_offset: int,
         total_steps: int,
-        num_faces: int,
+        iter_count: int,
         progress_cb: ProgressCallback,
         check_abort: AbortCallback,
         **kwargs: Any,

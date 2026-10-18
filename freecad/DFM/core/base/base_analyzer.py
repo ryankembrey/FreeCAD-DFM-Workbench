@@ -44,6 +44,17 @@ class BaseAnalyzer(ABC):
         """
         pass
 
+    def iteration_count(self, shape: TopoDS_Shape) -> int:
+        """Return the number of items this analyzer will iterate over.
+
+        The analysis runner uses this to allocate the correct progress-bar
+        budget.  The default counts faces; override in analyzers that
+        iterate edges (or anything else).
+        """
+        face_map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(shape, TopAbs_FACE, face_map)
+        return face_map.Extent()
+
     @abstractmethod
     def execute(
         self,
