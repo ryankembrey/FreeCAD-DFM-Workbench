@@ -9,7 +9,7 @@ from OCP.BRepAdaptor import BRepAdaptor_Curve
 from OCP.TopoDS import TopoDS_Edge, TopoDS_Face, TopoDS_Shape, TopoDS
 from OCP.TopExp import TopExp
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
-from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_IndexedMapOfShape
 from OCP.BRep import BRep_Tool
 from OCP.BRep import BRep_Tool
 from OCP.GeomLProp import GeomLProp_CLProps
@@ -39,6 +39,12 @@ class SharpCornersAnalyzer(BaseAnalyzer):
 
     def resolve_prefs(self, prefs: dict) -> None:
         pass
+
+    def iteration_count(self, shape: TopoDS_Shape) -> int:
+        """Return edge count since this analyzer iterates edges, not faces."""
+        edge_map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(shape, TopAbs_EDGE, edge_map)
+        return edge_map.Extent()
 
     def execute(
         self,
