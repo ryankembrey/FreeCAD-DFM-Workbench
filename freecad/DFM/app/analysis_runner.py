@@ -134,6 +134,71 @@ class AnalysisRunner:
 
         return results
 
+    def rerun_checks_only(
+        self,
+        process_name: str,
+        material_name: str,
+        progress_cb: ProgressCallback = None,
+        **kwargs: Any,
+    ) -> list[CheckResult]:
+        """Re-evaluate checks using the existing analyzer cache.
+
+        This is used when the user switches material in the results panel.
+        Analyzers are geometry-dependent and don't change with material;
+        only the checks (which compare analyzer output against material
+        thresholds) need to be re-run.
+
+        The caller must ensure ``self.analyzer_cache``, ``self.face_index``
+        and ``self.edge_index`` are still populated from a prior
+        ``run_analysis`` call on the same shape.
+        """
+        if not self.analyzer_cache:
+            App.Console.PrintError("Cannot rerun checks: no analyzer cache.\n")
+            return []
+
+        kwargs["prefs"] = self._load_prefs()
+
+        process = ProcessRegistry.get_instance().get_process_by_name(process_name)
+        if not process:
+            return []
+
+        target_material = process.materials.get(material_name)
+        if not target_material and material_name != "Default":
+            return []
+
+        active_rules = [
+            rule_id for rule_id in process.active_rules if get_check_class(rule_id)
+        ]
+        total_steps = len(active_rules)
+        results: list[CheckResult] = []
+
+        for current_step, rule_id in enumerate(active_rules):
+            check_class = get_check_class(rule_id)
+            if not check_class:
+                continue
+
+            check_instance = check_class()
+            analyzer_id = check_instance.required_analyzer_id
+
+            if analyzer_id not in self.analyzer_cache:
+                continue
+
+            rule_config = self._resolve_rule_config(process, target_material, rule_id)
+
+            check_results = self._execute_check(
+                rule_id,
+                check_instance,
+                process,
+                rule_config,
+                current_step,
+                total_steps,
+                progress_cb,
+                **kwargs,
+            )
+            results.extend(check_results)
+
+        return results
+
     def _load_prefs(self) -> dict:
         params = dfm_params()
         contents = params.GetContents()

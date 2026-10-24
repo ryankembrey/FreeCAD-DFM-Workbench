@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 import FreeCADGui as Gui  # type: ignore
+import FreeCAD as App  # type: ignore
 
 from ..core.models import CheckResult, Severity
 
@@ -33,7 +34,6 @@ class TaskResults(QtCore.QObject):
 
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setReadOnly(True)
-        self.form.leMaterial.setReadOnly(True)
         self.form.leVerdict.setReadOnly(True)
         self.form.pbExportDiff.setIcon(QtGui.QIcon(":/icons/export_diff.svg"))
 
@@ -46,6 +46,7 @@ class TaskResults(QtCore.QObject):
         self.on_export_clicked: Callable[[], None] | None = None
         self.on_toggle_ignore_all: Callable[[list[CheckResult]], None] | None = None
         self.on_zoom_to_rule: Callable[[list[CheckResult]], None] | None = None
+        self.on_material_changed: Callable[[str], None] | None = None
 
         self.form.tvResults.doubleClicked.connect(self._handle_double_click)
         self.form.pbExportCSV.clicked.connect(self._handle_export_btn)
@@ -384,7 +385,7 @@ class TaskResults(QtCore.QObject):
         )
 
     def on_save_clicked(self):
-        print("saved")
+        pass
 
     def clicked(self, button):
         if button == QtWidgets.QDialogButtonBox.StandardButton.Save:

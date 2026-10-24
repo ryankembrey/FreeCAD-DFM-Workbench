@@ -2,12 +2,15 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
+
 
 from .gui import task_setup, task_show_normals, process_library
 from .gui import preferences
 from .gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers
 from .gui import tools as _dfm_contour_tools
+from .app.shape_observer import install_observer
 
 
 class DFMWorkbench(Gui.Workbench):
@@ -28,6 +31,9 @@ class DFMWorkbench(Gui.Workbench):
         ]
         self.appendToolbar("DFM Analysis", self.list)
         self.appendMenu("DFM", self.list)
+
+        # Observer is installed at module level (bottom of this file)
+        # so it works even before the workbench is first activated.
 
     def Activated(self):
         """This function is executed whenever the workbench is activated"""
@@ -51,3 +57,7 @@ class DFMWorkbench(Gui.Workbench):
 Gui.addWorkbench(DFMWorkbench())
 Gui.addPreferencePage(DFMPreferencesGeneral, "DFM")
 Gui.addPreferencePage(DFMPreferencesAnalyzers, "DFM")
+
+# Install the shape-change observer at module load so it fires for
+# documents opened before the DFM workbench is first activated.
+install_observer()
