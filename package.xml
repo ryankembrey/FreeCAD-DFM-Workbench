@@ -6,8 +6,8 @@
     <!-- Versions -->
     <freecadmin>1.1.0</freecadmin>
     <pythonmin>3.11</pythonmin>
-    <version>0.1.21</version>
-    <date>2026-09-16</date>
+    <version>0.2.0</version>
+    <date>2026-10-24</date>
 
     <!-- Info -->
     <name>DFM</name>
