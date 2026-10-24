@@ -8,7 +8,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
 import FreeCADGui as Gui  # type: ignore
-import FreeCAD as App  # type: ignore
 
 from ..core.models import CheckResult, Severity
 
@@ -16,6 +15,24 @@ from ..gui.results.delegates import DFMTreeDelegate
 from ..gui.results.visuals import severity_color
 from ..core.rules import Criticality
 from ..gui.results.utils import CSVExportConfig, CSVResultExporter
+
+
+class _PanelResizeFilter(QtCore.QObject):
+    """Recalculates tree fill-height when the task-panel viewport resizes.
+
+    This fires on overlay ↔ docked mode transitions and any other
+    resize of the scroll-area viewport.
+    """
+
+    def __init__(self, task_results: "TaskResults"):
+        super().__init__()
+        self._task = task_results
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() == QtCore.QEvent.Type.Resize and self._task.form:
+            # Defer so the new geometry has settled before we measure.
+            QtCore.QTimer.singleShot(0, self._task._update_tree_fill)
+        return False
 
 
 class TaskResults(QtCore.QObject):
@@ -38,6 +55,8 @@ class TaskResults(QtCore.QObject):
         self.form.pbExportDiff.setIcon(QtGui.QIcon(":/icons/export_diff.svg"))
 
         self._save_clicked = False
+        self._scroll_area: QtWidgets.QScrollArea | None = None
+        self._resize_filter: _PanelResizeFilter | None = None
 
         self.on_closed: Callable[[], None] | None = None
         self.on_row_selected: Callable[[CheckResult | list[CheckResult]], None] | None = None
@@ -212,6 +231,90 @@ class TaskResults(QtCore.QObject):
         self.form.tvResults.expand(self.model.index(0, 0))
         self.form.tvResults.setFocus()
 
+        # Defer fill-height setup to the next event-loop tick.  At this
+        # point ``Gui.Control.showDialog()`` hasn't run yet, so the form
+        # isn't inside the task panel's scroll area.  By the time the
+        # timer fires the dialog is shown and we can configure the
+        # scroll area to let the form (and therefore the tree) fill all
+        # available vertical space.
+        QtCore.QTimer.singleShot(0, self._setup_fill_height)
+
+    # Fill-height helpers
+
+    def _setup_fill_height(self):
+        """Make the tree fill all available vertical space in the task panel.
+
+        FreeCAD wraps the form inside a ``QScrollArea`` in the ComboView.
+        By default the form is sized to its ``sizeHint`` — which is small
+        when the tree is collapsed — leaving empty space below.
+
+        We fix this by:
+        1. Setting ``widgetResizable(True)`` so the form expands to fill
+           the scroll-area viewport.
+        2. Calculating the exact remaining height below the tree's top
+           edge and setting it as the tree's ``minimumHeight``.
+        3. Installing a resize-event filter on the viewport so the
+           height is recalculated when the panel switches between
+           overlay and docked modes (or is otherwise resized).
+        """
+        if not self.form:
+            return
+
+        # Already configured (render_tree may be called more than once).
+        if self._scroll_area is not None:
+            self._update_tree_fill()
+            return
+
+        # Walk up to find FreeCAD's scroll-area wrapper.
+        widget = self.form.parentWidget()
+        while widget:
+            if isinstance(widget, QtWidgets.QScrollArea):
+                self._scroll_area = widget
+                break
+            widget = widget.parentWidget()
+
+        if self._scroll_area:
+            self._scroll_area.setWidgetResizable(True)
+            # Watch for viewport resizes (overlay ↔ docked transitions).
+            self._resize_filter = _PanelResizeFilter(self)
+            self._scroll_area.viewport().installEventFilter(self._resize_filter)
+
+        self._update_tree_fill()
+
+    def _update_tree_fill(self):
+        """Set the tree's minimum height so it fills the remaining panel space.
+
+        Uses the distance from the form's top to the tree's top (which
+        is constant regardless of scroll position) and subtracts that
+        plus bottom margins from the viewport height.
+        """
+        if not self.form:
+            return
+
+        tree = self.form.tvResults
+
+        if self._scroll_area:
+            viewport_h = self._scroll_area.viewport().height()
+        else:
+            # Fallback: use whatever parent height is available.
+            parent = self.form.parentWidget()
+            if not parent:
+                return
+            viewport_h = parent.height()
+
+        # Offset from the form's top edge to the tree's top edge.
+        # This is constant — determined by the header grid, tab bar,
+        # group-box title, and their cumulative layout margins.
+        tree_offset = tree.mapTo(self.form, QtCore.QPoint(0, 0)).y()
+
+        # Bottom margins: group-box frame + tab-content layout margin +
+        # tab-widget frame + form layout margin  (≈ 25-30 px).
+        bottom_margin = 30
+
+        available = viewport_h - tree_offset - bottom_margin
+        if available > 50:
+            tree.setMinimumHeight(available)
+
     def get_export_config(self) -> CSVExportConfig:
         return CSVExportConfig(
             include_criticality=self.form.cbColCriticality.isChecked(),
@@ -385,7 +488,7 @@ class TaskResults(QtCore.QObject):
         )
 
     def on_save_clicked(self):
-        pass
+        print("saved")
 
     def clicked(self, button):
         if button == QtWidgets.QDialogButtonBox.StandardButton.Save:
@@ -393,9 +496,17 @@ class TaskResults(QtCore.QObject):
             if self.on_save_clicked:
                 self.on_save_clicked()
 
+    def _cleanup_fill_height(self):
+        """Remove the resize filter and release scroll-area references."""
+        if self._scroll_area and self._resize_filter:
+            self._scroll_area.viewport().removeEventFilter(self._resize_filter)
+        self._scroll_area = None
+        self._resize_filter = None
+
     def reject(self):
         if self.form:
             self.form.tvResults.removeEventFilter(self)
+        self._cleanup_fill_height()
         if self.on_closed:
             self.on_closed()
         self.form = None
@@ -407,6 +518,7 @@ class TaskResults(QtCore.QObject):
             return
         if self.form:
             self.form.tvResults.removeEventFilter(self)
+        self._cleanup_fill_height()
         if self.on_closed:
             self.on_closed()
         self.form = None
