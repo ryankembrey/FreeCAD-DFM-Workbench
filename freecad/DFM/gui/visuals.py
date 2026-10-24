@@ -5,9 +5,11 @@
 import math
 
 from pivy import coin
-from PySide6 import QtCore, QtGui
+from PySide6 import QtGui
 
-import FreeCADGui as Gui  # type: ignore
+from .utils.badge import paint_badge, qimage_to_soimage
+from .utils.theme import contrast_text_color
+from .utils.view import device_pixel_ratio, get_active_view, viewport_height
 
 
 LABEL_FONT_POINT_SIZE = 9.5
@@ -19,6 +21,15 @@ LABEL_MARGIN = 2.0
 LABEL_GAP_PX = 7.0
 
 ARROW_HEIGHT = 28.0
+
+_BADGE_STYLE = dict(
+    font_pt=LABEL_FONT_POINT_SIZE,
+    pad_x=LABEL_PADDING_X,
+    pad_y=LABEL_PADDING_Y,
+    margin=LABEL_MARGIN,
+    radius=LABEL_CORNER_RADIUS,
+    shadow=True,
+)
 
 _SWITCH_ALL = -3
 _SWITCH_NONE = -1
@@ -48,17 +59,13 @@ class DirectionIndicator:
         self.viewport_height_px = 0
 
     def show(self, base_pnt, direction):
-        active_doc = Gui.ActiveDocument
-        if not active_doc or not hasattr(active_doc, "ActiveView"):
-            return
-
-        view = active_doc.ActiveView
+        view = get_active_view()
         if not view:
             return
 
         self.base_pnt = base_pnt
         self.direction = self._normalised(direction.x, direction.y, direction.z)
-        self.viewport_height_px = self._viewport_height(view)
+        self.viewport_height_px = viewport_height(view)
 
         if self.view_node is None:
             self.view_node = coin.SoAnnotation()
@@ -168,84 +175,19 @@ class DirectionIndicator:
 
     def _build_label_image(self):
         try:
-            dpr = self._device_pixel_ratio()
-            image = self._paint_badge(self.label, dpr)
-
-            logical_w = image.width() / dpr
-            logical_h = image.height() / dpr
-
-            flipped = image.mirrored(False, True).convertToFormat(
-                QtGui.QImage.Format.Format_RGBA8888
+            dpr = device_pixel_ratio()
+            image, _w, _h = paint_badge(
+                self.label,
+                dpr,
+                fill=QtGui.QColor.fromRgbF(*self.color),
+                text_color=contrast_text_color(self.color),
+                **_BADGE_STYLE,
             )
-            buffer = bytes(flipped.constBits())[: flipped.sizeInBytes()]
-
-            image_node = coin.SoImage()
-            image_node.image.setValue(coin.SbVec2s(flipped.width(), flipped.height()), 4, buffer)
-            image_node.width.setValue(int(round(logical_w)))
-            image_node.height.setValue(int(round(logical_h)))
-
-            image_node.vertAlignment = coin.SoImage.HALF
-            image_node.horAlignment = coin.SoImage.CENTER
-
+            node, logical_w, logical_h = qimage_to_soimage(image, dpr, h_align="center")
             self.label_size = (logical_w, logical_h)
-            return image_node
-
+            return node
         except Exception:
             return None
-
-    def _paint_badge(self, text: str, dpr: float) -> QtGui.QImage:
-        font = QtGui.QFont()
-        font.setPointSizeF(LABEL_FONT_POINT_SIZE)
-        font.setBold(True)
-
-        metrics = QtGui.QFontMetricsF(font)
-        badge_w = metrics.horizontalAdvance(text) + (LABEL_PADDING_X * 2.0)
-        badge_h = metrics.height() + (LABEL_PADDING_Y * 2.0)
-
-        img_w = badge_w + (LABEL_MARGIN * 2.0)
-        img_h = badge_h + (LABEL_MARGIN * 2.0)
-
-        image = QtGui.QImage(
-            int(math.ceil(img_w * dpr)),
-            int(math.ceil(img_h * dpr)),
-            QtGui.QImage.Format.Format_RGBA8888,
-        )
-        image.setDevicePixelRatio(dpr)
-        image.fill(QtCore.Qt.GlobalColor.transparent)
-
-        painter = QtGui.QPainter(image)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
-
-        rect = QtCore.QRectF(LABEL_MARGIN, LABEL_MARGIN, badge_w, badge_h)
-
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(QtGui.QColor(0, 0, 0, 70))
-        painter.drawRoundedRect(rect.translated(0.0, 1.0), LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS)
-
-        painter.setBrush(QtGui.QColor.fromRgbF(*self.color))
-        painter.drawRoundedRect(rect, LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS)
-
-        painter.setPen(self._text_colour())
-        painter.setFont(font)
-        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
-        painter.end()
-
-        return image
-
-    def _text_colour(self) -> QtGui.QColor:
-        r, g, b = self.color
-        luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b)
-        return QtGui.QColor(25, 25, 25) if luminance > 0.6 else QtGui.QColor(255, 255, 255)
-
-    def _device_pixel_ratio(self) -> float:
-        try:
-            screen = QtGui.QGuiApplication.primaryScreen()
-            if screen:
-                return max(1.0, float(screen.devicePixelRatio()))
-        except Exception:
-            pass
-        return 1.0
 
     def _build_label_text(self):
         text_sep = coin.SoSeparator()
@@ -308,15 +250,6 @@ class DirectionIndicator:
             return (tuple(right), tuple(up), tuple(view_dir))
         except Exception:
             return None
-
-    def _viewport_height(self, view) -> int:
-        try:
-            size = view.getSize()
-            if size and len(size) >= 2 and size[1] > 0:
-                return int(size[1])
-        except Exception:
-            pass
-        return 0
 
     def _base_tuple(self):
         return (self.base_pnt.x, self.base_pnt.y, self.base_pnt.z)
@@ -387,11 +320,9 @@ class DirectionIndicator:
         self.active_camera = None
 
         if self.view_node:
-            active_doc = Gui.ActiveDocument
-            if active_doc and hasattr(active_doc, "ActiveView"):
-                view = active_doc.ActiveView
-                if view and hasattr(view, "getSceneGraph"):
-                    view.getSceneGraph().removeChild(self.view_node)  # type: ignore
+            view = get_active_view()
+            if view and hasattr(view, "getSceneGraph"):
+                view.getSceneGraph().removeChild(self.view_node)  # type: ignore
             self.view_node = None
             self.view_trans = None
             self.scale_node = None
@@ -426,7 +357,7 @@ class ContourProbe:
         self.viewport_height_px = 0
 
     def show(self, view):
-        self.viewport_height_px = self._viewport_height(view)
+        self.viewport_height_px = viewport_height(view)
 
         self.view_node = coin.SoSeparator()
 
@@ -498,76 +429,14 @@ class ContourProbe:
 
     def _build_label_image(self):
         try:
-            dpr = self._device_pixel_ratio()
-            image = self._paint_badge(self.text, dpr)
-            logical_w = image.width() / dpr
-            logical_h = image.height() / dpr
-
-            flipped = image.mirrored(False, True).convertToFormat(
-                QtGui.QImage.Format.Format_RGBA8888
+            dpr = device_pixel_ratio()
+            image, _w, _h = paint_badge(
+                self.text, dpr, fill=QtGui.QColor.fromRgbF(*self.color), **_BADGE_STYLE
             )
-            buffer = bytes(flipped.constBits())[: flipped.sizeInBytes()]
-
-            image_node = coin.SoImage()
-            image_node.image.setValue(coin.SbVec2s(flipped.width(), flipped.height()), 4, buffer)
-            image_node.width.setValue(int(round(logical_w)))
-            image_node.height.setValue(int(round(logical_h)))
-
-            image_node.vertAlignment = coin.SoImage.HALF
-            image_node.horAlignment = coin.SoImage.LEFT
-
-            return image_node
+            node, _lw, _lh = qimage_to_soimage(image, dpr, h_align="left")
+            return node
         except Exception:
             return None
-
-    def _paint_badge(self, text: str, dpr: float) -> QtGui.QImage:
-        font = QtGui.QFont()
-        font.setPointSizeF(LABEL_FONT_POINT_SIZE)
-        font.setBold(True)
-
-        metrics = QtGui.QFontMetricsF(font)
-        badge_w = metrics.horizontalAdvance(text) + (LABEL_PADDING_X * 2.0)
-        badge_h = metrics.height() + (LABEL_PADDING_Y * 2.0)
-
-        img_w = badge_w + (LABEL_MARGIN * 2.0)
-        img_h = badge_h + (LABEL_MARGIN * 2.0)
-
-        image = QtGui.QImage(
-            int(math.ceil(img_w * dpr)),
-            int(math.ceil(img_h * dpr)),
-            QtGui.QImage.Format.Format_RGBA8888,
-        )
-        image.setDevicePixelRatio(dpr)
-        image.fill(QtCore.Qt.GlobalColor.transparent)
-
-        painter = QtGui.QPainter(image)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
-
-        rect = QtCore.QRectF(LABEL_MARGIN, LABEL_MARGIN, badge_w, badge_h)
-
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(QtGui.QColor(0, 0, 0, 70))
-        painter.drawRoundedRect(rect.translated(0.0, 1.0), LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS)
-
-        painter.setBrush(QtGui.QColor.fromRgbF(*self.color))
-        painter.drawRoundedRect(rect, LABEL_CORNER_RADIUS, LABEL_CORNER_RADIUS)
-
-        painter.setPen(QtGui.QColor(255, 255, 255))
-        painter.setFont(font)
-        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
-        painter.end()
-
-        return image
-
-    def _device_pixel_ratio(self) -> float:
-        try:
-            screen = QtGui.QGuiApplication.primaryScreen()
-            if screen:
-                return max(1.0, float(screen.devicePixelRatio()))
-        except Exception:
-            pass
-        return 1.0
 
     def _camera_changed(self, userdata, sensor):
         self._update_scale()
@@ -605,12 +474,3 @@ class ContourProbe:
             self.label_trans.translation.setValue(ox, oy, oz)
         except Exception:
             pass
-
-    def _viewport_height(self, view) -> int:
-        try:
-            size = view.getSize()
-            if size and len(size) >= 2 and size[1] > 0:
-                return int(size[1])
-        except Exception:
-            pass
-        return 0

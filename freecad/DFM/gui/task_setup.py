@@ -21,21 +21,22 @@ from ..core.utils.conversion import freecad_to_ocp
 
 from ..app.history import HistoryManager
 
-from ..gui import DFM_rc
+from ..gui.utils import resources  # noqa: F401
 from ..gui.results.bridge import DFMViewProvider
 from ..gui.results.models import DFMReportModel
 from ..gui.results.presenter import TaskResultsPresenter
 from ..gui.task_results import TaskResults
 from ..gui.visuals import DirectionIndicator
-from ..gui.pull_direction import compute_direction
-
-
-PICK_BUTTON_STYLE = """
-QPushButton:checked {
-    border: 2px solid palette(highlight);
-    font-weight: bold;
-}
-"""
+from ..gui.utils.body_select import auto_select_body
+from ..gui.utils.picking import (
+    PICK_BUTTON_STYLE,
+    CrossCursorOverride,
+    first_selected_subelement,
+)
+from ..gui.utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
+from ..gui.utils.pull_preview import PullPreview
+from ..gui.utils.qt_filters import EscapeFilter
+from ..gui.utils.widgets import make_flip_button
 
 
 class RequirementHandler(QtCore.QObject):
@@ -145,7 +146,7 @@ class VectorRequirement(RequirementHandler):
     """A direction picked from a face normal or an edge tangent (with flip)."""
 
     _COLORS = {
-        ProcessRequirement.PULL_DIRECTION: (1.0, 0.15, 0.15),  # red
+        ProcessRequirement.PULL_DIRECTION: PULL_DIRECTION_COLOR,
         ProcessRequirement.PRINT_ORIENTATION: (0.15, 0.45, 1.0),  # blue
     }
 
@@ -158,19 +159,11 @@ class VectorRequirement(RequirementHandler):
         return "Click a face or edge"
 
     def _build_extra(self, container: QtWidgets.QHBoxLayout) -> None:
-        self.flip_btn = QtWidgets.QToolButton()
-        self.flip_btn.setIcon(QtGui.QIcon(":/icons/flip_direction.svg"))
-        self.flip_btn.setToolTip("Flip direction 180 degrees")
-        self.flip_btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self.flip_btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-        self.flip_btn.setIconSize(QtCore.QSize(18, 18))
-        self.flip_btn.setFixedSize(26, 28)
-        self.flip_btn.setStyleSheet(
-            "QToolButton { border: none; background: transparent; padding: 0px; margin: 0px; }"
-            "QToolButton:hover { background: rgba(127, 127, 127, 40); border-radius: 3px; }"
+        self.flip_btn = make_flip_button(
+            lambda _checked=False: self.flip(),
+            size=(26, 28),
+            enabled=self.value is not None,
         )
-        self.flip_btn.setEnabled(self.value is not None)
-        self.flip_btn.clicked.connect(lambda _checked=False: self.flip())
         container.addWidget(self.flip_btn, 0)
 
     def refresh_display(self) -> None:
@@ -180,14 +173,12 @@ class VectorRequirement(RequirementHandler):
 
     def apply_selection(self) -> bool:
         try:
-            sel = Gui.Selection.getSelectionEx()
-            if not sel or not sel[0].SubObjects:
+            picked = first_selected_subelement()
+            if picked is None:
                 return False
+            sub_obj, sub_name = picked
 
-            sub_obj = sel[0].SubObjects[0]
-            sub_name = sel[0].SubElementNames[0] if sel[0].SubElementNames else "Selected"
-
-            result = self._compute_direction(sub_obj)
+            result = compute_direction(sub_obj)
             if result is None:
                 App.Console.PrintError("Selected element must be a Face or an Edge.\n")
                 return False
@@ -210,11 +201,6 @@ class VectorRequirement(RequirementHandler):
         except Exception as e:
             App.Console.PrintError(f"Visualizing {self.label.lower()} failed: {e}\n")
             return False
-
-    @staticmethod
-    def _compute_direction(sub_obj) -> "tuple[App.Vector, App.Vector] | None":
-        """Compute (point, direction) from a face or edge. Returns None on failure."""
-        return compute_direction(sub_obj)
 
     def flip(self) -> None:
         if not self.value or not self.pnt:
@@ -278,22 +264,6 @@ REQUIREMENT_HANDLER_TYPES: dict[ProcessRequirement, type[RequirementHandler]] = 
 # =============================================================================
 
 
-class _EscapeFilter(QtCore.QObject):
-    def __init__(self, callback):
-        super().__init__()
-        self._callback = callback
-
-    def eventFilter(self, obj, event):
-        if event.type() == QtCore.QEvent.Type.KeyPress:
-            if event.key() == QtCore.Qt.Key.Key_Escape:
-                if self._callback():
-                    return True
-        return False
-
-
-# =============================================================================
-
-
 class TaskSetup:
     def __init__(self):
         self.form = Gui.PySideUic.loadUi(":/ui/task_setup.ui")  # type: ignore
@@ -317,14 +287,14 @@ class TaskSetup:
         self.is_running = False
         self.abort_requested = False
         self.picking_mode: Any = None
-        self.cursor_overridden = False
-        self._preview_indicator: Optional[DirectionIndicator] = None
+        self._cursor = CrossCursorOverride()
+        self._preview: Optional[PullPreview] = None
 
         self.orig_model_text = self.form.pbSelectModel.text()
 
         Gui.Selection.addObserver(self)
 
-        self._escape_filter = _EscapeFilter(self._on_escape)
+        self._escape_filter = EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
 
         self._setup_widgets()
@@ -395,49 +365,34 @@ class TaskSetup:
         QtCore.QTimer.singleShot(50, self._process_picked_selection)
 
     def _ensure_preview_indicator(self):
-        """Create the preview indicator once for the current picking session."""
-        if self._preview_indicator is not None:
+        """Create the preview arrow once for the current picking session."""
+        if self._preview is not None:
             return
         handler = self.handlers.get(self.picking_mode)
         if isinstance(handler, VectorRequirement):
-            color = VectorRequirement._COLORS.get(handler.requirement, (1.0, 0.15, 0.15))
-            self._preview_indicator = DirectionIndicator(color, "")
+            color = VectorRequirement._COLORS.get(handler.requirement, PULL_DIRECTION_COLOR)
+            self._preview = PullPreview(color)
+            self._preview.begin()
 
-    def setPreselection(self, doc_name, obj_name, sub_name):
+    def setPreselection(self, doc_name, obj_name, sub_name, *_):
         """Show a live direction preview arrow when hovering over geometry during pick mode."""
         if not self.picking_mode or self.picking_mode == "model":
             return
-        handler = self.handlers.get(self.picking_mode)
-        if not isinstance(handler, VectorRequirement) or not sub_name:
+        if not isinstance(self.handlers.get(self.picking_mode), VectorRequirement):
             return
-
-        try:
-            doc = App.getDocument(doc_name)
-            obj = doc.getObject(obj_name)
-            sub_shape = obj.Shape.getElement(sub_name)
-        except Exception:
-            return
-
-        result = VectorRequirement._compute_direction(sub_shape)
-        if result is None:
-            return
-        pnt, dir_vec = result
-
-        if self._preview_indicator is None:
-            return
-        self._preview_indicator.show(pnt, dir_vec)
-        self._preview_indicator.set_visible(True)
+        if self._preview is not None:
+            self._preview.show_for(doc_name, obj_name, sub_name)
 
     def removePreselection(self, *args):
         """Hide the direction preview when the mouse leaves geometry."""
-        if self._preview_indicator:
-            self._preview_indicator.set_visible(False)
+        if self._preview is not None:
+            self._preview.hide()
 
     def _cleanup_preview(self):
-        """Remove the preview indicator from the scene graph."""
-        if self._preview_indicator:
-            self._preview_indicator.remove()
-            self._preview_indicator = None
+        """Remove the preview arrow from the scene graph."""
+        if self._preview is not None:
+            self._preview.end()
+            self._preview = None
 
     def _process_picked_selection(self):
         if not self.picking_mode:
@@ -468,9 +423,7 @@ class TaskSetup:
         for handler in self.handlers.values():
             handler.reset_ui()
 
-        if self.cursor_overridden:
-            QtWidgets.QApplication.restoreOverrideCursor()
-            self.cursor_overridden = False
+        self._cursor.pop()
 
     def _toggle_pick_mode_model(self):
         if self.picking_mode == "model":
@@ -482,8 +435,7 @@ class TaskSetup:
         self.picking_mode = "model"
         self.form.pbSelectModel.setChecked(True)
         self.form.pbSelectModel.setText("Click an object")
-        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
-        self.cursor_overridden = True
+        self._cursor.push()
 
     def on_select_shape(self):
         if self._apply_model_selection():
@@ -494,17 +446,8 @@ class TaskSetup:
             self._toggle_pick_mode_model()
 
     def _apply_model_selection(self) -> bool:
-        try:
-            sel = Gui.Selection.getSelection()
-            if not sel:
-                return False
-            self.target_object = sel[0]
-            self.target_shape = self.target_object.Shape
-            self.form.leSelectModel.setText(self.target_object.Label)
-            return True
-        except Exception as e:
-            App.Console.PrintError(f"Could not use the selected object. {e}\n")
-            return False
+        sel = Gui.Selection.getSelection()
+        return self._set_target(sel[0]) if sel else False
 
     def _on_requirement_pick(self, handler: RequirementHandler):
         """Pick-button handler shared by every dynamic requirement row."""
@@ -532,91 +475,22 @@ class TaskSetup:
             if handler.is_satisfied():
                 handler.indicator.set_visible(False)
             self._ensure_preview_indicator()
-        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.CrossCursor)
-        self.cursor_overridden = True
+        self._cursor.push()
 
-    def _set_target(self, obj):
-        """Set the target object for analysis."""
-        self.target_object = obj
-        self.target_shape = obj.Shape
-        self.form.leSelectModel.setText(obj.Label)
-        App.Console.PrintMessage(f"DFM: auto-selected {obj.Label}\n")
-
-    @staticmethod
-    def _is_effectively_visible(obj) -> bool:
-        """Check if an object is visible, accounting for parent folder visibility."""
+    def _set_target(self, obj) -> bool:
+        """Make ``obj`` the analysis target. Returns False if it can't be used."""
         try:
-            if not obj.ViewObject.Visibility:
-                return False
-        except Exception:
+            shape = obj.Shape
+        except Exception as e:
+            App.Console.PrintError(f"Could not use the selected object. {e}\n")
             return False
-        # Walk up the full container chain (App::Part / folder nesting)
-        _CONTAINER_TYPES = ("App::Part", "App::DocumentObjectGroup")
-        current = obj
-        seen = {id(current)}
-        while True:
-            parent = None
-            for candidate in current.InList:
-                if candidate.TypeId in _CONTAINER_TYPES and id(candidate) not in seen:
-                    parent = candidate
-                    break
-            if parent is None:
-                break
-            seen.add(id(parent))
-            try:
-                if not parent.ViewObject.Visibility:
-                    return False
-            except Exception:
-                return False
-            current = parent
+        self.target_object = obj
+        self.target_shape = shape
+        self.form.leSelectModel.setText(obj.Label)
         return True
 
     def _auto_select_model(self):
-        # 1. If something is already selected in the viewport, use that
-        if len(Gui.Selection.getSelection()) > 0:
-            if self._apply_model_selection():
-                Gui.Selection.clearSelection()
-                App.Console.PrintMessage(f"DFM: auto-selected {self.target_object.Label}\n")
-                return
-
-        # 2. Find candidate bodies in the document
-        doc = App.ActiveDocument
-        if not doc:
-            return
-
-        # Prefer PartDesign::Body objects (the typical DFM target).
-        # Fall back to any solid-bearing object if no Bodies exist.
-        _SKIP = {"App::Origin", "App::Line", "App::Plane", "App::DocumentObjectGroup"}
-        bodies = []
-        fallback = []
-        for obj in doc.Objects:
-            if not hasattr(obj, "Shape") or obj.Shape.isNull():
-                continue
-            if not obj.Shape.Faces:
-                continue
-            type_id = obj.TypeId
-            if type_id in _SKIP:
-                continue
-            if any(skip in type_id for skip in ("Datum", "Sketch", "Origin", "ShapeBinder")):
-                continue
-            if type_id == "PartDesign::Body":
-                bodies.append(obj)
-            elif not type_id.startswith("PartDesign::"):
-                # App::Part containers, Part WB solids, imported STEPs, etc.
-                fallback.append(obj)
-
-        candidates = bodies if bodies else fallback
-
-        # Single body in document: auto-select it
-        if len(candidates) == 1:
-            self._set_target(candidates[0])
-            return
-
-        # Multiple bodies but only one visible: auto-select the visible one
-        if len(candidates) > 1:
-            visible = [obj for obj in candidates if self._is_effectively_visible(obj)]
-            if len(visible) == 1:
-                self._set_target(visible[0])
+        auto_select_body(self._set_target)
 
     def _remove_all_indicators(self):
         for handler in self.handlers.values():

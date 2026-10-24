@@ -17,6 +17,9 @@ Shared by the task setup panel and the contour tools so both pick the same way:
 import FreeCAD as App  # type: ignore
 import Part  # type: ignore
 
+# Red arrow used for pull direction in both setup and the contour tools.
+PULL_DIRECTION_COLOR = (1.0, 0.15, 0.15)
+
 
 def axis_from_face_edges(face) -> "App.Vector | None":
     """Extract an axis from arc/circle edges on a face (e.g. fillet faces)."""

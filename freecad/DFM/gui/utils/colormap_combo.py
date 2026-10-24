@@ -2,6 +2,13 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+"""Color map preview swatches for combo boxes.
+
+Each combo item gets a small square icon showing the color map's gradient.
+Qt draws item icons between the check indicator (if the style/theme draws one)
+and the item text, in the popup list and in the closed combo box alike, so
+FreeCAD's own styling keeps control of the checkmark.
+"""
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -35,6 +42,8 @@ def colormap_pixmap(name: str, size: int = _SWATCH_SIZE, dpr: float = 1.0) -> Qt
     try:
         rect = QtCore.QRectF(0.0, 0.0, float(size), float(size))
         p.fillRect(rect, QtGui.QBrush(grad))
+        # Thin neutral outline so light ends (e.g. the white middle of diverging maps)
+        # stay visible on light backgrounds and dark ends on dark ones.
         pen = QtGui.QPen(QtGui.QColor(127, 127, 127, 190))
         pen.setWidthF(1.0)
         p.setPen(pen)
@@ -48,6 +57,9 @@ def colormap_pixmap(name: str, size: int = _SWATCH_SIZE, dpr: float = 1.0) -> Qt
 def colormap_icon(name: str, size: int = _SWATCH_SIZE, dpr: float = 1.0) -> QtGui.QIcon:
     pm = colormap_pixmap(name, size, dpr)
     icon = QtGui.QIcon()
+    # Register the same pixmap for every mode that can be shown. Without this, Qt
+    # tints the Selected-mode icon with the highlight color when the row is hovered
+    # or highlighted, which would distort the preview.
     for mode in (QtGui.QIcon.Mode.Normal, QtGui.QIcon.Mode.Active, QtGui.QIcon.Mode.Selected):
         icon.addPixmap(pm, mode, QtGui.QIcon.State.Off)
         icon.addPixmap(pm, mode, QtGui.QIcon.State.On)

@@ -17,6 +17,7 @@ from ..core.models import CheckResult, ProcessRequirement
 from ..core.processes.process import RuleFeedback, RuleLimit
 from ..core.utils.conversion import freecad_to_ocp
 from ..core.utils.geometry import EdgeIndex, FaceIndex
+from .prefs import dfm_params
 
 from ..app.analysis_timer import AnalysisTiming
 
@@ -134,7 +135,7 @@ class AnalysisRunner:
         return results
 
     def _load_prefs(self) -> dict:
-        params = App.ParamGet("User parameter:BaseApp/Preferences/Mod/DFM")
+        params = dfm_params()
         contents = params.GetContents()
         if not contents:
             return {}

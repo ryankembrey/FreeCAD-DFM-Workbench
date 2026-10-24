@@ -16,7 +16,7 @@ from ..core.rules import Criticality, Rulebook
 
 from .rule_cards import CARD_STYLE, BaseRuleCard, build_card
 
-from . import DFM_rc  # noqa: F401
+from .utils import resources  # noqa: F401
 
 
 TREE_FRAME_STYLE = """
