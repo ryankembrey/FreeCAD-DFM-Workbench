@@ -53,20 +53,24 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
 
             badge_font = QtGui.QFont(option.font)
             badge_font.setPointSizeF(option.font.pointSizeF() * 0.85)
-            fm_badge = QtGui.QFontMetrics(badge_font)
+
+            ignored_count = index.data(QtCore.Qt.ItemDataRole.UserRole + 8) or 0
+
+            # Fixed-width badges packed right-to-left (no empty gaps).
+            # Ordered: error (rightmost), warning, ignored (leftmost).
+            BADGE_W = 28
+            badge_spacing = 4
 
             badges = []
-            if not error_count and not warning_count:
-                badges.append((secondary, QtGui.QColor("#639922")))
-            else:
-                if warning_count:
-                    badges.append((str(warning_count), QtGui.QColor("#D4900A")))
-                if error_count:
-                    badges.append((str(error_count), QtGui.QColor("#E24B4A")))
+            if ignored_count:
+                badges.append((str(ignored_count), QtGui.QColor("#666666")))
+            if warning_count:
+                badges.append((str(warning_count), QtGui.QColor("#D4900A")))
+            if error_count:
+                badges.append((str(error_count), QtGui.QColor("#E24B4A")))
 
-            badge_spacing = 4
-            badge_widths = [fm_badge.horizontalAdvance(f"  {t}  ") + 8 for t, _ in badges]
-            total_badge_w = sum(badge_widths) + badge_spacing * (len(badges) - 1)
+            n = len(badges)
+            total_badge_w = n * BADGE_W + max(0, n - 1) * badge_spacing if n else 0
 
             label_rect = QtCore.QRect(
                 text_left, rect.top(), rect.right() - total_badge_w - 14 - text_left, rect.height()
@@ -77,8 +81,8 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             painter.setPen(base_text)
             painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, primary)
 
-            def draw_badge(text, color, x, w):
-                badge_rect = QtCore.QRect(x, rect.top() + 5, w, rect.height() - 10)
+            def draw_badge(text, color, x):
+                badge_rect = QtCore.QRect(x, rect.top() + 5, BADGE_W, rect.height() - 10)
                 bg = QtGui.QColor(color)
                 bg.setAlpha(180)
                 painter.setPen(QtCore.Qt.PenStyle.NoPen)
@@ -88,10 +92,11 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
                 painter.setPen(QtGui.QColor("white"))
                 painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
 
+            # Draw right-to-left: last in list → rightmost on screen.
             x = rect.right() - 6
-            for (text, color), w in zip(reversed(badges), reversed(badge_widths)):
-                x -= w
-                draw_badge(text, color, x, w)
+            for text, color in reversed(badges):
+                x -= BADGE_W
+                draw_badge(text, color, x)
                 x -= badge_spacing
 
         elif item_type == "finding":
