@@ -94,6 +94,16 @@ def _log(message):
         print(f"DFM thickness: {message}")
 
 
+def _pref_min_parallel_tasks() -> int:
+    from ..prefs import dfm_params
+    return dfm_params().GetInt("ContourMinParallelTasks", 2000)
+
+
+def _pref_worker_timeout() -> int:
+    from ..prefs import dfm_params
+    return dfm_params().GetInt("ContourWorkerTimeout", 60)
+
+
 def measure_thickness(
     part_shape,
     tasks,
@@ -103,13 +113,15 @@ def measure_thickness(
     tol=_TOL,
     workers=None,
     enable=True,
-    min_tasks=2000,
+    min_tasks=None,
 ):
     """Measure thickness for a list of (centroid, outward_normal, margin) tasks.
 
     Uses a process pool when it's available and worthwhile, otherwise measures
     serially. Returns one value per task, in order.
     """
+    if min_tasks is None:
+        min_tasks = _pref_min_parallel_tasks()
     n = len(tasks)
     if n == 0:
         return []
@@ -194,7 +206,7 @@ def _parallel(part_shape, tasks, method, progress_cb, check_abort, tol, workers,
         # Smoke-test one tiny job so a broken environment fails fast (and within
         # a timeout) instead of hanging, then we fall back to serial.
         probe = executor.submit(_measure_chunk, [tasks[0]])
-        results[0] = probe.result(timeout=60)[0]
+        results[0] = probe.result(timeout=_pref_worker_timeout())[0]
 
         futures = {}
         for start, chunk in _chunks(tasks, workers * 8):

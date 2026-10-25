@@ -2,4 +2,4 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-from ..gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers
+from ..gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers, DFMPreferencesContour

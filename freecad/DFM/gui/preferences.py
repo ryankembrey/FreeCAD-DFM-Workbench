@@ -5,11 +5,12 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional, TypeVar
 
-from PySide6 import QtGui, QtWidgets, QtCore
+from PySide6 import QtGui, QtWidgets
 
 import FreeCADGui as Gui  # type: ignore
 
 from ..app.prefs import dfm_params
+from ..app.contour.colormap import COLORMAPS
 from .utils.widgets import ToleranceSpinBox
 
 _PREF_PATH = "Mod/DFM"
@@ -70,6 +71,43 @@ class ToleranceField:
 class FieldGroup:
     title: str
     fields: list = field(default_factory=list)
+
+
+@dataclass
+class ComboField:
+    key: str
+    label: str
+    options: list[str] = field(default_factory=list)
+    default: str = ""
+    tooltip: str = ""
+
+
+@dataclass
+class ColorField:
+    key: str
+    label: str
+    default: tuple = (1.0, 1.0, 1.0)  # (r, g, b) floats 0.0-1.0
+    tooltip: str = ""
+
+
+# ---- Color helpers ----------------------------------------------------------
+
+
+def _rgb_to_uint(r: float, g: float, b: float) -> int:
+    """Pack (0.0-1.0) RGB into FreeCAD's 32-bit unsigned integer (0xRRGGBBAA)."""
+    ri = max(0, min(255, int(round(r * 255))))
+    gi = max(0, min(255, int(round(g * 255))))
+    bi = max(0, min(255, int(round(b * 255))))
+    return (ri << 24) | (gi << 16) | (bi << 8) | 0xFF
+
+
+def _uint_to_rgb(val: int) -> tuple[float, float, float]:
+    """Unpack FreeCAD's 32-bit unsigned integer to (0.0-1.0) RGB tuple."""
+    return (
+        ((val >> 24) & 0xFF) / 255.0,
+        ((val >> 16) & 0xFF) / 255.0,
+        ((val >> 8) & 0xFF) / 255.0,
+    )
 
 
 class AnalyzerPanel(QtWidgets.QWidget):
@@ -165,6 +203,28 @@ class AnalyzerPanel(QtWidgets.QWidget):
                 w.setToolTip(f.tooltip)
             return w
 
+        if isinstance(f, ComboField):
+            w = _pref(QtWidgets.QComboBox(), f.key)
+            w.addItems(f.options)
+            w.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            if f.tooltip:
+                w.setToolTip(f.tooltip)
+            return w
+
+        if isinstance(f, ColorField):
+            loader = Gui.UiLoader()
+            w = loader.createWidget("Gui::PrefColorButton")
+            w.setProperty("prefPath", _PREF_PATH)
+            w.setProperty("prefEntry", f.key)
+            w.setProperty("color", QtGui.QColor.fromRgbF(*f.default))
+            w.setProperty("_dfm_is_color", True)
+            if f.tooltip:
+                w.setToolTip(f.tooltip)
+            return w
+
         raise TypeError(f"Unknown field type: {type(f)}")
 
     def load(self, params):
@@ -176,6 +236,12 @@ class AnalyzerPanel(QtWidgets.QWidget):
                 widget.setValue(params.GetFloat(key, default))
             elif isinstance(widget, ToleranceSpinBox):
                 widget.setValue(params.GetFloat(key, default))
+            elif widget.property("_dfm_is_color"):
+                uint_default = _rgb_to_uint(*default)
+                r, g, b = _uint_to_rgb(params.GetUnsigned(key, uint_default))
+                widget.setProperty("color", QtGui.QColor.fromRgbF(r, g, b))
+            elif isinstance(widget, QtWidgets.QComboBox):
+                widget.setCurrentText(params.GetString(key, default))
             elif isinstance(widget, QtWidgets.QSpinBox):
                 widget.setValue(params.GetInt(key, default))
 
@@ -187,6 +253,12 @@ class AnalyzerPanel(QtWidgets.QWidget):
                 params.SetFloat(key, widget.value())
             elif isinstance(widget, ToleranceSpinBox):
                 params.SetFloat(key, widget.value())
+            elif widget.property("_dfm_is_color"):
+                c = widget.property("color")
+                if isinstance(c, QtGui.QColor):
+                    params.SetUnsigned(key, _rgb_to_uint(c.redF(), c.greenF(), c.blueF()))
+            elif isinstance(widget, QtWidgets.QComboBox):
+                params.SetString(key, widget.currentText())
             elif isinstance(widget, QtWidgets.QSpinBox):
                 params.SetInt(key, widget.value())
 
@@ -558,6 +630,122 @@ class SharpCornersPanel(AnalyzerPanel):
     ]
 
 
+class ContourSettingsPanel(AnalyzerPanel):
+    title = "Contour Settings"
+    groups = [
+        FieldGroup(
+            "Meshing",
+            [
+                ComboField(
+                    "ContourDefaultResolution",
+                    "Default resolution",
+                    options=["Rough", "Coarse", "Fine", "Ultra Fine"],
+                    default="Coarse",
+                    tooltip="Default mesh resolution preset. Finer resolutions produce "
+                    "more triangles and take longer to compute.",
+                ),
+                IntField(
+                    "ContourTriangleWarn",
+                    "Triangle warning threshold",
+                    default=300_000,
+                    min=10_000,
+                    max=10_000_000,
+                    tooltip="Triangle count above which a warning is shown before meshing.",
+                ),
+                IntField(
+                    "ContourTriangleHardCap",
+                    "Triangle hard cap",
+                    default=1_500_000,
+                    min=100_000,
+                    max=10_000_000,
+                    tooltip="Maximum triangle count allowed. Mesh requests above this are refused.",
+                ),
+                ToleranceField(
+                    "ContourMinElementSize",
+                    "Min element size",
+                    default=1e-3,
+                    tooltip="Smallest allowed mesh element size (mm). Prevents "
+                    "accidentally requesting an impossibly fine mesh.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Parallel Processing",
+            [
+                IntField(
+                    "ContourMinParallelTasks",
+                    "Min tasks for parallel",
+                    default=2000,
+                    min=100,
+                    max=100_000,
+                    tooltip="Minimum number of measurement tasks before the solver "
+                    "uses multiple workers instead of running serially.",
+                ),
+                IntField(
+                    "ContourWorkerTimeout",
+                    "Worker probe timeout",
+                    default=60,
+                    min=5,
+                    max=600,
+                    suffix=" s",
+                    tooltip="Seconds to wait for a worker probe before falling back "
+                    "to serial measurement.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Scene Rendering",
+            [
+                FloatField(
+                    "ContourCreaseAngle",
+                    "Crease angle",
+                    default=35.0,
+                    min=0.0,
+                    max=90.0,
+                    step=1.0,
+                    decimals=1,
+                    suffix="°",
+                    tooltip="Edges sharper than this angle stay crisp in the contour "
+                    "overlay; smoother edges blend colors (Gouraud shading).",
+                ),
+                IntField(
+                    "ContourTargetPerChunk",
+                    "Triangles per chunk",
+                    default=2500,
+                    min=500,
+                    max=50_000,
+                    tooltip="Target triangle count per spatial chunk for pick-ray "
+                    "culling. Smaller chunks speed up hover but add scene overhead.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Default Colormaps",
+            [
+                ComboField(
+                    "ContourDefaultColormap",
+                    "Default colormap",
+                    options=list(COLORMAPS.keys()),
+                    default="Cool-Warm",
+                    tooltip="Colormap used when no measure-specific default is set.",
+                ),
+                ColorField(
+                    "ContourHighlightInColor",
+                    "Highlight in-band color",
+                    default=(0.85, 0.15, 0.15),
+                    tooltip="Color for triangles inside the highlight band.",
+                ),
+                ColorField(
+                    "ContourHighlightOutColor",
+                    "Highlight out-of-band color",
+                    default=(0.62, 0.62, 0.62),
+                    tooltip="Color for triangles outside the highlight band.",
+                ),
+            ],
+        ),
+    ]
+
+
 # =============================================================================
 
 
@@ -671,3 +859,21 @@ class DFMPreferencesAnalyzers:
         params = dfm_params()
         for p in self.panels:
             p.save(params)
+
+
+class DFMPreferencesContour:
+    def __init__(self):
+        self.form = QtWidgets.QWidget()
+        self.form.setWindowTitle("Contour")
+        self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
+
+        self.panel = ContourSettingsPanel()
+
+        layout = QtWidgets.QVBoxLayout(self.form)
+        layout.addWidget(self.panel)
+
+    def loadSettings(self):
+        self.panel.load(dfm_params())
+
+    def saveSettings(self):
+        self.panel.save(dfm_params())

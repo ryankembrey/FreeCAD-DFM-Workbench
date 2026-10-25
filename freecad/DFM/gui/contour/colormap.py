@@ -205,6 +205,41 @@ COLORMAPS: dict = {
 
 DEFAULT_COLORMAP = "Cool-Warm"
 
+_HIGHLIGHT_IN = (0.85, 0.15, 0.15)  # red
+_HIGHLIGHT_OUT = (0.62, 0.62, 0.62)  # gray
+
+
+def _rgb_to_uint(r: float, g: float, b: float) -> int:
+    ri = max(0, min(255, int(round(r * 255))))
+    gi = max(0, min(255, int(round(g * 255))))
+    bi = max(0, min(255, int(round(b * 255))))
+    return (ri << 24) | (gi << 16) | (bi << 8) | 0xFF
+
+
+def _uint_to_rgb(val: int) -> tuple:
+    return (
+        ((val >> 24) & 0xFF) / 255.0,
+        ((val >> 16) & 0xFF) / 255.0,
+        ((val >> 8) & 0xFF) / 255.0,
+    )
+
+
+def _pref_default_colormap() -> str:
+    from ..prefs import dfm_params
+    return dfm_params().GetString("ContourDefaultColormap", DEFAULT_COLORMAP)
+
+
+def _pref_highlight_in() -> tuple:
+    from ..prefs import dfm_params
+    default_uint = _rgb_to_uint(*_HIGHLIGHT_IN)
+    return _uint_to_rgb(dfm_params().GetUnsigned("ContourHighlightInColor", default_uint))
+
+
+def _pref_highlight_out() -> tuple:
+    from ..prefs import dfm_params
+    default_uint = _rgb_to_uint(*_HIGHLIGHT_OUT)
+    return _uint_to_rgb(dfm_params().GetUnsigned("ContourHighlightOutColor", default_uint))
+
 
 def get_colormap(name: str) -> Callable[[float], tuple]:
     return COLORMAPS.get(name, viridis)
@@ -224,19 +259,10 @@ def quantize(value: float, step: float) -> float:
 
 
 class HighlightSpec:
-    def __init__(
-        self,
-        active=False,
-        lo=None,
-        hi=None,
-        flag_color=(0.85, 0.15, 0.15),
-        base_color=(0.30, 0.65, 0.30),
-    ):
+    def __init__(self, active=False, lo=None, hi=None):
         self.active = bool(active)
         self.lo = lo
         self.hi = hi
-        self.flag_color = tuple(flag_color)
-        self.base_color = tuple(base_color)
 
     def in_band(self, value: float) -> bool:
         if self.lo is not None and value < self.lo:
@@ -245,22 +271,25 @@ class HighlightSpec:
             return False
         return True
 
+    def color(self, value: float) -> tuple:
+        return _pref_highlight_in() if self.in_band(value) else _pref_highlight_out()
+
 
 def value_to_color(
     value: float,
     vmin: float,
     vmax: float,
-    colormap: str = DEFAULT_COLORMAP,
+    colormap: str = None,
     band_step: float = 0.0,
     highlight: "HighlightSpec | None" = None,
 ) -> tuple:
     """Map a value to an rgb. With an active HighlightSpec, the raw value is
-    classified against its band and painted with the flag color (in-band) or
-    base color (out-of-band), replacing the colormap. The band test uses the
-    raw value, before quantization/normalization, so it's independent of the
-    legend window."""
+    classified against its band and painted red (in) or gray (out), replacing
+    the colormap entirely. The band test uses the raw value, before
+    quantization/normalization, so it's independent of the legend window."""
     if highlight is not None and highlight.active:
-        return highlight.flag_color if highlight.in_band(value) else highlight.base_color
-
+        return highlight.color(value)
+    if colormap is None:
+        colormap = _pref_default_colormap()
     v = quantize(value, band_step)
     return get_colormap(colormap)(normalize(v, vmin, vmax))

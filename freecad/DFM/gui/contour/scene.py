@@ -17,19 +17,28 @@ from collections import defaultdict
 
 import FreeCAD as App  # type: ignore
 
-from ...app.contour.colormap import value_to_color, DEFAULT_COLORMAP, HighlightSpec
+from ...app.contour.colormap import value_to_color, HighlightSpec
+from ...app.prefs import dfm_params
 from ..utils.view import get_active_view
 
 
-_TARGET_PER_CHUNK = 2500
+_TARGET_PER_CHUNK_DEFAULT = 2500
+_CREASE_ANGLE_DEFAULT = 35.0
 _NAME_PREFIX = "DFMContourChunk_"
 
-# Blend colors only across edges smoother than this; sharper edges (corners,
-# chamfers) stay crisp so a draft jump from 0 to 90 degrees is not smeared.
-_CREASE_COS = math.cos(math.radians(35.0))
+
+def _pref_target_per_chunk() -> int:
+    return dfm_params().GetInt("ContourTargetPerChunk", _TARGET_PER_CHUNK_DEFAULT)
 
 
-def _partition(vertices, triangles, values, normals, target=_TARGET_PER_CHUNK):
+def _pref_crease_cos() -> float:
+    angle = dfm_params().GetFloat("ContourCreaseAngle", _CREASE_ANGLE_DEFAULT)
+    return math.cos(math.radians(angle))
+
+
+def _partition(vertices, triangles, values, normals, target=None):
+    if target is None:
+        target = _pref_target_per_chunk()
     n = len(triangles)
     if n <= target:
         return [{"tris": triangles, "values": values, "normals": normals}]
@@ -82,7 +91,7 @@ class ContourNode:
 
     @staticmethod
     def _split_for_smoothing(
-        vertices, triangles, values, normals, crease_cos=_CREASE_COS, value_gap=None
+        vertices, triangles, values, normals, crease_cos=None, value_gap=None
     ):
         """Duplicate vertices across sharp edges so smoothing groups blend
         within a surface (fillets) but stay crisp across creases (corners).
@@ -95,6 +104,8 @@ class ContourNode:
         Returns (new_vertices, new_triangles, per_vertex_values). Triangles keep
         their order, so per-triangle values/normals still line up by index.
         """
+        if crease_cos is None:
+            crease_cos = _pref_crease_cos()
         incident = defaultdict(list)
         for ti, tri in enumerate(triangles):
             for corner in tri:
@@ -174,7 +185,7 @@ class ContourNode:
         normals,
         vmin,
         vmax,
-        colormap=DEFAULT_COLORMAP,
+        colormap=None,
         band_step=0.0,
         smooth=False,
         value_gap=None,
@@ -272,7 +283,7 @@ class ContourNode:
         self._name_to_chunk[name] = index
         return sep
 
-    def recolor(self, vmin, vmax, colormap=DEFAULT_COLORMAP, band_step=0.0, highlight=None):
+    def recolor(self, vmin, vmax, colormap=None, band_step=0.0, highlight=None):
         if highlight is not None:
             self._highlight = highlight
         hl = self._highlight
@@ -352,7 +363,7 @@ def build_scene(
     normals,
     vmin,
     vmax,
-    colormap=DEFAULT_COLORMAP,
+    colormap=None,
     band_step=0.0,
     smooth=False,
     value_gap=None,

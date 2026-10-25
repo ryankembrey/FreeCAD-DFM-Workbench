@@ -10,6 +10,8 @@ import tempfile
 
 import FreeCAD as App  # type: ignore
 
+from ..prefs import dfm_params
+
 
 RESOLUTION_DIVISORS = {
     "Rough": 15.0,
@@ -17,12 +19,27 @@ RESOLUTION_DIVISORS = {
     "Fine": 70.0,
     "Ultra Fine": 140.0,
 }
-DEFAULT_RESOLUTION = "Coarse"
 
-TRIANGLE_WARN = 300_000
-TRIANGLE_HARD_CAP = 1_500_000
+_DEFAULT_RESOLUTION = "Coarse"
+_TRIANGLE_WARN = 300_000
+_TRIANGLE_HARD_CAP = 1_500_000
+_MIN_ELEMENT_SIZE = 1e-3
 
-MIN_ELEMENT_SIZE = 1e-3
+
+def get_default_resolution() -> str:
+    return dfm_params().GetString("ContourDefaultResolution", _DEFAULT_RESOLUTION)
+
+
+def get_triangle_warn() -> int:
+    return dfm_params().GetInt("ContourTriangleWarn", _TRIANGLE_WARN)
+
+
+def get_triangle_hard_cap() -> int:
+    return dfm_params().GetInt("ContourTriangleHardCap", _TRIANGLE_HARD_CAP)
+
+
+def get_min_element_size() -> float:
+    return dfm_params().GetFloat("ContourMinElementSize", _MIN_ELEMENT_SIZE)
 
 
 @dataclass
@@ -34,7 +51,7 @@ class UniformMesh:
 
 def element_size_for(shape, resolution: str) -> float:
     diag = shape.BoundBox.DiagonalLength
-    divisor = RESOLUTION_DIVISORS.get(resolution, RESOLUTION_DIVISORS[DEFAULT_RESOLUTION])
+    divisor = RESOLUTION_DIVISORS.get(resolution, RESOLUTION_DIVISORS[get_default_resolution()])
     return diag / divisor
 
 
@@ -176,15 +193,17 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
     Raises RuntimeError if gmsh is unavailable, the size is unsafe, or no
     triangles were produced.
     """
-    if element_size is None or element_size < MIN_ELEMENT_SIZE:
+    min_size = get_min_element_size()
+    if element_size is None or element_size < min_size:
         raise RuntimeError(
-            f"Element size {element_size} mm is too small; minimum is {MIN_ELEMENT_SIZE} mm."
+            f"Element size {element_size} mm is too small; minimum is {min_size} mm."
         )
+    hard_cap = get_triangle_hard_cap()
     estimate = estimate_triangle_count(shape, element_size)
-    if estimate is None or estimate > TRIANGLE_HARD_CAP:
+    if estimate is None or estimate > hard_cap:
         raise RuntimeError(
             f"That element size would create about {estimate:,} triangles, over "
-            f"the {TRIANGLE_HARD_CAP:,} safety limit. Choose a coarser resolution."
+            f"the {hard_cap:,} safety limit. Choose a coarser resolution."
         )
 
     gmsh = _import_gmsh()

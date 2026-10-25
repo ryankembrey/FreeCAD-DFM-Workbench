@@ -7,9 +7,9 @@ from PySide6 import QtCore, QtWidgets
 
 from ...app.contour.meshing import (
     RESOLUTION_DIVISORS,
-    DEFAULT_RESOLUTION,
-    MIN_ELEMENT_SIZE,
-    TRIANGLE_HARD_CAP,
+    get_default_resolution,
+    get_min_element_size,
+    get_triangle_hard_cap,
     element_size_for,
     estimate_triangle_count,
 )
@@ -31,13 +31,13 @@ class ResolutionField(QtWidgets.QWidget):
 
         self.combo = QtWidgets.QComboBox()
         self.combo.addItems(list(RESOLUTION_DIVISORS.keys()) + [_CUSTOM])
-        self.combo.setCurrentText(DEFAULT_RESOLUTION)
+        self.combo.setCurrentText(get_default_resolution())
         self.combo.setToolTip("Element size preset, scaled to the part. Custom lets you type mm.")
         self.combo.currentIndexChanged.connect(self._on_combo)
         layout.addWidget(self.combo)
 
         self.spin = QtWidgets.QDoubleSpinBox()
-        self.spin.setRange(MIN_ELEMENT_SIZE, 100000.0)
+        self.spin.setRange(get_min_element_size(), 100000.0)
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.5)
         self.spin.setSuffix(" mm")
@@ -110,4 +110,4 @@ class ResolutionField(QtWidgets.QWidget):
             self._safe = False
             return
         count = estimate_triangle_count(self._shape, size)
-        self._safe = count is not None and count <= TRIANGLE_HARD_CAP
+        self._safe = count is not None and count <= get_triangle_hard_cap()
