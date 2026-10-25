@@ -81,7 +81,8 @@ class TaskResults(QtCore.QObject):
         self.on_toggle_ignore_all: Callable[[list[CheckResult]], None] | None = None
         self.on_zoom_to_rule: Callable[[list[CheckResult]], None] | None = None
         self.on_material_changed: Callable[[str], None] | None = None
-
+        self.on_filters_changed: Callable[[], None] | None = None
+        self.on_markers_toggled: Callable[[bool], None] | None = None
         self.form.tvResults.doubleClicked.connect(self._handle_double_click)
         self.form.pbExportCSV.clicked.connect(self._handle_export_btn)
 
@@ -95,6 +96,7 @@ class TaskResults(QtCore.QObject):
         self._toolbar = ResultsToolbar()
         self._inject_toolbar()
         self._toolbar.settings_changed.connect(self._on_toolbar_changed)
+        self._toolbar.markers_toggled.connect(self._on_markers_toggled)
         self._toolbar.expand_all_requested.connect(self._expand_all)
         self._toolbar.collapse_all_requested.connect(self._collapse_all)
 
@@ -539,6 +541,20 @@ class TaskResults(QtCore.QObject):
         """Rebuild the tree when any toolbar control changes."""
         if self._grouped_data:
             self._build_tree()
+        if self.on_filters_changed:
+            self.on_filters_changed()
+
+    def _on_markers_toggled(self, on: bool):
+        if self.on_markers_toggled:
+            self.on_markers_toggled(on)
+
+    @property
+    def show_markers(self) -> bool:
+        return self._toolbar.show_markers
+
+    @show_markers.setter
+    def show_markers(self, value: bool):
+        self._toolbar.show_markers = value
 
     # ── Fill-height helpers ──────────────────────────────
 
@@ -778,7 +794,23 @@ class TaskResults(QtCore.QObject):
     def eventFilter(self, obj, event):
         if self.form is None:
             return False
-        if obj is self.form.tvResults and event.type() == QtCore.QEvent.Type.KeyPress:
+        if obj is not self.form.tvResults:
+            return False
+
+        etype = event.type()
+
+        # Deselect when clicking empty space in the tree
+        if etype == QtCore.QEvent.Type.MouseButtonPress:
+            if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                index = self.form.tvResults.indexAt(event.pos())
+                if not index.isValid():
+                    self.form.tvResults.clearSelection()
+                    self.form.tvResults.setCurrentIndex(QtCore.QModelIndex())
+                    if self.on_row_selected:
+                        self.on_row_selected([])
+                    return False
+
+        if etype == QtCore.QEvent.Type.KeyPress:
             if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
                 index = self.form.tvResults.currentIndex()
                 item = self.model.itemFromIndex(index)
@@ -811,6 +843,62 @@ class TaskResults(QtCore.QObject):
             self._save_clicked = True
             if self.on_save_clicked:
                 self.on_save_clicked()
+
+    # ── Filter state properties ──────────────────────────
+
+    @property
+    def show_errors(self) -> bool:
+        return self._toolbar.show_errors
+
+    @property
+    def show_warnings(self) -> bool:
+        return self._toolbar.show_warnings
+
+    @property
+    def show_ignored(self) -> bool:
+        return self._toolbar.show_ignored
+
+    # ── Programmatic finding selection ───────────────────
+
+    def select_finding(self, finding: CheckResult) -> bool:
+        """Walk the tree model to find and select the item for *finding*.
+
+        Expands all ancestor nodes so the item is visible.  Returns True
+        if the finding was found and selected, False otherwise.
+        """
+        if self.form is None:
+            return False
+        target = self._find_item_for_finding(self.model.invisibleRootItem(), finding)
+        if target is None:
+            return False
+
+        # Expand ancestors so the item is visible in the tree.
+        parent = target.parent()
+        while parent is not None:
+            idx = self.model.indexFromItem(parent)
+            if not self.form.tvResults.isExpanded(idx):
+                self.form.tvResults.expand(idx)
+            parent = parent.parent()
+
+        # Select the item.
+        idx = self.model.indexFromItem(target)
+        self.form.tvResults.setCurrentIndex(idx)
+        return True
+
+    def _find_item_for_finding(
+        self, parent: QStandardItem, finding: CheckResult
+    ) -> QStandardItem | None:
+        """Recursively search for the tree item whose UserRole data is *finding*."""
+        for row in range(parent.rowCount()):
+            child = parent.child(row)
+            data = child.data(QtCore.Qt.ItemDataRole.UserRole)
+            if data is finding:
+                return child
+            # Recurse into group nodes.
+            result = self._find_item_for_finding(child, finding)
+            if result is not None:
+                return result
+        return None
 
     def _cleanup_fill_height(self):
         """Remove the resize filter and release scroll-area references."""

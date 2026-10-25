@@ -8,7 +8,7 @@ import FreeCADGui as Gui  # type: ignore
 
 from .gui import task_setup, task_show_normals, process_library
 from .gui import preferences
-from .gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers
+from .gui.preferences import DFMPreferencesGeneral, DFMPreferencesAnalyzers, DFMPreferencesResults
 from .gui import tools as _dfm_contour_tools
 from .app.shape_observer import install_observer
 
@@ -56,6 +56,7 @@ class DFMWorkbench(Gui.Workbench):
 
 Gui.addWorkbench(DFMWorkbench())
 Gui.addPreferencePage(DFMPreferencesGeneral, "DFM")
+Gui.addPreferencePage(DFMPreferencesResults, "DFM")
 Gui.addPreferencePage(DFMPreferencesAnalyzers, "DFM")
 
 # Install the shape-change observer at module load so it fires for

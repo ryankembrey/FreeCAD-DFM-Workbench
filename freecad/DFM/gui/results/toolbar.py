@@ -8,6 +8,8 @@ from enum import Enum
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ...app.prefs import dfm_params
+
 
 class GroupMode(Enum):
     """How findings are organised in the results tree."""
@@ -36,6 +38,7 @@ class ResultsToolbar(QtWidgets.QWidget):
     """
 
     settings_changed = QtCore.Signal()
+    markers_toggled = QtCore.Signal(bool)
     expand_all_requested = QtCore.Signal()
     collapse_all_requested = QtCore.Signal()
 
@@ -92,6 +95,15 @@ class ResultsToolbar(QtWidgets.QWidget):
             "I", "#666666", "Show / hide ignored findings", checked=True
         )
 
+        # ── Marker toggle ──
+        _default_markers = dfm_params().GetBool("ResultsShowMarkersDefault", False)
+        self.btn_markers = self._make_toggle(
+            "●",  # ● filled circle
+            "#378ADD",
+            "Show / hide viewport markers",
+            checked=_default_markers,
+        )
+
         # ── Count label ──
         self.lbl_count = QtWidgets.QLabel()
         self.lbl_count.setStyleSheet("color: #888888;")
@@ -115,6 +127,8 @@ class ResultsToolbar(QtWidgets.QWidget):
         row.addWidget(self.btn_warnings)
         row.addWidget(self.btn_ignored)
         row.addWidget(self._make_separator())
+        row.addWidget(self.btn_markers)
+        row.addWidget(self._make_separator())
         row.addWidget(self.lbl_count)
         row.addStretch(1)
         row.addWidget(self.btn_expand)
@@ -130,6 +144,7 @@ class ResultsToolbar(QtWidgets.QWidget):
         self.btn_errors.toggled.connect(self.settings_changed)
         self.btn_warnings.toggled.connect(self.settings_changed)
         self.btn_ignored.toggled.connect(self.settings_changed)
+        self.btn_markers.toggled.connect(self.markers_toggled)
         self.btn_expand.clicked.connect(self.expand_all_requested)
         self.btn_collapse.clicked.connect(self.collapse_all_requested)
 
@@ -331,6 +346,14 @@ class ResultsToolbar(QtWidgets.QWidget):
     @property
     def show_ignored(self) -> bool:
         return self.btn_ignored.isChecked()
+
+    @property
+    def show_markers(self) -> bool:
+        return self.btn_markers.isChecked()
+
+    @show_markers.setter
+    def show_markers(self, value: bool):
+        self.btn_markers.setChecked(value)
 
     def update_count(self, shown: int, total: int):
         """Update the 'X of Y' count label."""

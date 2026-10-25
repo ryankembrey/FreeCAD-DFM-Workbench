@@ -368,6 +368,43 @@ class BridgeSpanPanel(AnalyzerPanel):
 # =============================================================================
 
 
+class DFMPreferencesResults:
+    """Preference page for Results panel settings (viewport markers, etc.)."""
+
+    DEFAULT_SHOW_MARKERS = False
+
+    def __init__(self):
+        self.form = QtWidgets.QWidget()
+        self.form.setWindowTitle("Results")
+        self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
+
+        self.show_markers_default = _pref(
+            QtWidgets.QCheckBox("Show viewport markers by default"),
+            "ResultsShowMarkersDefault",
+        )
+        self.show_markers_default.setToolTip(
+            "When enabled, viewport markers are shown automatically\n"
+            "when the results panel opens.  When disabled, markers\n"
+            "must be turned on manually from the toolbar."
+        )
+
+        layout = QtWidgets.QVBoxLayout(self.form)
+        group = QtWidgets.QGroupBox("Viewport Markers")
+        QtWidgets.QVBoxLayout(group).addWidget(self.show_markers_default)
+        layout.addWidget(group)
+        layout.addStretch()
+
+    def loadSettings(self):
+        params = dfm_params()
+        self.show_markers_default.setChecked(
+            params.GetBool("ResultsShowMarkersDefault", self.DEFAULT_SHOW_MARKERS)
+        )
+
+    def saveSettings(self):
+        params = dfm_params()
+        params.SetBool("ResultsShowMarkersDefault", self.show_markers_default.isChecked())
+
+
 class DFMPreferencesGeneral:
     DEFAULT_PRINT_TIMING_REPORT = False
 

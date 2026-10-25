@@ -56,6 +56,8 @@ class FindingCard(QtWidgets.QFrame):
 
     # Signal emitted when the user finishes dragging (new position as QPoint)
     dragged = QtCore.Signal(QtCore.QPoint)
+    # Emitted when the user picks "Ignore" from the right-click menu.
+    ignore_requested = QtCore.Signal(object)  # CheckResult
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -67,6 +69,8 @@ class FindingCard(QtWidgets.QFrame):
         self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
         self.setMinimumWidth(260)
 
+        self._finding: Optional[CheckResult] = None
+
         self._build_ui()
         self._feedback_visible = False
         self._feedback_frame.setVisible(False)
@@ -77,6 +81,11 @@ class FindingCard(QtWidgets.QFrame):
 
         # Re-entrancy guard for theme updates
         self._applying_theme = False
+
+    @property
+    def finding(self) -> Optional[CheckResult]:
+        """The CheckResult currently displayed by this card."""
+        return self._finding
 
     def _build_ui(self):
         root = QtWidgets.QVBoxLayout(self)
@@ -289,6 +298,18 @@ class FindingCard(QtWidgets.QFrame):
             self._header.setStyleSheet(
                 "#cardHeader { border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; }"
             )
+
+    def contextMenuEvent(self, event):
+        """Right-click context menu with 'Ignore' option."""
+        if self._finding is None:
+            return super().contextMenuEvent(event)
+
+        menu = QtWidgets.QMenu(self)
+        label = "Unignore finding" if self._finding.ignore else "Ignore finding"
+        action = menu.addAction(label)
+        chosen = menu.exec(event.globalPos())
+        if chosen is action:
+            self.ignore_requested.emit(self._finding)
 
     @staticmethod
     def _darken(hex_color: str, factor: float) -> str:
@@ -688,3 +709,11 @@ class _ResizeFilter(QtCore.QObject):
         if event.type() == QtCore.QEvent.Type.Resize:
             self._overlay_ref._reposition()
         return False
+
+
+# ---------------------------------------------------------------------------
+#  AnnotationManager — multi-annotation lifecycle
+# ---------------------------------------------------------------------------
+
+# Stagger offset applied to each successive pinned card so they don't
+# overlap exactly.

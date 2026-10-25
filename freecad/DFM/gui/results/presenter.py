@@ -18,10 +18,12 @@ from ...app.document_object import (
 
 from ...core.models import CheckResult, Severity
 from ...core.registries.process_registry import ProcessRegistry
+from ...app.prefs import dfm_params
 from ...gui.results.bridge import DFMViewProvider
 from ...gui.results.delegates import HistoryRowDelegate
 from ...gui.results.models import DFMReportModel
 from ...gui.results.utils import CSVResultExporter, CSVExportConfig
+from ...gui.results.viewport_markers import ViewportMarkerController
 from ...gui.results.visuals import severity_color
 from ...gui.results.widgets import DFMSparkline
 from ...gui.task_results import TaskResults
@@ -56,10 +58,26 @@ class TaskResultsPresenter:
         self.view.on_toggle_ignore_all = self.handle_ignore_all
         self.view.on_zoom_to_rule = self.handle_zoom_to_rule
         self.view.on_material_changed = self.handle_material_changed
+        self.view.on_filters_changed = self._handle_filters_changed
+        self.view.on_markers_toggled = self._handle_markers_toggled
 
         self.history_manager = history_manager
         self.doc_name = doc_name
         self.shape_name = shape_name
+
+        # Guard flag to prevent circular updates between tree and markers.
+        self._syncing = False
+
+        # Viewport marker overlay.
+        self._marker_controller = ViewportMarkerController(
+            target_object=bridge.target_object,
+            on_finding_selected=self._handle_marker_finding_selected,
+            on_finding_hover_started=self._handle_marker_hover_started,
+            on_finding_hover_ended=self._handle_marker_hover_ended,
+        )
+
+        # Read default marker visibility from preferences.
+        self._markers_active = dfm_params().GetBool("ResultsShowMarkersDefault", False)
 
         # Material switching cache: material_name -> list[CheckResult]
         self._material_cache: dict[str, list[CheckResult]] = {}
@@ -113,10 +131,25 @@ class TaskResultsPresenter:
             self.model.process.get_criticality,
         )
 
+        # Activate viewport markers only when the toggle is on.
+        if self._markers_active:
+            self._marker_controller.activate(
+                self.model.results,
+                show_errors=self.view.show_errors,
+                show_warnings=self.view.show_warnings,
+                show_ignored=self.view.show_ignored,
+            )
+        else:
+            self._marker_controller.deactivate()
+
     def handle_selection(self, data: CheckResult | list[CheckResult]):
+        if self._syncing:
+            return
+
         Gui.Selection.clearSelection()
         if isinstance(data, list) and len(data) == 0:
             self.bridge.highlight_faces_and_edges_by_index([], [])
+            self._marker_controller.clear_highlight()
             return
         elif isinstance(data, list):
             face_pairs = [
@@ -134,6 +167,7 @@ class TaskResultsPresenter:
                 if ref.type == "Edge"
             ]
             self.bridge.highlight_faces_and_edges_by_index(face_pairs, edge_pairs)
+            self._marker_controller.clear_highlight()
 
         elif isinstance(data, CheckResult):
             color = severity_color(data.severity)
@@ -146,8 +180,10 @@ class TaskResultsPresenter:
                 [(ref.index, color) for ref in edge_refs],
             )
 
-            # Show the viewport overlay card
             self.bridge.show_finding_overlay(data, color)
+
+            # Highlight the corresponding viewport marker.
+            self._marker_controller.highlight_finding(data)
 
     def handle_zoom_to_rule(self, findings: list[CheckResult]):
         face_pairs = [
@@ -196,6 +232,7 @@ class TaskResultsPresenter:
             QMessageBox.information(self.view.form, "Done", "Export Successful")
 
     def handle_cleanup(self):
+        self._marker_controller.deactivate()
         self.bridge.restore()
         Gui.Selection.addSelection(self.bridge.target_object)
         Gui.Selection.clearSelection()
@@ -343,6 +380,71 @@ class TaskResultsPresenter:
         for finding in findings:
             self.model.toggle_ignore_state(finding)
         self.refresh_ui()
+
+    # ── Viewport marker integration ─────────────────────
+
+    def _handle_filters_changed(self) -> None:
+        """Update viewport markers when toolbar filter toggles change."""
+        if self._markers_active:
+            self._marker_controller.update_filters(
+                show_errors=self.view.show_errors,
+                show_warnings=self.view.show_warnings,
+                show_ignored=self.view.show_ignored,
+            )
+
+    def _handle_marker_finding_selected(self, finding: CheckResult) -> None:
+        """Handle a finding selection originating from a viewport marker click."""
+        if finding not in self.model.results:
+            return
+        self._syncing = True
+        try:
+            # Select the finding in the tree (scrolls and expands ancestors).
+            self.view.select_finding(finding)
+
+            # Trigger the same highlight + overlay as a tree click.
+            color = severity_color(finding.severity)
+            face_refs = [ref for ref in finding.refs if ref.type == "Face"]
+            edge_refs = [ref for ref in finding.refs if ref.type == "Edge"]
+            self.bridge.highlight_faces_and_edges_by_index(
+                [(ref.index, color) for ref in face_refs],
+                [(ref.index, color) for ref in edge_refs],
+            )
+
+            self.bridge.show_finding_overlay(finding, color)
+            self._marker_controller.highlight_finding(finding)
+        finally:
+            self._syncing = False
+
+    def _handle_markers_toggled(self, on: bool) -> None:
+        """Toggle viewport markers on or off from the toolbar button."""
+        self._markers_active = on
+        if on:
+            self._marker_controller.activate(
+                self.model.results,
+                show_errors=self.view.show_errors,
+                show_warnings=self.view.show_warnings,
+                show_ignored=self.view.show_ignored,
+            )
+        else:
+            self._marker_controller.deactivate()
+
+    def _handle_marker_hover_started(self, marker) -> None:
+        """Show the overlay card when hovering over a marker dot."""
+        if not self._markers_active:
+            return
+        # Pick the worst-severity finding for the preview.
+        active = [f for f in marker.findings if not f.ignore]
+        if not active:
+            active = marker.findings
+        if not active:
+            return
+        finding = max(active, key=lambda f: f.severity.value)
+        color = severity_color(finding.severity)
+        self.bridge.show_finding_overlay(finding, color)
+
+    def _handle_marker_hover_ended(self) -> None:
+        """Clear the overlay when the mouse leaves all markers."""
+        self.bridge.remove_finding_overlay()
 
     def build_history_tab(self):
         runs = self.history_manager.load_runs(self.doc_name, self.shape_name)

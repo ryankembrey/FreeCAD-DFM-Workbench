@@ -150,6 +150,10 @@ class DFMViewProvider:
 
         self._overlay.show(anchor, finding, color_hex)
 
+    def remove_finding_overlay(self):
+        """Hide the viewport overlay card, if shown."""
+        self._overlay.remove()
+
     def _update_overlay(
         self,
         face_color_map: dict[int, str],
