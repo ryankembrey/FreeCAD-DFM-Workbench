@@ -13,9 +13,25 @@ from PySide6 import QtCore, QtGui, QtWidgets
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
+from ...app.prefs import dfm_params
 from ...core.models import CheckResult, Severity
 from ..utils.theme import qcolor_luminance
 from ..utils.view import get_active_view, get_view_widget
+
+
+def _overlay_offset_x() -> int:
+    """Default horizontal pixel offset of the finding card from the anchor."""
+    return dfm_params().GetInt("OverlayOffsetX", 30)
+
+
+def _overlay_offset_y() -> int:
+    """Default vertical pixel offset of the finding card from the anchor."""
+    return dfm_params().GetInt("OverlayOffsetY", -40)
+
+
+def _overlay_card_min_width() -> int:
+    """Minimum pixel width for the finding overlay card."""
+    return dfm_params().GetInt("OverlayCardMinWidth", 260)
 
 
 _SEVERITY_BG = {
@@ -67,7 +83,7 @@ class FindingCard(QtWidgets.QFrame):
         )
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
-        self.setMinimumWidth(260)
+        self.setMinimumWidth(_overlay_card_min_width())
 
         self._finding: Optional[CheckResult] = None
 
@@ -196,7 +212,7 @@ class FindingCard(QtWidgets.QFrame):
 
         # Lock card width to the header content (+ 2px for border)
         header_w = self._header.sizeHint().width() + 2
-        self.setFixedWidth(max(260, header_w))
+        self.setFixedWidth(max(_overlay_card_min_width(), header_w))
 
         self.adjustSize()
 
@@ -327,7 +343,10 @@ class FindingOverlay:
     world-space anchor point visible in FreeCAD's 3D view.
     """
 
-    OFFSET_PX = QtCore.QPoint(30, -40)  # card offset from projected anchor
+    @property
+    def OFFSET_PX(self) -> QtCore.QPoint:
+        """Default card offset from projected anchor, read from preferences."""
+        return QtCore.QPoint(_overlay_offset_x(), _overlay_offset_y())
 
     def __init__(self):
         self._card: Optional[FindingCard] = None

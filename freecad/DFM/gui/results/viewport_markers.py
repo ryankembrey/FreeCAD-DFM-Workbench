@@ -33,6 +33,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 import FreeCAD as App  # type: ignore
 
+from ...app.prefs import dfm_params
 from ...core.models import CheckResult, Severity
 from ...gui.results.visuals import severity_color
 from ...gui.utils.view import get_active_view, get_view_widget, project_to_screen
@@ -40,21 +41,37 @@ from ...gui.utils.view import get_active_view, get_view_widget, project_to_scree
 if TYPE_CHECKING:
     pass
 
-# ── Constants ───────────────────────────────────────────────
+# ── Preference-backed constants ────────────────────────────
 
-# Density heuristics
-_MAX_SHOW_ALL = 10  # show every marker when total count ≤ this
-_MIN_SCREEN_DIST_PX = 30  # greedy filter: minimum px between visible markers
 
-# Occlusion
-_OCCLUSION_DOT_THRESHOLD = 0.15  # face normal · cam_fwd below this → hidden
+def _max_show_all() -> int:
+    """Show every marker when total count is at or below this."""
+    return dfm_params().GetInt("MarkersMaxShowAll", 10)
 
-# Interaction
-_HIT_RADIUS_PX = 14  # click / hover tolerance in screen pixels
 
-# Visual sizing
-_NORMAL_POINT_SIZE = 10.0
-_HIGHLIGHT_POINT_SIZE = 16.0
+def _min_screen_dist_px() -> int:
+    """Greedy filter: minimum px between visible markers."""
+    return dfm_params().GetInt("MarkersMinScreenDist", 30)
+
+
+def _occlusion_dot_threshold() -> float:
+    """Face normal · cam_fwd above this → marker hidden."""
+    return dfm_params().GetFloat("MarkersOcclusionThreshold", 0.15)
+
+
+def _hit_radius_px() -> int:
+    """Click / hover tolerance in screen pixels."""
+    return dfm_params().GetInt("MarkersHitRadius", 14)
+
+
+def _normal_point_size() -> float:
+    """Coin3D point size for normal markers."""
+    return dfm_params().GetFloat("MarkersNormalSize", 10.0)
+
+
+def _highlight_point_size() -> float:
+    """Coin3D point size for highlighted markers."""
+    return dfm_params().GetFloat("MarkersHighlightSize", 16.0)
 
 # Severity → Coin3D RGB
 _SEVERITY_COIN_RGB: dict[Severity, tuple[float, float, float]] = {
@@ -323,7 +340,7 @@ class MarkerSceneLayer:
         self._root.addChild(self._material)
 
         self._draw_style = coin.SoDrawStyle()
-        self._draw_style.pointSize.setValue(_NORMAL_POINT_SIZE)
+        self._draw_style.pointSize.setValue(_normal_point_size())
         self._root.addChild(self._draw_style)
 
         self._coords = coin.SoCoordinate3()
@@ -347,7 +364,7 @@ class MarkerSceneLayer:
         self._hl_sep.addChild(self._hl_material)
 
         self._hl_draw_style = coin.SoDrawStyle()
-        self._hl_draw_style.pointSize.setValue(_HIGHLIGHT_POINT_SIZE)
+        self._hl_draw_style.pointSize.setValue(_highlight_point_size())
         self._hl_sep.addChild(self._hl_draw_style)
 
         self._hl_coords = coin.SoCoordinate3()
@@ -396,7 +413,7 @@ class MarkerSceneLayer:
                     + m.face_normal.z * cam_fwd.z
                 )
                 # Negative dot → normal faces camera; positive → faces away.
-                if dot > _OCCLUSION_DOT_THRESHOLD:
+                if dot > _occlusion_dot_threshold():
                     continue
 
             # Project to screen for density filtering.
@@ -406,7 +423,7 @@ class MarkerSceneLayer:
             candidates.append((i, sp[0], sp[1]))
 
         # Phase 2: density filter (greedy screen-space).
-        if len(candidates) <= _MAX_SHOW_ALL:
+        if len(candidates) <= _max_show_all():
             self._visible_indices = [c[0] for c in candidates]
         else:
             self._visible_indices = self._density_filter(candidates)
@@ -428,7 +445,8 @@ class MarkerSceneLayer:
 
         ordered = sorted(candidates, key=_severity_key)
         kept: list[tuple[int, float, float]] = []
-        min_dist_sq = _MIN_SCREEN_DIST_PX * _MIN_SCREEN_DIST_PX
+        dist = _min_screen_dist_px()
+        min_dist_sq = dist * dist
 
         for c in ordered:
             _, sx, sy = c
@@ -664,7 +682,8 @@ class MarkerInteraction(QtCore.QObject):
 
         mx, my = pos.x(), pos.y()
         best: tuple[int, MarkerInfo] | None = None
-        best_dist_sq = _HIT_RADIUS_PX * _HIT_RADIUS_PX
+        radius = _hit_radius_px()
+        best_dist_sq = radius * radius
 
         for idx, marker in self._scene.visible_markers:
             sp = project_to_screen(view, marker.world_point)

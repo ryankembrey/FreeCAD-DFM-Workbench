@@ -749,41 +749,186 @@ class ContourSettingsPanel(AnalyzerPanel):
 # =============================================================================
 
 
-class DFMPreferencesResults:
-    """Preference page for Results panel settings (viewport markers, etc.)."""
+class ResultsSettingsPanel(AnalyzerPanel):
+    title = "Results Settings"
+    groups = [
+        FieldGroup(
+            "Viewport Markers",
+            [
+                BoolField(
+                    "ResultsShowMarkersDefault",
+                    "Show viewport markers by default",
+                    tooltip="When enabled, viewport markers are shown automatically\n"
+                    "when the results panel opens. When disabled, markers\n"
+                    "must be turned on manually from the toolbar.",
+                ),
+                IntField(
+                    "MarkersMaxShowAll",
+                    "Max visible markers",
+                    default=10,
+                    min=1,
+                    max=500,
+                    tooltip="Show every marker when the total count is at or below "
+                    "this threshold. Above this, density filtering kicks in.",
+                ),
+                IntField(
+                    "MarkersMinScreenDist",
+                    "Min marker spacing",
+                    default=30,
+                    min=1,
+                    max=200,
+                    suffix=" px",
+                    tooltip="Minimum screen-pixel distance between visible markers "
+                    "during density filtering.",
+                ),
+                FloatField(
+                    "MarkersOcclusionThreshold",
+                    "Occlusion threshold",
+                    default=0.15,
+                    min=0.0,
+                    max=1.0,
+                    step=0.01,
+                    decimals=2,
+                    tooltip="Dot-product threshold for face-normal vs camera direction. "
+                    "Markers on faces angled away more than this are hidden.",
+                ),
+                FloatField(
+                    "MarkersNormalSize",
+                    "Marker point size",
+                    default=10.0,
+                    min=1.0,
+                    max=50.0,
+                    step=0.5,
+                    decimals=1,
+                    tooltip="Diameter in pixels for normal (unhighlighted) markers.",
+                ),
+                FloatField(
+                    "MarkersHighlightSize",
+                    "Marker highlight size",
+                    default=16.0,
+                    min=1.0,
+                    max=50.0,
+                    step=0.5,
+                    decimals=1,
+                    tooltip="Diameter in pixels for the highlighted marker ring.",
+                ),
+                IntField(
+                    "MarkersHitRadius",
+                    "Marker click radius",
+                    default=14,
+                    min=1,
+                    max=100,
+                    suffix=" px",
+                    tooltip="Screen-pixel radius within which a click or hover "
+                    "registers as hitting a marker.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Highlight Overlay",
+            [
+                IntField(
+                    "ResultsOverlayTransparency",
+                    "Overlay transparency",
+                    default=30,
+                    min=0,
+                    max=100,
+                    tooltip="Transparency of the shape overlay shown during "
+                    "highlighting (0 = opaque, 100 = invisible).",
+                ),
+                IntField(
+                    "ResultsOverlayEdgeWidth",
+                    "Edge highlight width",
+                    default=3,
+                    min=0,
+                    max=20,
+                    tooltip="Line width of highlighted edges in the overlay.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Camera Animation",
+            [
+                FloatField(
+                    "ResultsCameraAnimDuration",
+                    "Zoom animation duration",
+                    default=0.6,
+                    min=0.0,
+                    max=5.0,
+                    step=0.1,
+                    decimals=1,
+                    suffix=" s",
+                    tooltip="Time in seconds for the zoom-to-selection camera animation. "
+                    "Set to 0 for instant zoom.",
+                ),
+                FloatField(
+                    "ResultsCameraPadding",
+                    "Zoom padding factor",
+                    default=1.7,
+                    min=1.0,
+                    max=5.0,
+                    step=0.1,
+                    decimals=1,
+                    tooltip="Multiplier applied to the bounding-box size when framing "
+                    "the camera on a selection.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Finding Overlay Card",
+            [
+                IntField(
+                    "OverlayOffsetX",
+                    "Card X offset",
+                    default=30,
+                    min=-500,
+                    max=500,
+                    suffix=" px",
+                    tooltip="Default horizontal pixel offset of the finding card "
+                    "from its anchor point.",
+                ),
+                IntField(
+                    "OverlayOffsetY",
+                    "Card Y offset",
+                    default=-40,
+                    min=-500,
+                    max=500,
+                    suffix=" px",
+                    tooltip="Default vertical pixel offset of the finding card "
+                    "from its anchor point.",
+                ),
+                IntField(
+                    "OverlayCardMinWidth",
+                    "Card min width",
+                    default=260,
+                    min=100,
+                    max=800,
+                    suffix=" px",
+                    tooltip="Minimum pixel width for the finding overlay card.",
+                ),
+            ],
+        ),
+    ]
 
-    DEFAULT_SHOW_MARKERS = False
+
+class DFMPreferencesResults:
+    """Preference page for Results panel settings."""
 
     def __init__(self):
         self.form = QtWidgets.QWidget()
         self.form.setWindowTitle("Results")
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
-        self.show_markers_default = _pref(
-            QtWidgets.QCheckBox("Show viewport markers by default"),
-            "ResultsShowMarkersDefault",
-        )
-        self.show_markers_default.setToolTip(
-            "When enabled, viewport markers are shown automatically\n"
-            "when the results panel opens.  When disabled, markers\n"
-            "must be turned on manually from the toolbar."
-        )
+        self.panel = ResultsSettingsPanel()
 
         layout = QtWidgets.QVBoxLayout(self.form)
-        group = QtWidgets.QGroupBox("Viewport Markers")
-        QtWidgets.QVBoxLayout(group).addWidget(self.show_markers_default)
-        layout.addWidget(group)
-        layout.addStretch()
+        layout.addWidget(self.panel)
 
     def loadSettings(self):
-        params = dfm_params()
-        self.show_markers_default.setChecked(
-            params.GetBool("ResultsShowMarkersDefault", self.DEFAULT_SHOW_MARKERS)
-        )
+        self.panel.load(dfm_params())
 
     def saveSettings(self):
-        params = dfm_params()
-        params.SetBool("ResultsShowMarkersDefault", self.show_markers_default.isChecked())
+        self.panel.save(dfm_params())
 
 
 class DFMPreferencesGeneral:

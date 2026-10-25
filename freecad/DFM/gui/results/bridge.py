@@ -12,6 +12,7 @@ from PySide6.QtCore import QTimer
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
+from ...app.prefs import dfm_params
 from ...core.models import CheckResult
 from ...gui.results.overlay import FindingOverlay
 from ...gui.utils.view import get_active_view
@@ -27,9 +28,15 @@ class DFMViewProvider:
         "#639922": (0.388, 0.600, 0.133, 0.0),
     }
     OVERLAY_INACTIVE_COLOR = (0.5, 0.5, 0.5, 0.7)
-    OVERLAY_TRANSPARENCY = 30
-    OVERLAY_EDGE_WIDTH = 3
     OVERLAY_NAME = "DFM_Highlight_Overlay"
+
+    @property
+    def OVERLAY_TRANSPARENCY(self) -> int:
+        return dfm_params().GetInt("ResultsOverlayTransparency", 30)
+
+    @property
+    def OVERLAY_EDGE_WIDTH(self) -> int:
+        return dfm_params().GetInt("ResultsOverlayEdgeWidth", 3)
 
     def __init__(self, target_object):
         self.target_object = target_object
@@ -262,8 +269,6 @@ class DFMViewProvider:
 
 
 class CameraAnimator:
-    DURATION = 0.6
-    PADDING = 1.7
     FPS = 60
 
     def __init__(self) -> None:
@@ -278,6 +283,10 @@ class CameraAnimator:
         self._pos1: Optional[App.Vector] = None
         self._h0: float = 1.0
         self._h1: float = 1.0
+
+        # Read once from prefs at zoom time; cached per animation.
+        self._duration: float = 0.6
+        self._padding: float = 1.7
 
     def zoom_to_subelement(self, shape_object, subelement_name: str) -> None:
         """Pan and zoom to frame a single subelement."""
@@ -327,9 +336,14 @@ class CameraAnimator:
             return
         self._cam = cam
 
+        # Read animation prefs once per zoom (cached for the tick loop).
+        params = dfm_params()
+        self._duration = params.GetFloat("ResultsCameraAnimDuration", 0.6)
+        self._padding = params.GetFloat("ResultsCameraPadding", 1.7)
+
         center = bb.Center
         bb_size = max(bb.XMax - bb.XMin, bb.YMax - bb.YMin, bb.ZMax - bb.ZMin)
-        frame_size = bb_size * self.PADDING
+        frame_size = bb_size * self._padding
 
         cp = cam.position.getValue()
         pos0 = App.Vector(cp[0], cp[1], cp[2])
@@ -379,7 +393,7 @@ class CameraAnimator:
         assert self._pos1 is not None
 
         elapsed = time.perf_counter() - self._start
-        raw_t = min(elapsed / self.DURATION, 1.0)
+        raw_t = min(elapsed / self._duration, 1.0) if self._duration > 0 else 1.0
         t = self._smoothstep(raw_t)
 
         cam = self._cam
