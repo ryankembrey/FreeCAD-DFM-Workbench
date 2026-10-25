@@ -30,7 +30,10 @@ class UndercutAnalyzer(BaseAnalyzer):
         return "Undercut Analyzer"
 
     def resolve_prefs(self, prefs: dict) -> None:
-        pass
+        self.samples = prefs.get("UndercutSamples", 10)
+        self.margin = prefs.get("UndercutMargin", 0.01)
+        self.intersector_tol = prefs.get("UndercutIntersectorTol", 1e-6)
+        self.self_hit_threshold = prefs.get("UndercutSelfHitThreshold", 0.05)
 
     def execute(
         self,
@@ -41,11 +44,11 @@ class UndercutAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[tuple[str, int], list[float]]:
+        self.resolve_prefs(kwargs.get("prefs", {}))
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
-        self.samples = kwargs.get("samples", 10)
 
         self.intersector = IntCurvesFace_ShapeIntersector()
-        self.intersector.Load(shape, 1e-6)
+        self.intersector.Load(shape, self.intersector_tol)
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
             ratio = self._analyze_face(face)
@@ -60,7 +63,7 @@ class UndercutAnalyzer(BaseAnalyzer):
         total_points = 0
         trapped_points = 0
 
-        for u, v in yield_face_uv_grid(face, self.samples, 0.01):
+        for u, v in yield_face_uv_grid(face, self.samples, self.margin):
             total_points += 1
 
             if self._is_point_trapped(face, u, v):
@@ -106,7 +109,7 @@ class UndercutAnalyzer(BaseAnalyzer):
         if not self.intersector.IsDone():
             return False
 
-        self_hit_threshold = 0.05  ## mm
+        self_hit_threshold = self.self_hit_threshold  ## mm
 
         for i in range(1, self.intersector.NbPnt() + 1):
             hit_pnt = self.intersector.Pnt(i)

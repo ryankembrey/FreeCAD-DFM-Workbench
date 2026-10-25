@@ -44,7 +44,9 @@ class OverhangAnalyzer(BaseAnalyzer):
         return "Overhang Analyzer"
 
     def resolve_prefs(self, prefs: dict) -> None:
-        return super().resolve_prefs(prefs)
+        self.samples = prefs.get("OverhangSamples", 15)
+        self.margin = prefs.get("OverhangMargin", 0.01)
+        self.bed_tolerance = prefs.get("OverhangBedTolerance", 0.5)
 
     def execute(
         self,
@@ -55,10 +57,10 @@ class OverhangAnalyzer(BaseAnalyzer):
         check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
     ) -> dict[tuple[str, int], float]:
+        self.resolve_prefs(kwargs.get("prefs", {}))
         self.print_orientation = kwargs.get(
             ProcessRequirement.PRINT_ORIENTATION.name, gp_Dir(0, 0, 1)
         )
-        self.samples = kwargs.get("samples", 15)
         self.face_index = face_index
 
         self.bed_height = calculate_bed_height(shape, self.print_orientation)
@@ -78,7 +80,7 @@ class OverhangAnalyzer(BaseAnalyzer):
         height = gp_Vec(pnt.XYZ()).Dot(gp_Vec(self.print_orientation))
 
         # TODO: Investigate tolerance here
-        return math.isclose(height, self.bed_height, abs_tol=0.5)
+        return math.isclose(height, self.bed_height, abs_tol=self.bed_tolerance)
 
     def _get_overhang_for_face(self, face: TopoDS_Face) -> Optional[float]:
         """Calculates the maximum overhang angle in degrees for the given face."""
@@ -94,7 +96,7 @@ class OverhangAnalyzer(BaseAnalyzer):
             return self._calculate_overhang_angle(normal_dir) if normal_dir else None
 
         max_overhang = 0.0
-        for u, v in yield_face_uv_grid(face, self.samples, margin=0.01):
+        for u, v in yield_face_uv_grid(face, self.samples, margin=self.margin):
             if self._is_on_bed(surface, u, v):
                 continue
 

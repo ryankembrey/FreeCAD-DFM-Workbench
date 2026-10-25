@@ -248,6 +248,12 @@ class SphereThicknessPanel(AnalyzerPanel):
                     "Ray intersector tolerance",
                     tooltip="Sets the load tolerance of the shape intersector.",
                 ),
+                ToleranceField(
+                    "SphereDeflection",
+                    "Extrema deflection",
+                    default=1e-3,
+                    tooltip="Sets the deflection tolerance for the BRepExtrema distance tool.",
+                ),
             ],
         ),
     ]
@@ -340,6 +346,17 @@ class BridgeSpanPanel(AnalyzerPanel):
             "Detection Settings",
             [
                 FloatField(
+                    "BridgeHorizontalTolerance",
+                    "Horizontal tolerance",
+                    default=1.0,
+                    max=10.0,
+                    step=0.1,
+                    decimals=2,
+                    suffix="°",
+                    tooltip="Maximum angle from horizontal (degrees) for a face to be "
+                    "considered a bridge candidate.",
+                ),
+                FloatField(
                     "BridgeBedTolerance",
                     "Bed contact tolerance",
                     default=0.5,
@@ -348,6 +365,16 @@ class BridgeSpanPanel(AnalyzerPanel):
                     suffix=" mm",
                     tooltip="How close to the lowest point of the model a face must sit to be "
                     "considered resting on the bed, and so exempt from bridging.",
+                ),
+                FloatField(
+                    "BridgeProbeDepth",
+                    "Probe depth",
+                    default=0.01,
+                    max=1.0,
+                    step=0.005,
+                    suffix=" mm",
+                    tooltip="Distance below the face to probe for solid material when "
+                    "detecting supported edges.",
                 ),
             ],
         ),
@@ -359,6 +386,172 @@ class BridgeSpanPanel(AnalyzerPanel):
                     "Solid classifier tolerance",
                     default=1e-6,
                     tooltip="Sets the tolerance of the inside/outside test used to find walls.",
+                ),
+            ],
+        ),
+    ]
+
+
+class DraftAnglePanel(AnalyzerPanel):
+    title = "Draft Angle"
+    groups = [
+        FieldGroup(
+            "Sampling Settings",
+            [
+                IntField(
+                    "DraftSamples",
+                    "Sampling density",
+                    default=20,
+                    min=3,
+                    max=100,
+                    suffix="²",
+                    tooltip="Number of UV samples per axis for curved faces.",
+                ),
+                FloatField(
+                    "DraftMargin",
+                    "Boundary margin",
+                    default=0.01,
+                    max=0.495,
+                    step=0.005,
+                    suffix="%",
+                    tooltip="UV boundary margin. Prevents sampling too close to face edges.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Algorithm Settings",
+            [
+                ToleranceField(
+                    "DraftClassifierTol",
+                    "Solid classifier tolerance",
+                    default=1e-6,
+                    tooltip="Tolerance for the mold-side classifier that determines "
+                    "core vs. cavity faces.",
+                ),
+            ],
+        ),
+    ]
+
+
+class OverhangPanel(AnalyzerPanel):
+    title = "Overhang"
+    groups = [
+        FieldGroup(
+            "Sampling Settings",
+            [
+                IntField(
+                    "OverhangSamples",
+                    "Sampling density",
+                    default=15,
+                    min=3,
+                    max=100,
+                    suffix="²",
+                    tooltip="Number of UV samples per axis for curved faces.",
+                ),
+                FloatField(
+                    "OverhangMargin",
+                    "Boundary margin",
+                    default=0.01,
+                    max=0.495,
+                    step=0.005,
+                    suffix="%",
+                    tooltip="UV boundary margin. Prevents sampling too close to face edges.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Detection Settings",
+            [
+                FloatField(
+                    "OverhangBedTolerance",
+                    "Bed contact tolerance",
+                    default=0.5,
+                    max=5.0,
+                    step=0.05,
+                    suffix=" mm",
+                    tooltip="Height tolerance for considering a face to be resting "
+                    "on the print bed.",
+                ),
+            ],
+        ),
+    ]
+
+
+class UndercutPanel(AnalyzerPanel):
+    title = "Undercut"
+    groups = [
+        FieldGroup(
+            "Sampling Settings",
+            [
+                IntField(
+                    "UndercutSamples",
+                    "Sampling density",
+                    default=10,
+                    min=3,
+                    max=100,
+                    suffix="²",
+                    tooltip="Number of UV samples per axis for each face.",
+                ),
+                FloatField(
+                    "UndercutMargin",
+                    "Boundary margin",
+                    default=0.01,
+                    max=0.495,
+                    step=0.005,
+                    suffix="%",
+                    tooltip="UV boundary margin. Prevents sampling too close to face edges.",
+                ),
+            ],
+        ),
+        FieldGroup(
+            "Algorithm Settings",
+            [
+                ToleranceField(
+                    "UndercutIntersectorTol",
+                    "Ray intersector tolerance",
+                    default=1e-6,
+                    tooltip="Load tolerance for the shape intersector used in ray casting.",
+                ),
+                FloatField(
+                    "UndercutSelfHitThreshold",
+                    "Self-hit threshold",
+                    default=0.05,
+                    max=1.0,
+                    step=0.01,
+                    suffix=" mm",
+                    tooltip="Minimum distance from the ray origin before a hit is "
+                    "considered a blocking surface rather than a self-intersection.",
+                ),
+            ],
+        ),
+    ]
+
+
+class SharpCornersPanel(AnalyzerPanel):
+    title = "Sharp Corners"
+    groups = [
+        FieldGroup(
+            "Detection Thresholds",
+            [
+                IntField(
+                    "SharpExternalMinAngle",
+                    "Min external corner angle",
+                    default=1,
+                    min=0,
+                    max=90,
+                    suffix="°",
+                    tooltip="Edges with a dihedral angle below this value (degrees) "
+                    "are not flagged as sharp external corners.",
+                ),
+                IntField(
+                    "SharpInternalMinAngle",
+                    "Min internal corner angle",
+                    default=1,
+                    min=0,
+                    max=90,
+                    suffix="°",
+                    tooltip="Edges with a dihedral angle below this value (degrees) "
+                    "are not flagged as sharp internal corners.",
                 ),
             ],
         ),
@@ -454,6 +647,10 @@ class DFMPreferencesAnalyzers:
         self._register(SphereThicknessPanel())
         self._register(RayThicknessPanel())
         self._register(BridgeSpanPanel())
+        self._register(DraftAnglePanel())
+        self._register(OverhangPanel())
+        self._register(UndercutPanel())
+        self._register(SharpCornersPanel())
 
         self.combo.currentIndexChanged.connect(self.stack.setCurrentIndex)
 

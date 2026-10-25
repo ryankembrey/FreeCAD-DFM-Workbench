@@ -47,6 +47,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         self.enable_multithread = prefs.get("SphereMultiThreaded", False)
         self.max_shrink_iters = prefs.get("SphereMaxShrinkIters", 10)
         self.intersector_tol = prefs.get("SphereIntersectorTol", 1e-3)
+        self.deflection = prefs.get("SphereDeflection", 1e-3)
 
     def execute(
         self,
@@ -86,7 +87,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
 
         self.dist_tool = BRepExtrema_DistShapeShape()
         self.dist_tool.SetMultiThread(self.enable_multithread)
-        self.dist_tool.SetDeflection(1e-3)
+        self.dist_tool.SetDeflection(self.deflection)
         self.dist_tool.LoadS2(face_compound)
 
         self.shared_vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Vertex()

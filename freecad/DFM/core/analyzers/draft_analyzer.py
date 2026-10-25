@@ -48,7 +48,9 @@ class DraftAnalyzer(BaseAnalyzer):
         return "Draft Analyzer"
 
     def resolve_prefs(self, prefs: dict) -> None:
-        pass
+        self.samples = prefs.get("DraftSamples", 20)
+        self.margin = prefs.get("DraftMargin", 0.01)
+        self.classifier_tol = prefs.get("DraftClassifierTol", 1e-6)
 
     def execute(
         self,
@@ -60,8 +62,8 @@ class DraftAnalyzer(BaseAnalyzer):
         **kwargs,
     ):
         """Runs a full draft analysis on an inputted shape."""
+        self.resolve_prefs(kwargs.get("prefs", {}))
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
-        self.samples = kwargs.get("samples", 20)
 
         self.face_index = face_index
         self.core_cavity_mapping = self.classify_moldside(shape)
@@ -95,7 +97,7 @@ class DraftAnalyzer(BaseAnalyzer):
         """
         min_draft_angle = float("inf")
 
-        for u, v in yield_face_uv_grid(face, self.samples, margin=0.01):
+        for u, v in yield_face_uv_grid(face, self.samples, margin=self.margin):
             normal_dir = get_face_uv_normal(face, u, v)
             if not normal_dir:
                 FreeCAD.Console.PrintError(f"Normal returned None for face {face.__hash__()}")
@@ -149,7 +151,7 @@ class DraftAnalyzer(BaseAnalyzer):
     def classify_moldside(self, shape: TopoDS_Shape) -> dict[int, MoldSide]:
         """Returns a mapping of TopoDS_Face to MoldSide"""
         intersector = IntCurvesFace_ShapeIntersector()
-        intersector.Load(shape, 1e-6)
+        intersector.Load(shape, self.classifier_tol)
 
         return {
             i: moldside_of_face(face, intersector, self.pull_direction)
