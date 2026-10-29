@@ -10,7 +10,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 
-from ..core.processes.process import Material, Process, RuleFeedback, RuleLimit
+from ..core.processes.process import Material, Process, ProcessArchetype, RuleFeedback, RuleLimit
 from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import Criticality, Rulebook
 
@@ -80,12 +80,13 @@ class ProcessLibraryModel:
             self.active_process.rule_feedback[rule] = RuleFeedback(warning_msg, error_msg)
             self.mark_dirty()
 
-    def add_process(self, name: str, category: str) -> bool:
+    def add_process(self, name: str, category: str, archetype: ProcessArchetype = ProcessArchetype.GENERIC) -> bool:
         if self.registry.get_process_by_name(name):
             return False
         new_process = Process(
             name=name,
             category=category,
+            archetype=archetype,
             description="New manufacturing process.",
             active_rules=[],
             materials={
@@ -485,6 +486,7 @@ class MaterialEditView(QtCore.QObject):
         default_material: Optional[Material],
         active_rules: list,
         editable: bool = True,
+        archetype: Optional[ProcessArchetype] = None,
     ) -> None:
         """Full rebuild. Used when switching material or process."""
         scroll_pos = self.scroll.verticalScrollBar().value()
@@ -507,6 +509,7 @@ class MaterialEditView(QtCore.QObject):
                 is_default_material=(material.name == "Default"),
                 is_active=is_active,
                 parent=self._container,
+                archetype=archetype,
             )
             card.set_editable(editable)
             if editable:
@@ -670,6 +673,47 @@ class AddProcessDialog(_NamedCategoryDialog):
             parent=parent,
         )
 
+        # Insert archetype combo between Name and Category
+        self.archetype_combo = QtWidgets.QComboBox()
+        self.archetype_combo.setMinimumHeight(32)
+        for arch in ProcessArchetype:
+            self.archetype_combo.addItem(arch.label, arch)
+        self.archetype_combo.setToolTip(
+            "Determines how thresholds are derived.\n"
+            "Generic: all thresholds from material data.\n"
+            "Injection Molding: material-based with draft/undercut support.\n"
+            "FDM 3D Printing: wall thickness from nozzle diameter."
+        )
+
+        form_layout: QtWidgets.QFormLayout = self.layout()  # type: ignore
+        # Row 0 = Name, Row 1 = Category, Row 2 = Buttons
+        # Insert archetype at row 1, pushing Category to row 2
+        form_layout.insertRow(1, "Archetype:", self.archetype_combo)
+
+        # Auto-fill category when archetype changes
+        self._user_edited_category = False
+        self.cat_combo.lineEdit().textEdited.connect(self._on_category_edited)
+        self.archetype_combo.currentIndexChanged.connect(self._on_archetype_changed)
+        # Set initial category from default archetype
+        self._on_archetype_changed()
+
+    def _on_archetype_changed(self):
+        """Auto-fill category with the archetype's label unless the user typed their own."""
+        if not self._user_edited_category:
+            arch = self.archetype_combo.currentData()
+            if arch:
+                self.cat_combo.setCurrentText(arch.label)
+
+    def _on_category_edited(self):
+        """Once the user manually types in the category, stop overwriting it."""
+        self._user_edited_category = True
+
+    def get_data(self) -> tuple[str, str, ProcessArchetype]:  # type: ignore[override]
+        name = self.name_edit.text().strip()
+        category = self.cat_combo.currentText().strip()
+        archetype = self.archetype_combo.currentData()
+        return name, category, archetype
+
 
 # =============================================================================
 
@@ -791,7 +835,8 @@ class ProcessLibraryController(QtCore.QObject):
         default_mat = process.materials.get("Default")
         if default_mat:
             self.view.material_edit_view.populate(
-                default_mat, default_mat, process.active_rules, editable=False
+                default_mat, default_mat, process.active_rules,
+                editable=False, archetype=process.archetype,
             )
 
     def _display_material(self, process_name: str, mat_name: str):
@@ -803,7 +848,8 @@ class ProcessLibraryController(QtCore.QObject):
         self.view.set_material_edit_title(f"Editing {material.name}")
         default_mat = process.materials.get("Default", material)
         self.view.material_edit_view.populate(
-            material, default_mat, process.active_rules, editable=True
+            material, default_mat, process.active_rules,
+            editable=True, archetype=process.archetype,
         )
 
     def on_new_request(self):
@@ -859,13 +905,13 @@ class ProcessLibraryController(QtCore.QObject):
         dlg = AddProcessDialog(self.model.registry.get_categories(), self.view)
         if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
-        name, category = dlg.get_data()
+        name, category, archetype = dlg.get_data()
         if not name or not category:
             QtWidgets.QMessageBox.warning(
                 self.view, "Invalid Input", "Both name and category are required."
             )
             return
-        if not self.model.add_process(name, category):
+        if not self.model.add_process(name, category, archetype):
             QtWidgets.QMessageBox.warning(
                 self.view, "Duplicate", f"Process '{name}' already exists."
             )

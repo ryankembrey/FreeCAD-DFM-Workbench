@@ -254,10 +254,91 @@ class PlaneRequirement(RequirementHandler):
 
 # =============================================================================
 
+
+_NUMERIC_DEFAULTS: dict[ProcessRequirement, tuple[float, float, float, float, str, str]] = {
+    #                                          default, min, max,  step, unit, suffix
+    ProcessRequirement.NOZZLE_DIAMETER: (0.4, 0.1, 2.0, 0.05, "mm", "Nozzle Diameter"),
+    ProcessRequirement.LAYER_HEIGHT: (0.2, 0.01, 1.0, 0.05, "mm", "Layer Height"),
+}
+
+
+class NumericRequirement(RequirementHandler):
+    """A numeric value entered via a spinbox (no 3D picking needed)."""
+
+    def __init__(self, requirement: ProcessRequirement):
+        super().__init__(requirement)
+        defaults = _NUMERIC_DEFAULTS.get(requirement)
+        if defaults:
+            self.default_val, self.min_val, self.max_val, self.step, self.unit, self._label = defaults
+        else:
+            self.default_val, self.min_val, self.max_val, self.step, self.unit, self._label = (
+                1.0, 0.0, 100.0, 0.1, "", requirement.name.replace("_", " ").title(),
+            )
+        self.spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        # Set the default value immediately
+        self.value = self.default_val
+
+    @property
+    def label(self) -> str:
+        return self._label
+
+    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
+        """Create a label + spinbox row. No pick button needed."""
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
+
+        lbl = QtWidgets.QLabel(self._label)
+        lbl.setMinimumHeight(28)
+        row.addWidget(lbl, 1)
+
+        self.spin = QtWidgets.QDoubleSpinBox()
+        self.spin.setMinimumHeight(28)
+        self.spin.setRange(self.min_val, self.max_val)
+        self.spin.setSingleStep(self.step)
+        self.spin.setDecimals(2)
+        self.spin.setSuffix(f" {self.unit}")
+        self.spin.setValue(self.default_val)
+        self.spin.valueChanged.connect(self._on_value_changed)
+        row.addWidget(self.spin, 1)
+
+        layout.addLayout(row)
+
+    def _on_value_changed(self, val: float):
+        self.value = val
+
+    def detach(self) -> None:
+        self.spin = None
+
+    def apply_selection(self) -> bool:
+        # No 3D selection needed; value comes from the spinbox
+        return True
+
+    def is_satisfied(self) -> bool:
+        return self.value is not None
+
+    def clear(self) -> None:
+        self.value = self.default_val
+        if self.spin:
+            self.spin.setValue(self.default_val)
+
+    def refresh_display(self) -> None:
+        pass
+
+    def reset_ui(self) -> None:
+        pass
+
+    def enter_picking_ui(self) -> None:
+        pass
+
+
+# =============================================================================
+
 REQUIREMENT_HANDLER_TYPES: dict[ProcessRequirement, type[RequirementHandler]] = {
     ProcessRequirement.PULL_DIRECTION: VectorRequirement,
     ProcessRequirement.PRINT_ORIENTATION: VectorRequirement,
     ProcessRequirement.NEUTRAL_PLANE: PlaneRequirement,
+    ProcessRequirement.NOZZLE_DIAMETER: NumericRequirement,
+    ProcessRequirement.LAYER_HEIGHT: NumericRequirement,
 }
 
 
@@ -648,6 +729,10 @@ class TaskSetup:
             except KeyError:
                 App.Console.PrintWarning(f"Rule '{rule.name}' not found in Rulebook.\n")
                 continue
+
+        # Merge in archetype-level requirements (e.g. NOZZLE_DIAMETER for FDM)
+        requirements.update(self.process.archetype.extra_requirements)
+
         return requirements
 
     def _missing_requirements(self) -> list[str]:

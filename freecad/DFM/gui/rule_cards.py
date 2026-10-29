@@ -6,7 +6,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..core.processes.process import RuleLimit
+from ..core.processes.process import ProcessArchetype, RuleLimit
 from ..core.rules import Rulebook, RuleShape
 
 
@@ -501,6 +501,40 @@ class BinaryCard(BaseRuleCard):
 # =============================================================================
 
 
+class DerivedRuleCard(BaseRuleCard):
+    """Card for rules whose thresholds are computed by the archetype at runtime.
+
+    Shows an italic hint instead of editable input fields.
+    """
+
+    def __init__(
+        self,
+        rule: Rulebook,
+        material_limit: Optional[RuleLimit],
+        default_limit: Optional[RuleLimit],
+        is_default_material: bool,
+        is_active: bool,
+        hint: str = "",
+        parent: Optional[QtWidgets.QWidget] = None,
+    ):
+        self._hint = hint
+        super().__init__(rule, material_limit, default_limit, is_default_material, is_active, parent)
+
+    def _build_fields(self) -> None:
+        lbl = QtWidgets.QLabel(self._hint)
+        lbl.setStyleSheet("font-style: italic; font-size: 11px; color: palette(mid);")
+        lbl.setWordWrap(True)
+        lbl.setMinimumWidth(180)
+        self._fields_row.addWidget(lbl)
+
+    def _load_values(self) -> None:
+        # No editable fields to load
+        pass
+
+
+# =============================================================================
+
+
 _CARD_CLASSES: dict[RuleShape, type[BaseRuleCard]] = {
     RuleShape.TARGET_AND_LIMIT: TargetAndLimitCard,
     RuleShape.TARGET_ONLY: TargetOnlyCard,
@@ -517,6 +551,17 @@ def build_card(
     is_default_material: bool,
     is_active: bool,
     parent: Optional[QtWidgets.QWidget] = None,
+    archetype: Optional[ProcessArchetype] = None,
 ) -> BaseRuleCard:
+    # If the archetype derives this rule at runtime, show a hint instead of inputs
+    if archetype is not None:
+        derived = archetype.derived_rules
+        if rule in derived:
+            return DerivedRuleCard(
+                rule, material_limit, default_limit,
+                is_default_material, is_active,
+                hint=derived[rule], parent=parent,
+            )
+
     card_cls = _CARD_CLASSES[rule.shape]
     return card_cls(rule, material_limit, default_limit, is_default_material, is_active, parent)

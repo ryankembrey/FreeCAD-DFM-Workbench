@@ -92,6 +92,7 @@ class ProcessRegistry:
         data = {
             "name": process.name,
             "category": process.category,
+            "archetype": process.archetype.name,
             "description": process.description,
             "active_rules": [r.name for r in process.active_rules],
             "rule_feedback": {r.name: asdict(f) for r, f in process.rule_feedback.items()},

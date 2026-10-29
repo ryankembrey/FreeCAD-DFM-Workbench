@@ -15,6 +15,7 @@ from ..core.registries.checks_registry import get_check_class
 from ..core.registries.analyzers_registry import get_analyzer_class
 from ..core.models import CheckResult, ProcessRequirement
 from ..core.processes.process import RuleFeedback, RuleLimit
+from ..core.processes.threshold_resolvers import get_resolver
 from ..core.utils.conversion import freecad_to_ocp
 from ..core.utils.geometry import EdgeIndex, FaceIndex
 from .prefs import dfm_params
@@ -106,7 +107,9 @@ class AnalysisRunner:
                     continue
                 current_step += iter_count
 
-            rule_config = self._resolve_rule_config(process, target_material, rule_id)
+            rule_config = self._resolve_rule_config(
+                process, target_material, rule_id, **kwargs,
+            )
 
             if timing:
                 timing.start(rule_id.name)
@@ -183,7 +186,9 @@ class AnalysisRunner:
             if analyzer_id not in self.analyzer_cache:
                 continue
 
-            rule_config = self._resolve_rule_config(process, target_material, rule_id)
+            rule_config = self._resolve_rule_config(
+                process, target_material, rule_id, **kwargs,
+            )
 
             check_results = self._execute_check(
                 rule_id,
@@ -228,30 +233,12 @@ class AnalysisRunner:
         total_steps = sum(analyzer_counts.values()) + len(active_rules)
         return active_rules, analyzer_counts, total_steps
 
-    def _resolve_rule_config(self, process: Any, target_material: Any, rule_id: Any) -> RuleLimit:
-        """Build a RuleLimit by layering the Default material config with any material override."""
-        config = RuleLimit(target="N/A", limit="N/A", binary_severity=None)
-
-        default_material = process.materials.get("Default")
-        if default_material and rule_id in default_material.rule_limits:
-            default_limit = default_material.rule_limits[rule_id]
-            config.target = default_limit.target
-            config.limit = default_limit.limit
-            config.binary_severity = default_limit.binary_severity
-
-        if target_material and rule_id in target_material.rule_limits:
-            override = target_material.rule_limits[rule_id]
-            if override.target not in ("N/A", "", None):
-                config.target = override.target
-            if override.limit not in ("N/A", "", None):
-                config.limit = override.limit
-            if override.binary_severity is not None:
-                config.binary_severity = override.binary_severity
-
-        if config.binary_severity is None:
-            config.binary_severity = "ERROR"
-
-        return config
+    def _resolve_rule_config(
+        self, process: Any, target_material: Any, rule_id: Any, **kwargs: Any,
+    ) -> RuleLimit:
+        """Build a RuleLimit by delegating to the process archetype's resolver."""
+        resolver = get_resolver(process.archetype)
+        return resolver.resolve(rule_id, process, target_material, **kwargs)
 
     def _run_analyzer(
         self,

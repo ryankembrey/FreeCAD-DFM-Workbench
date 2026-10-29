@@ -3,9 +3,92 @@
 # SPDX-FileNotice: Part of the DFM addon.
 
 from dataclasses import dataclass, field, fields
+from enum import Enum
 from typing import Optional
 
+import FreeCAD as App  # type: ignore
+
 from ...core.rules import Criticality, Rulebook
+
+
+class ProcessArchetype(Enum):
+    """Defines how a process derives its rule thresholds.
+
+    Each archetype encodes the physics of a manufacturing process family.
+    Users pick an archetype when creating a new process; the archetype
+    determines which rules make sense and how thresholds are resolved.
+    """
+
+    GENERIC = "GENERIC"
+    INJECTION_MOLDING = "INJECTION_MOLDING"
+    FDM = "FDM"
+
+    @property
+    def label(self) -> str:
+        return {
+            "GENERIC": "Generic",
+            "INJECTION_MOLDING": "Injection Molding",
+            "FDM": "FDM 3D Printing",
+        }.get(self.name, self.name.replace("_", " ").title())
+
+    @property
+    def description(self) -> str:
+        return {
+            "GENERIC": "General-purpose process. All thresholds come from material data.",
+            "INJECTION_MOLDING": (
+                "Thresholds derived from material properties. "
+                "Requires a pull direction for draft and undercut analysis."
+            ),
+            "FDM": (
+                "Wall thickness derived from nozzle diameter. "
+                "Overhang and bridge thresholds from material. "
+                "Requires print orientation and nozzle diameter."
+            ),
+        }.get(self.name, "")
+
+    @property
+    def extra_requirements(self) -> set:
+        """ProcessRequirements needed by the archetype's threshold resolver,
+        beyond what analyzers already declare.
+
+        Imported lazily to avoid circular imports with core.models.
+        """
+        from ..models import ProcessRequirement
+
+        return {
+            "GENERIC": set(),
+            "INJECTION_MOLDING": set(),
+            "FDM": {ProcessRequirement.NOZZLE_DIAMETER},
+        }.get(self.name, set())
+
+    @property
+    def derived_rules(self) -> dict:
+        """Rules whose thresholds are computed by the archetype at runtime,
+        not edited manually. Returns {Rulebook member: hint string}.
+
+        Imported lazily to avoid circular imports with core.rules.
+        """
+        from ..rules import Rulebook
+
+        return {
+            "GENERIC": {},
+            "INJECTION_MOLDING": {},
+            "FDM": {
+                Rulebook.MIN_WALL_THICKNESS: (
+                    "Derived from nozzle diameter during DFM analysis setup."
+                ),
+            },
+        }.get(self.name, {})
+
+
+# Mapping from category strings to archetypes for backward compatibility.
+# When loading a YAML file that has no 'archetype' field, we infer from category.
+_CATEGORY_TO_ARCHETYPE: dict[str, ProcessArchetype] = {
+    "Injection Molding": ProcessArchetype.INJECTION_MOLDING,
+    "FDM": ProcessArchetype.FDM,
+    "FDM 3D Printing": ProcessArchetype.FDM,
+    "3D Printing": ProcessArchetype.FDM,
+}
 
 
 @dataclass
@@ -64,6 +147,7 @@ class Process:
     name: str
     category: str
     description: str = ""
+    archetype: ProcessArchetype = ProcessArchetype.GENERIC
     active_rules: list[Rulebook] = field(default_factory=list)
     materials: dict[str, Material] = field(default_factory=dict)
     rule_feedback: dict[Rulebook, RuleFeedback] = field(default_factory=dict)
@@ -76,6 +160,28 @@ class Process:
         raw_feedback = data.pop("rule_feedback", {})
         raw_criticality = data.pop("rule_criticality", {})
 
+        # --- Archetype resolution (backward compatible) ---
+        raw_archetype = data.pop("archetype", None)
+        if raw_archetype:
+            try:
+                archetype = ProcessArchetype[raw_archetype]
+            except KeyError:
+                App.Console.PrintWarning(
+                    f"DFM: Unknown archetype '{raw_archetype}' in process "
+                    f"'{data.get('name')}'. Falling back to GENERIC.\n"
+                )
+                archetype = ProcessArchetype.GENERIC
+        else:
+            # Infer from category for old YAML files
+            category = data.get("category", "")
+            archetype = _CATEGORY_TO_ARCHETYPE.get(category, ProcessArchetype.GENERIC)
+            if archetype != ProcessArchetype.GENERIC:
+                App.Console.PrintMessage(
+                    f"DFM: Process '{data.get('name')}' has no archetype field. "
+                    f"Inferred '{archetype.name}' from category '{category}'. "
+                    f"Save the process to persist this.\n"
+                )
+
         valid_field_names = {f.name for f in fields(cls)}
         clean_data = {k: v for k, v in data.items() if k in valid_field_names}
 
@@ -86,7 +192,7 @@ class Process:
             except KeyError:
                 print(f"Warning: Rule '{r_id}' in process '{data.get('name')}' is invalid.")
 
-        process = cls(**clean_data, active_rules=active_rules)
+        process = cls(**clean_data, active_rules=active_rules, archetype=archetype)
 
         for r_id, f_data in raw_feedback.items():
             try:
