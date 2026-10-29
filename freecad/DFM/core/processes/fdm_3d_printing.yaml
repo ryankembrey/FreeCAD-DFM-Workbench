@@ -1,0 +1,166 @@
+name: FDM 3D Printing
+category: Additive Manufacturing
+archetype: FDM
+description: >-
+    Fused Deposition Modelling (FDM) builds parts layer-by-layer by extruding
+    thermoplastic filament through a heated nozzle. Wall thickness limits are
+    derived from nozzle diameter at analysis time. Overhang and bridge thresholds
+    depend on material cooling behaviour.
+
+active_rules:
+- MAX_OVERHANG_ANGLE
+- MAX_BRIDGE_SPAN
+- MIN_WALL_THICKNESS
+
+rule_feedback:
+    MIN_WALL_THICKNESS:
+        warning_msg: >-
+            Wall thickness {measured} is below the recommended {target}
+            (2x nozzle diameter). Too narrow to fit two extrusion widths,
+            so perimeters will not fuse properly. Expect poor layer bonding
+            and a rough surface.
+        error_msg: >-
+            Wall thickness {measured} is below the {limit} minimum
+            (1x nozzle diameter). The slicer cannot lay down a single
+            extrusion line in this gap and will either skip it or force an
+            under-extruded pass. Widen to at least one nozzle width.
+    MAX_OVERHANG_ANGLE:
+        warning_msg: >-
+            Overhang angle {measured} exceeds the recommended {target}.
+            Each layer overhangs further than the material can self-support.
+            Expect drooping and rough texture on the underside.
+        error_msg: >-
+            Overhang angle {measured} exceeds the {limit} limit. Extruded
+            filament has nothing to rest on and will sag or curl. Add
+            supports, chamfer the edge, or reorient the part.
+    MAX_BRIDGE_SPAN:
+        warning_msg: >-
+            Bridge span {measured} exceeds the recommended {target}.
+            Unsupported strands will sag in the middle, leaving a rough
+            underside that later layers cannot fully recover.
+        error_msg: >-
+            Bridge span {measured} exceeds the {limit} limit. Filament
+            will droop and may detach from one anchor, leaving a failed
+            region. Add a support pillar or redesign to shorten the gap.
+
+rule_criticality:
+    MAX_OVERHANG_ANGLE: HIGH
+    MAX_BRIDGE_SPAN: HIGH
+    MIN_WALL_THICKNESS: CRITICAL
+
+materials:
+    Default:
+        category: Default
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '45'
+                limit: '55'
+            MAX_BRIDGE_SPAN:
+                target: '15'
+                limit: '40'
+            MIN_WALL_THICKNESS:
+                target: '1.2'
+                limit: '0.8'
+
+    PLA:
+        category: Standard Thermoplastic
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '50'
+                limit: '60'
+            MAX_BRIDGE_SPAN:
+                target: '20'
+                limit: '50'
+
+    PLA-CF (Carbon Fiber):
+        category: Composite Filament
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '48'
+                limit: '55'
+            MAX_BRIDGE_SPAN:
+                target: '18'
+                limit: '45'
+
+    PETG:
+        category: Standard Thermoplastic
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '42'
+                limit: '50'
+            MAX_BRIDGE_SPAN:
+                target: '12'
+                limit: '35'
+
+    ABS:
+        category: Engineering Thermoplastic
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '40'
+                limit: '45'
+            MAX_BRIDGE_SPAN:
+                target: '10'
+                limit: '30'
+
+    ASA:
+        category: Engineering Thermoplastic
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '40'
+                limit: '45'
+            MAX_BRIDGE_SPAN:
+                target: '10'
+                limit: '30'
+
+    TPU (Flexible):
+        category: Flexible Filament
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '35'
+                limit: '40'
+            MAX_BRIDGE_SPAN:
+                target: '8'
+                limit: '20'
+            MIN_WALL_THICKNESS:
+                target: '1.6'
+                limit: '1.2'
+
+    PA / Nylon:
+        category: Engineering Thermoplastic
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '38'
+                limit: '45'
+            MAX_BRIDGE_SPAN:
+                target: '10'
+                limit: '30'
+
+    PA-CF (Nylon Carbon Fiber):
+        category: Composite Filament
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '42'
+                limit: '50'
+            MAX_BRIDGE_SPAN:
+                target: '15'
+                limit: '40'
+
+    PC (Polycarbonate):
+        category: Engineering Thermoplastic
+        is_active: true
+        rule_limits:
+            MAX_OVERHANG_ANGLE:
+                target: '38'
+                limit: '45'
+            MAX_BRIDGE_SPAN:
+                target: '10'
+                limit: '30'
