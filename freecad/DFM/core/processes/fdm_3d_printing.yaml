@@ -11,6 +11,7 @@ active_rules:
 - MAX_OVERHANG_ANGLE
 - MAX_BRIDGE_SPAN
 - MIN_WALL_THICKNESS
+- MAX_BED_CONTACT_AREA
 
 rule_feedback:
     MIN_WALL_THICKNESS:
@@ -42,11 +43,23 @@ rule_feedback:
             Bridge span {measured} exceeds the {limit} limit. Filament
             will droop and may detach from one anchor, leaving a failed
             region. Add a support pillar or redesign to shorten the gap.
+    MAX_BED_CONTACT_AREA:
+        warning_msg: >-
+            Bed contact area {measured} exceeds the recommended {target}.
+            Large flat surfaces cool unevenly and can pull away from the
+            bed at the corners. Consider adding mouse ears or splitting
+            the face with a relief groove.
+        error_msg: >-
+            Bed contact area {measured} exceeds the {limit} limit. A flat
+            footprint this large will almost certainly warp as the part
+            cools. Add a brim, use relief slots, or redesign to reduce
+            unbroken bed contact.
 
 rule_criticality:
     MAX_OVERHANG_ANGLE: HIGH
     MAX_BRIDGE_SPAN: HIGH
     MIN_WALL_THICKNESS: CRITICAL
+    MAX_BED_CONTACT_AREA: MEDIUM
 
 materials:
     Default:
@@ -62,6 +75,9 @@ materials:
             MIN_WALL_THICKNESS:
                 target: '1.2'
                 limit: '0.8'
+            MAX_BED_CONTACT_AREA:
+                target: '5000'
+                limit: '10000'
 
     PLA:
         category: Standard Thermoplastic
@@ -106,6 +122,9 @@ materials:
             MAX_BRIDGE_SPAN:
                 target: '10'
                 limit: '30'
+            MAX_BED_CONTACT_AREA:
+                target: '2500'
+                limit: '5000'
 
     ASA:
         category: Engineering Thermoplastic
@@ -117,6 +136,9 @@ materials:
             MAX_BRIDGE_SPAN:
                 target: '10'
                 limit: '30'
+            MAX_BED_CONTACT_AREA:
+                target: '2500'
+                limit: '5000'
 
     TPU (Flexible):
         category: Flexible Filament
@@ -142,6 +164,9 @@ materials:
             MAX_BRIDGE_SPAN:
                 target: '10'
                 limit: '30'
+            MAX_BED_CONTACT_AREA:
+                target: '2000'
+                limit: '4000'
 
     PA-CF (Nylon Carbon Fiber):
         category: Composite Filament
@@ -164,3 +189,6 @@ materials:
             MAX_BRIDGE_SPAN:
                 target: '10'
                 limit: '30'
+            MAX_BED_CONTACT_AREA:
+                target: '2000'
+                limit: '4000'

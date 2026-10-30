@@ -359,3 +359,21 @@ def project_onto(pnt: gp_Pnt, direction: gp_Dir) -> float:
 
 def calculate_bed_height(shape, print_orientation: gp_Dir) -> float:
     return get_extent_along(shape, print_orientation)[0]
+
+
+def is_on_bed(pnt: gp_Pnt, bed_height: float, print_orientation: gp_Dir, tolerance: float = 0.5) -> bool:
+    """Check whether a 3D point sits on the print bed.
+
+    Projects *pnt* onto the *print_orientation* axis and compares the
+    result to *bed_height* within *tolerance*.
+    """
+    import math
+    height = project_onto(pnt, print_orientation)
+    return math.isclose(height, bed_height, abs_tol=tolerance)
+
+
+def face_area(face: TopoDS_Face) -> float:
+    """Return the surface area of a face in model units squared."""
+    props = GProp_GProps()
+    BRepGProp.SurfaceProperties_s(face, props)
+    return props.Mass()

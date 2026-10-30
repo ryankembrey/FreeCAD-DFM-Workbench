@@ -24,6 +24,7 @@ from ...core.utils.geometry import (
     get_face_uv_center,
     get_face_uv_normal,
     is_flat,
+    is_on_bed,
     project_onto,
 )
 
@@ -110,8 +111,8 @@ class BridgeSpanAnalyzer(BaseAnalyzer):
             return False
 
         surface = BRepAdaptor_Surface(face)
-        height = self._height_of(surface.Value(u_mid, v_mid))
-        return not math.isclose(height, self.bed_height, abs_tol=self.bed_tolerance)
+        pnt = surface.Value(u_mid, v_mid)
+        return not is_on_bed(pnt, self.bed_height, self.print_orientation, self.bed_tolerance)
 
     def _bridge_directions(self, face: TopoDS_Face) -> list[gp_Dir]:
         directions: list[gp_Dir] = []

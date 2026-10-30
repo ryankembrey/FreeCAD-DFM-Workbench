@@ -9,7 +9,7 @@ import FreeCAD as App  # type: ignore
 
 from OCP.TopoDS import TopoDS_Shape, TopoDS_Face
 from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.gp import gp_Dir, gp_Vec
+from OCP.gp import gp_Dir
 from OCP.GeomAbs import GeomAbs_Plane
 
 from ...core.base.base_analyzer import BaseAnalyzer
@@ -21,6 +21,7 @@ from ...core.utils.geometry import (
     calculate_bed_height,
     get_face_uv_center,
     get_face_uv_normal,
+    is_on_bed,
     yield_face_uv_grid,
 )
 
@@ -76,11 +77,7 @@ class OverhangAnalyzer(BaseAnalyzer):
     def _is_on_bed(self, surface: BRepAdaptor_Surface, u: float, v: float) -> bool:
         """Checks if a specific UV point on a face is touching the print bed."""
         pnt = surface.Value(u, v)
-
-        height = gp_Vec(pnt.XYZ()).Dot(gp_Vec(self.print_orientation))
-
-        # TODO: Investigate tolerance here
-        return math.isclose(height, self.bed_height, abs_tol=self.bed_tolerance)
+        return is_on_bed(pnt, self.bed_height, self.print_orientation, self.bed_tolerance)
 
     def _get_overhang_for_face(self, face: TopoDS_Face) -> Optional[float]:
         """Calculates the maximum overhang angle in degrees for the given face."""
