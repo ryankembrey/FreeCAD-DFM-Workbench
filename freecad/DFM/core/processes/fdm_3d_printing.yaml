@@ -1,4 +1,4 @@
-name: FDM 3D Printing
+name: FDM
 category: Additive Manufacturing
 archetype: FDM
 description: >-
@@ -185,7 +185,7 @@ materials:
                 target: '1.6'
                 limit: '1.2'
 
-    PA / Nylon:
+    PA:
         category: Engineering Thermoplastic
         is_active: true
         rule_limits:
@@ -199,7 +199,7 @@ materials:
                 target: '2000'
                 limit: '4000'
 
-    PA-CF (Nylon Carbon Fiber):
+    PA-CF (Carbon Fiber):
         category: Composite Filament
         is_active: true
         rule_limits:
@@ -210,7 +210,7 @@ materials:
                 target: '15'
                 limit: '40'
 
-    PC (Polycarbonate):
+    PC:
         category: Engineering Thermoplastic
         is_active: true
         rule_limits:

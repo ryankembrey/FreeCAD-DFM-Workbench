@@ -95,7 +95,7 @@ materials:
                 binary_severity: ERROR
             SHARP_EXTERNAL_CORNERS:
                 binary_severity: WARNING
-    PLA (Polylactic Acid):
+    PLA:
         category: Bio-Thermoplastic
         is_active: true
         rule_limits:
@@ -105,7 +105,7 @@ materials:
             MIN_DRAFT_ANGLE:
                 target: '2.0'
                 limit: '1.0'
-    ABS (Acrylonitrile Butadiene Styrene):
+    ABS:
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -115,7 +115,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.56'
                 limit: '4.5'
-    Acetal / POM (Polyoxymethylene):
+    Acetal / POM:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -125,7 +125,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.05'
                 limit: '4.0'
-    PMMA (Acrylic):
+    PMMA:
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -135,7 +135,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '12.70'
                 limit: '14.0'
-    LCP (Liquid Crystal Polymer):
+    LCP:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -155,7 +155,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '27.94'
                 limit: '30.0'
-    PA (Nylon):
+    PA:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -168,7 +168,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '2.92'
                 limit: '3.5'
-    PC (Polycarbonate):
+    PC:
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -181,7 +181,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
-    PET / PBT (Polyester):
+    PET / PBT:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -191,7 +191,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.18'
                 limit: '4.0'
-    PE (Polyethylene):
+    PE:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -204,7 +204,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '5.08'
                 limit: '6.0'
-    PSU (Polyphenylene Sulfide):
+    PSU:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -214,7 +214,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '4.57'
                 limit: '5.5'
-    PP (Polypropylene):
+    PP:
         category: Semi-Crystalline Thermoplastic
         is_active: true
         rule_limits:
@@ -227,7 +227,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
-    PS (Polystyrene):
+    PS:
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
@@ -237,7 +237,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
-    PUR (Polyurethane):
+    PUR:
         category: Elastomer
         is_active: true
         rule_limits:
@@ -247,7 +247,7 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '19.05'
                 limit: '21.0'
-    PVC (Polyvinyl Chloride):
+    PVC:
         category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
