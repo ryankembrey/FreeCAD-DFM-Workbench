@@ -18,8 +18,8 @@ from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, Rulebook
 
 from .rule_cards import (
-    ADD_SVG, CARD_STYLE, FILTER_SVG, IMPORT_SVG, REDO_SVG, REMOVE_SVG, UNDO_SVG, BaseRuleCard,
-    UnitInput,
+    ADD_SVG, CARD_STYLE, FILTER_SVG, GRID_VIEW_SVG, IMPORT_SVG, LIST_VIEW_SVG, REDO_SVG,
+    REMOVE_SVG, UNDO_SVG, BaseRuleCard, UnitInput,
     apply_svg_icon, build_card, limit_conflict_message,
 )
 from .rule_cards import _RESET_SVG, _resolve_badge
@@ -956,6 +956,11 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
 _PREF_PATH = "User parameter:BaseApp/Preferences/Mod/DFM"
 _PREF_OFF_COLLAPSED = "ProcessLibraryOffRulesCollapsed"
+_PREF_LAYOUT = "ProcessLibraryRuleLayout"  # "list" or "grid"
+
+# Grid view: smallest comfortable tile width, used to pick 2 or 3 columns.
+_GRID_TILE_MIN_WIDTH = 300
+_GRID_SPACING = 8
 
 
 def _get_pref_bool(name: str, default: bool) -> bool:
@@ -970,6 +975,46 @@ def _set_pref_bool(name: str, value: bool) -> None:
         App.ParamGet(_PREF_PATH).SetBool(name, value)
     except Exception:
         pass
+
+
+def _get_pref_str(name: str, default: str) -> str:
+    try:
+        return App.ParamGet(_PREF_PATH).GetString(name, default) or default
+    except Exception:
+        return default
+
+
+def _set_pref_str(name: str, value: str) -> None:
+    try:
+        App.ParamGet(_PREF_PATH).SetString(name, value)
+    except Exception:
+        pass
+
+
+class _CardGrid(QtWidgets.QWidget):
+    """Lays rule cards out in rows of *columns*, in the order given.
+
+    Cards not passed to ``place`` are hidden, so filtering never leaves gaps.
+    One column gives the list view.
+    """
+
+    def __init__(self, parent: QtWidgets.QWidget):
+        super().__init__(parent)
+        self._grid = QtWidgets.QGridLayout(self)
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        self._grid.setSpacing(_GRID_SPACING)
+        self._columns_used = 0
+
+    def place(self, cards: list, columns: int) -> None:
+        while self._grid.count():
+            self._grid.takeAt(0)
+        for i, card in enumerate(cards):
+            self._grid.addWidget(card, i // columns, i % columns)
+            card.show()
+        for col in range(max(columns, self._columns_used)):
+            self._grid.setColumnStretch(col, 1 if col < columns else 0)
+        self._columns_used = columns
+        self.setVisible(bool(cards))
 
 
 class MaterialEditView(QtCore.QObject):
@@ -1011,6 +1056,48 @@ class MaterialEditView(QtCore.QObject):
         self._off_collapsed = _get_pref_bool(_PREF_OFF_COLLAPSED, True)
         self._off_header: Optional[QtWidgets.QToolButton] = None
 
+        # List (one wide row per rule) or grid (tiles with the rule diagram).
+        self._layout_mode = _get_pref_str(_PREF_LAYOUT, "list")
+        if self._layout_mode not in ("list", "grid"):
+            self._layout_mode = "list"
+        self._on_grid: Optional[_CardGrid] = None
+        self._off_grid: Optional[_CardGrid] = None
+        self._columns = 1
+        self._populate_args: Optional[dict] = None
+        self.scroll.viewport().installEventFilter(self)
+
+    @property
+    def layout_mode(self) -> str:
+        return self._layout_mode
+
+    def set_layout_mode(self, mode: str) -> None:
+        """Switch between "list" and "grid" and rebuild the cards."""
+        if mode == self._layout_mode or mode not in ("list", "grid"):
+            return
+        self._layout_mode = mode
+        _set_pref_str(_PREF_LAYOUT, mode)
+        if self._populate_args is not None:
+            self.populate(**self._populate_args)
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        # Reflow the grid when the visible width changes the column count.
+        if (
+            obj is self.scroll.viewport()
+            and event.type() == QtCore.QEvent.Type.Resize
+            and self._layout_mode == "grid"
+            and self._column_count() != self._columns
+        ):
+            self._apply_filters()
+        return super().eventFilter(obj, event)
+
+    def _column_count(self) -> int:
+        if self._layout_mode != "grid":
+            return 1
+        margins = self._layout.contentsMargins()
+        width = self.scroll.viewport().width() - margins.left() - margins.right()
+        three = 3 * _GRID_TILE_MIN_WIDTH + 2 * _GRID_SPACING
+        return 3 if width >= three else 2
+
     def populate(
         self,
         material: Material,
@@ -1020,7 +1107,11 @@ class MaterialEditView(QtCore.QObject):
         archetype: Optional[ProcessArchetype] = None,
         criticality_of: Optional[Callable[[Rulebook], Criticality]] = None,
     ) -> None:
-        """Full rebuild. Used when switching material or process."""
+        """Full rebuild. Used when switching material, process or layout."""
+        self._populate_args = dict(
+            material=material, default_material=default_material, active_rules=active_rules,
+            editable=editable, archetype=archetype, criticality_of=criticality_of,
+        )
         scroll_pos = self.scroll.verticalScrollBar().value()
 
         self._material = material
@@ -1043,19 +1134,25 @@ class MaterialEditView(QtCore.QObject):
                 is_active=is_active,
                 parent=self._container,
                 archetype=archetype,
+                layout_mode=self._layout_mode,
             )
+            card.hide()
             card.set_editable(editable)
             if criticality_of is not None:
                 card.set_criticality(criticality_of(rule))
             if editable:
                 self._wire_card(card, rule)
-            self._layout.addWidget(card)
             self._cards[rule] = card
 
+        # On rules, the Off header, then the rules that are off.
+        self._on_grid = _CardGrid(self._container)
         self._off_header = self._make_off_header()
+        self._off_grid = _CardGrid(self._container)
+        self._layout.addWidget(self._on_grid)
+        self._layout.addWidget(self._off_header)
+        self._layout.addWidget(self._off_grid)
         self._layout.addStretch(1)
         self._wire_dependencies()
-        self._reorder_cards()
         self._apply_filters()
 
         QtCore.QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(scroll_pos))
@@ -1161,14 +1258,30 @@ class MaterialEditView(QtCore.QObject):
         return card.badge_type in self._scopes
 
     def _apply_filters(self) -> None:
-        off_matching = 0
+        """Place the cards that pass the filters; hide the rest."""
+        if self._on_grid is None or self._off_grid is None:
+            return
         # While searching, show matching rules that are off even if collapsed.
         show_off = not self._off_collapsed or bool(self._search)
-        for card in self._cards.values():
-            passes = self._passes_filters(card)
-            if passes and not card.is_active:
+        on_cards, off_cards = [], []
+        off_matching = 0
+        for rule in self._sorted_rules(self._active_rules):
+            card = self._cards.get(rule)
+            if card is None or not self._passes_filters(card):
+                continue
+            if card.is_active:
+                on_cards.append(card)
+            else:
                 off_matching += 1
-            card.setVisible(passes and (card.is_active or show_off))
+                if show_off:
+                    off_cards.append(card)
+        placed = set(on_cards) | set(off_cards)
+        for card in self._cards.values():
+            if card not in placed:
+                card.hide()
+        self._columns = self._column_count()
+        self._on_grid.place(on_cards, self._columns)
+        self._off_grid.place(off_cards, self._columns)
         if self._off_header is not None:
             self._off_header.setVisible(off_matching > 0)
             self._off_header.setText(f"Off ({off_matching})")
@@ -1189,7 +1302,6 @@ class MaterialEditView(QtCore.QObject):
         font.setBold(True)
         header.setFont(font)
         header.clicked.connect(self._toggle_off_section)
-        self._layout.addWidget(header)
         return header
 
     def _toggle_off_section(self) -> None:
@@ -1204,22 +1316,8 @@ class MaterialEditView(QtCore.QObject):
         )
 
     def _reorder_cards(self) -> None:
-        """Order the layout as: rules that are on, the Off header, rules that are off."""
-        desired: list[QtWidgets.QWidget] = []
-        for rule in self._sorted_rules(self._active_rules):
-            if rule not in self._active_rules and self._off_header is not None \
-                    and self._off_header not in desired:
-                desired.append(self._off_header)
-            card = self._cards.get(rule)
-            if card:
-                desired.append(card)
-        if self._off_header is not None and self._off_header not in desired:
-            desired.append(self._off_header)
-
-        for i, widget in enumerate(desired):
-            if self._layout.indexOf(widget) != i:
-                self._layout.removeWidget(widget)
-                self._layout.insertWidget(i, widget)
+        """Rules that are on come first; placement handles the order."""
+        self._apply_filters()
 
     def _wire_card(self, card: BaseRuleCard, rule: Rulebook) -> None:
         card.value_changed.connect(
@@ -1311,12 +1409,20 @@ class MaterialEditView(QtCore.QObject):
     # -------------------------------------------------------------------------
 
     def _clear(self) -> None:
+        # Hide before deleting: deletion waits for the event loop, and the old
+        # cards would otherwise show through the new ones until then.
+        for card in self._cards.values():
+            card.hide()
+            card.deleteLater()
         self._cards.clear()
         self._off_header = None
+        self._on_grid = None
+        self._off_grid = None
         while self._layout.count():
             item = self._layout.takeAt(0)
             widget = item.widget()
             if widget:
+                widget.hide()
                 widget.deleteLater()
 
 
@@ -1486,6 +1592,7 @@ class ProcessLibraryController(QtCore.QObject):
         f.buttonBox.accepted.connect(self.on_save)
         f.buttonBox.rejected.connect(self.on_reject)
         self.view.filters_changed.connect(self.view.material_edit_view.set_filters)
+        self.view.layout_mode_changed.connect(self.view.material_edit_view.set_layout_mode)
         save_shortcut = QtGui.QShortcut(
             QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Save), self.view
         )
@@ -1887,6 +1994,7 @@ class ProcessLibraryController(QtCore.QObject):
 
 class ProcessLibrary(QtWidgets.QDialog):
     filters_changed = QtCore.Signal(bool, bool, set)  # overridden only, on only, scopes
+    layout_mode_changed = QtCore.Signal(str)  # "list" or "grid"
 
     def __init__(self, parent=None):
         super().__init__(parent or Gui.getMainWindow())
@@ -2019,7 +2127,32 @@ class ProcessLibrary(QtWidgets.QDialog):
         row.setSpacing(6)
         row.addWidget(search, stretch=1)
         row.addWidget(btn)
+        self._add_layout_toggle(row)
         layout.insertLayout(index, row)
+
+    def _add_layout_toggle(self, row: QtWidgets.QHBoxLayout) -> None:
+        """List / Grid switch for the rule cards."""
+        group = QtWidgets.QButtonGroup(self)
+        group.setExclusive(True)
+        current = self.material_edit_view.layout_mode
+        for mode, svg, tip in (
+            ("list", LIST_VIEW_SVG, "List view: one row per rule"),
+            ("grid", GRID_VIEW_SVG, "Grid view: rule tiles with diagrams"),
+        ):
+            b = QtWidgets.QToolButton(self.form.gbMaterialEdit)
+            b.setCheckable(True)
+            b.setAutoRaise(True)
+            b.setFixedSize(28, 28)
+            b.setToolTip(tip)
+            b.setAccessibleName(tip)
+            apply_svg_icon(b, svg, 18)
+            b.setChecked(mode == current)
+            b.toggled.connect(
+                lambda on, m=mode: on and self.layout_mode_changed.emit(m)
+            )
+            group.addButton(b)
+            row.addWidget(b)
+        self._layout_group = group
 
     def _clear_filters(self) -> None:
         for act in (self._act_overridden, self._act_on):

@@ -20,6 +20,15 @@ from ._diagrams import DIAGRAMS
 from ._renderer import DEFAULT_WIDTH, render_diagram
 
 _LEGEND_ACCENT = "#5b9bd5"
+
+# Width range for diagrams that follow the widget's width (grid tiles).
+_FIT_MIN_WIDTH = 220
+_FIT_MAX_WIDTH = 440
+
+
+def _height_for(width: int) -> int:
+    """Diagram height for *width*; every diagram's viewBox is 340 x 165."""
+    return round(width * 165 / 340)
 _BRIEF_ALPHA = 0.65
 
 
@@ -38,6 +47,9 @@ class RuleDiagramView(QtWidgets.QWidget):
     show_legend:
         Whether to show the target / limit legend below the diagram. Turn it
         off when the values are shown elsewhere, for example as inputs.
+    fit_width:
+        Scale the diagram to the widget's width (up to a maximum) instead of
+        drawing it at the fixed default width. Used by grid tiles.
     parent:
         Parent widget.
 
@@ -52,10 +64,14 @@ class RuleDiagramView(QtWidgets.QWidget):
         limit: Optional[RuleLimit] = None,
         show_brief: bool = True,
         show_legend: bool = True,
+        fit_width: bool = False,
         parent: Optional[QtWidgets.QWidget] = None,
     ):
         super().__init__(parent)
         self._rule = rule
+        self._fit = fit_width
+        self._palette: Optional[QtGui.QPalette] = None
+        self._rendered_width = 0
         self._limit = limit
         self._brief: Optional[QtWidgets.QLabel] = None
         self._image: Optional[QtWidgets.QLabel] = None
@@ -75,7 +91,15 @@ class RuleDiagramView(QtWidgets.QWidget):
         if diag is not None:
             self._image = QtWidgets.QLabel(self)
             self._image.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self._image.setFixedSize(DEFAULT_WIDTH, int(DEFAULT_WIDTH * 165 / 340))
+            if fit_width:
+                # Follow the available width; the pixmap must not hold it open.
+                self._image.setSizePolicy(
+                    QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Fixed
+                )
+                self._image.setMinimumWidth(_FIT_MIN_WIDTH)
+                self._image.setFixedHeight(_height_for(DEFAULT_WIDTH))
+            else:
+                self._image.setFixedSize(DEFAULT_WIDTH, _height_for(DEFAULT_WIDTH))
             root.addWidget(self._image)
 
         if show_legend and not rule.is_binary:
@@ -144,6 +168,26 @@ class RuleDiagramView(QtWidgets.QWidget):
         self._apply_theme()
         super().showEvent(event)
 
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        if self._fit and self._image is not None and self.isVisible():
+            if self._target_width() != self._rendered_width:
+                self._render_image(self._palette or self._drawn_palette())
+
+    def _target_width(self) -> int:
+        if not self._fit or self._image is None:
+            return DEFAULT_WIDTH
+        return max(_FIT_MIN_WIDTH, min(self.width(), _FIT_MAX_WIDTH))
+
+    def _render_image(self, pal: QtGui.QPalette) -> None:
+        width = self._target_width()
+        pixmap = render_diagram(self._rule, pal, width)
+        if pixmap is not None:
+            if self._fit:
+                self._image.setFixedHeight(_height_for(width))
+            self._image.setPixmap(pixmap)
+            self._rendered_width = width
+
     def changeEvent(self, event: QtCore.QEvent) -> None:
         if event.type() in (
             QtCore.QEvent.Type.StyleChange,
@@ -165,10 +209,9 @@ class RuleDiagramView(QtWidgets.QWidget):
                 brief_pal = self._brief.palette()
                 brief_pal.setColor(QtGui.QPalette.ColorRole.WindowText, color)
                 self._brief.setPalette(brief_pal)
+            self._palette = pal
             if self._image is not None:
-                pixmap = render_diagram(self._rule, pal, DEFAULT_WIDTH)
-                if pixmap is not None:
-                    self._image.setPixmap(pixmap)
+                self._render_image(pal)
         finally:
             self._rendering = False
 

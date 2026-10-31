@@ -9,6 +9,7 @@ from PySide6.QtSvg import QSvgRenderer
 
 from ..core.processes.process import ProcessArchetype, RuleLimit
 from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, RuleDependency, Rulebook, RuleShape
+from .rule_information import RuleDiagramView
 
 
 OVERRIDE_COLOR = "#e8890c"
@@ -196,6 +197,23 @@ REDO_SVG = (
     b'<path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"'
     b' fill="none" stroke="COLOR" stroke-width="2"'
     b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
+LIST_VIEW_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
+    b'<rect x="3" y="10" width="18" height="4" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
+    b'<rect x="3" y="16" width="18" height="4" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
+    b'</svg>'
+)
+
+GRID_VIEW_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<rect x="3" y="3" width="7.5" height="7.5" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
+    b'<rect x="13.5" y="3" width="7.5" height="7.5" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
+    b'<rect x="3" y="13.5" width="7.5" height="7.5" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
+    b'<rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1" fill="none" stroke="COLOR" stroke-width="2"/>'
     b'</svg>'
 )
 
@@ -618,10 +636,14 @@ class BaseRuleCard(QtWidgets.QFrame):
         is_active: bool,
         badge_type: str = "M",
         parent: Optional[QtWidgets.QWidget] = None,
+        *,
+        layout_mode: str = "list",
     ):
         super().__init__(parent)
         self.setObjectName("RuleCard")
         self.rule = rule
+        # "list": one wide row per rule. "grid": a tile with the rule diagram.
+        self._layout_mode = layout_mode
         self._material_limit = material_limit
         self._default_limit = default_limit
         self._is_default = is_default_material
@@ -716,36 +738,39 @@ class BaseRuleCard(QtWidgets.QFrame):
             field.set_conflict(message)
 
     def _build_layout(self) -> None:
-        outer = QtWidgets.QHBoxLayout(self)
-        outer.setContentsMargins(12, 8, 10, 8)
-        outer.setSpacing(12)
+        self._build_parts()
+        if self._layout_mode == "grid":
+            self._arrange_grid()
+        else:
+            self._arrange_list()
 
+    def _build_parts(self) -> None:
+        """Create the widgets shared by both layouts."""
         self._check = QtWidgets.QCheckBox()
         self._check.setChecked(self._is_active)
         self._check.toggled.connect(self._on_check_toggled)
-        outer.addWidget(self._check)
 
-        name_col = QtWidgets.QVBoxLayout()
-        name_col.setSpacing(2)
-
-        # Title row: scope badge + rule name
-        title_row = QtWidgets.QHBoxLayout()
-        title_row.setSpacing(6)
+        # Title row: scope badge, rule name, criticality chip
+        self._title_row = QtWidgets.QHBoxLayout()
+        self._title_row.setSpacing(6)
         self._badge_lbl = _make_scope_badge(self._badge_type)
-        title_row.addWidget(self._badge_lbl)
+        self._title_row.addWidget(self._badge_lbl)
         self._name_lbl = QtWidgets.QLabel(self.rule.label)
         self._name_lbl.setStyleSheet("font-weight: 500;")
-        title_row.addWidget(self._name_lbl)
+        self._title_row.addWidget(self._name_lbl)
         # Criticality chip; clicking it opens a menu to change the level.
         self._criticality: Optional[Criticality] = None
         self._crit_editable = True
         self._crit_lbl = QtWidgets.QLabel()
+        # Keep the chip at its natural height when the row is taller.
+        self._crit_lbl.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
         self._crit_lbl.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self._crit_lbl.installEventFilter(self)
         self._crit_lbl.hide()
-        title_row.addWidget(self._crit_lbl)
-        title_row.addStretch()
-        name_col.addLayout(title_row)
+        self._title_row.addWidget(self._crit_lbl)
+        self._title_row.addStretch()
 
         # Description (with optional inline dependency link)
         self._desc_lbl = QtWidgets.QLabel()
@@ -761,15 +786,11 @@ class BaseRuleCard(QtWidgets.QFrame):
             self._refresh_dep_description()
         else:
             self._desc_lbl.setText(self.rule.description or "")
-        name_col.addWidget(self._desc_lbl)
-
-        outer.addLayout(name_col, stretch=1)
 
         self._fields_host = QtWidgets.QWidget()
         self._fields_row = QtWidgets.QHBoxLayout(self._fields_host)
         self._fields_row.setContentsMargins(0, 0, 0, 0)
         self._fields_row.setSpacing(10)
-        outer.addWidget(self._fields_host)
 
         self._feedback_btn = _SvgToolButton(
             _FEEDBACK_SVG,
@@ -777,7 +798,48 @@ class BaseRuleCard(QtWidgets.QFrame):
             self,
         )
         self._feedback_btn.clicked.connect(self.feedback_requested.emit)
+
+    def _arrange_list(self) -> None:
+        """One wide row: checkbox | title and description | inputs | button."""
+        outer = QtWidgets.QHBoxLayout(self)
+        outer.setContentsMargins(12, 8, 10, 8)
+        outer.setSpacing(12)
+        outer.addWidget(self._check)
+
+        name_col = QtWidgets.QVBoxLayout()
+        name_col.setSpacing(2)
+        name_col.addLayout(self._title_row)
+        name_col.addWidget(self._desc_lbl)
+        outer.addLayout(name_col, stretch=1)
+
+        outer.addWidget(self._fields_host)
         outer.addWidget(self._feedback_btn)
+
+    def _arrange_grid(self) -> None:
+        """A tile: title row, description, diagram, then the inputs."""
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(12, 8, 8, 10)
+        outer.setSpacing(6)
+
+        top = QtWidgets.QHBoxLayout()
+        top.setSpacing(8)
+        top.addWidget(self._check)
+        top.addLayout(self._title_row, stretch=1)
+        top.addWidget(self._feedback_btn)
+        outer.addLayout(top)
+
+        outer.addWidget(self._desc_lbl)
+
+        self._diagram = RuleDiagramView(
+            self.rule, show_brief=False, show_legend=False, fit_width=True, parent=self
+        )
+        outer.addWidget(self._diagram)
+        outer.addStretch(1)
+
+        fields_row = QtWidgets.QHBoxLayout()
+        fields_row.addWidget(self._fields_host)
+        fields_row.addStretch(1)
+        outer.addLayout(fields_row)
 
     def _on_check_toggled(self, checked: bool) -> None:
         if self._loading:
@@ -1182,6 +1244,8 @@ class DerivedRuleCard(BaseRuleCard):
         hint: str = "",
         badge_type: str = "S",
         parent: Optional[QtWidgets.QWidget] = None,
+        *,
+        layout_mode: str = "list",
     ):
         self._hint = hint
         super().__init__(
@@ -1192,6 +1256,7 @@ class DerivedRuleCard(BaseRuleCard):
             is_active,
             badge_type,
             parent,
+            layout_mode=layout_mode,
         )
 
     def _build_fields(self) -> None:
@@ -1227,6 +1292,7 @@ def build_card(
     is_active: bool,
     parent: Optional[QtWidgets.QWidget] = None,
     archetype: Optional[ProcessArchetype] = None,
+    layout_mode: str = "list",
 ) -> BaseRuleCard:
     badge_type = _resolve_badge(rule, archetype)
 
@@ -1243,6 +1309,7 @@ def build_card(
                 hint=derived[rule],
                 badge_type=badge_type,
                 parent=parent,
+                layout_mode=layout_mode,
             )
 
     card_cls = _CARD_CLASSES[rule.shape]
@@ -1254,4 +1321,5 @@ def build_card(
         is_active,
         badge_type,
         parent,
+        layout_mode=layout_mode,
     )
