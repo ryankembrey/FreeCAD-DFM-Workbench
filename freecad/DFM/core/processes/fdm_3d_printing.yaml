@@ -12,6 +12,7 @@ active_rules:
 - MAX_BRIDGE_SPAN
 - MIN_WALL_THICKNESS
 - MAX_BED_CONTACT_AREA
+- MAX_CUSP_HEIGHT
 
 rule_feedback:
     MIN_WALL_THICKNESS:
@@ -54,12 +55,23 @@ rule_feedback:
             footprint this large will almost certainly warp as the part
             cools. Add a brim, use relief slots, or redesign to reduce
             unbroken bed contact.
+    MAX_CUSP_HEIGHT:
+        warning_msg: >-
+            Cusp height {measured} exceeds the recommended {target}. At
+            this surface angle each printed layer creates a visible step.
+            Expect a rough surface finish on this face.
+        error_msg: >-
+            Cusp height {measured} exceeds the {limit} limit. Layer steps
+            are clearly visible and the surface will feel rough to the
+            touch. Steepen the surface, reduce the layer height, or plan
+            to sand after printing.
 
 rule_criticality:
     MAX_OVERHANG_ANGLE: HIGH
     MAX_BRIDGE_SPAN: HIGH
     MIN_WALL_THICKNESS: CRITICAL
     MAX_BED_CONTACT_AREA: MEDIUM
+    MAX_CUSP_HEIGHT: LOW
 
 materials:
     Default:
@@ -78,6 +90,9 @@ materials:
             MAX_BED_CONTACT_AREA:
                 target: '5000'
                 limit: '10000'
+            MAX_CUSP_HEIGHT:
+                target: '0.10'
+                limit: '0.15'
 
     PLA:
         category: Standard Thermoplastic

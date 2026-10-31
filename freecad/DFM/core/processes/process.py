@@ -41,8 +41,8 @@ class ProcessArchetype(Enum):
             ),
             "FDM": (
                 "Wall thickness derived from nozzle diameter. "
-                "Overhang and bridge thresholds from material. "
-                "Requires print orientation and nozzle diameter."
+                "Overhang, bridge, and staircase thresholds from material. "
+                "Requires print orientation, nozzle diameter, and layer height."
             ),
         }.get(self.name, "")
 
@@ -58,7 +58,7 @@ class ProcessArchetype(Enum):
         return {
             "GENERIC": set(),
             "INJECTION_MOLDING": set(),
-            "FDM": {ProcessRequirement.NOZZLE_DIAMETER},
+            "FDM": {ProcessRequirement.NOZZLE_DIAMETER, ProcessRequirement.LAYER_HEIGHT},
         }.get(self.name, set())
 
     @property

@@ -122,6 +122,14 @@ class Rulebook(Enum):
         field_labels=("Aim for", "At most"),
         description="Maximum area of a single flat face on the print bed.",
     )
+    MAX_CUSP_HEIGHT = RuleType(
+        "Maximum Cusp Height",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="max",
+        field_labels=("Aim for", "At most"),
+        description="Maximum layer step height on sloped surfaces due to staircase effect.",
+    )
 
     @property
     def id(self) -> str:
