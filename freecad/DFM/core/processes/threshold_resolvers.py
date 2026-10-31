@@ -16,7 +16,7 @@ from typing import Any, Optional, TYPE_CHECKING
 import FreeCAD as App  # type: ignore
 
 from ..models import ProcessRequirement
-from ..rules import Rulebook
+from ..rules import Rulebook, RuleType
 from .process import ProcessArchetype, RuleLimit
 
 if TYPE_CHECKING:
@@ -43,7 +43,8 @@ class ThresholdResolver:
             config.limit = default_limit.limit
             config.binary_severity = default_limit.binary_severity
 
-        if target_material and rule_id in target_material.rule_limits:
+        # Only apply material-specific overrides for per-material rules.
+        if rule_id.per_material and target_material and rule_id in target_material.rule_limits:
             override = target_material.rule_limits[rule_id]
             if override.target not in ("N/A", "", None):
                 config.target = override.target

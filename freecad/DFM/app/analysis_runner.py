@@ -16,8 +16,9 @@ from ..core.registries.analyzers_registry import get_analyzer_class
 from ..core.models import CheckResult, ProcessRequirement
 from ..core.processes.process import RuleFeedback, RuleLimit
 from ..core.processes.threshold_resolvers import get_resolver
+from ..core.rules import Rulebook
 from ..core.utils.conversion import freecad_to_ocp
-from ..core.utils.geometry import EdgeIndex, FaceIndex
+from ..core.utils.geometry import EdgeIndex, FaceIndex, face_area
 from .prefs import dfm_params
 
 from ..app.analysis_timer import AnalysisTiming
@@ -62,6 +63,12 @@ class AnalysisRunner:
 
         self.face_index = FaceIndex(shape_occ)
         self.edge_index = EdgeIndex(shape_occ)
+
+        # Precompute total surface area for checks that need it (e.g. support %).
+        self.total_surface_area = sum(face_area(f) for f in self.face_index)
+        kwargs["face_index"] = self.face_index
+        kwargs["total_surface_area"] = self.total_surface_area
+        kwargs["_target_material"] = target_material
 
         prefs = kwargs.get("prefs", {})
         enable_timing = prefs.get("GeneralPrintTimingReport", False)
@@ -169,6 +176,11 @@ class AnalysisRunner:
         if not target_material and material_name != "Default":
             return []
 
+        # Re-inject runtime data that checks may need.
+        kwargs["face_index"] = self.face_index
+        kwargs["total_surface_area"] = self.total_surface_area
+        kwargs["_target_material"] = target_material
+
         active_rules = [
             rule_id for rule_id in process.active_rules if get_check_class(rule_id)
         ]
@@ -263,13 +275,17 @@ class AnalysisRunner:
             if progress_cb:
                 progress_cb(step_offset + faces_done, total_steps, analyzer_instance.name)
 
+        # face_index and edge_index are passed positionally below, but they
+        # also live in kwargs (injected for checks that need them).  Strip
+        # them so execute() doesn't receive duplicate keyword arguments.
+        fwd = {k: v for k, v in kwargs.items() if k not in ("face_index", "edge_index")}
         self.analyzer_cache[analyzer_id] = analyzer_instance.execute(
             shape_occ,
             self.face_index,
             self.edge_index,
             progress_cb=on_progress,
             check_abort=check_abort,
-            **kwargs,
+            **fwd,
         )
         return True
 
@@ -290,6 +306,15 @@ class AnalysisRunner:
 
         if progress_cb:
             progress_cb(current_step, total_steps, check_instance.name)
+
+        # Inject cross-rule config for checks that depend on another rule's
+        # thresholds.  MAX_SUPPORT_MATERIAL needs the overhang angle limit.
+        if rule_id == Rulebook.MAX_SUPPORT_MATERIAL:
+            target_material = kwargs.get("_target_material")
+            overhang_config = self._resolve_rule_config(
+                process, target_material, Rulebook.MAX_OVERHANG_ANGLE, **kwargs,
+            )
+            kwargs["overhang_rule_config"] = overhang_config
 
         try:
             return check_instance.run_check(
