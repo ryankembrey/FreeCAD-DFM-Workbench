@@ -14,7 +14,11 @@ from ..core.processes.process import Material, Process, ProcessArchetype, RuleFe
 from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import Criticality, Rulebook
 
-from .rule_cards import CARD_STYLE, BaseRuleCard, build_card
+from .rule_cards import (
+    ADD_SVG, CARD_STYLE, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, build_card,
+    render_svg_icon,
+)
+from .rule_cards import _RESET_SVG
 
 from .utils import resources  # noqa: F401
 
@@ -1215,13 +1219,10 @@ class ProcessLibrary(QtWidgets.QDialog):
         self.form.leSearchRules.setClearButtonEnabled(True)
 
     def _configure_toolbar_icons(self):
-        std = self.style()
-        self.form.tbNew.setIcon(Gui.getIcon("list-add"))
-        self.form.tbDelete.setIcon(Gui.getIcon("list-remove"))
-        self.form.tbImport.setIcon(Gui.getIcon("Std_Import"))
-        self.form.tbRestore.setIcon(
-            std.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_BrowserReload)
-        )
+        self.form.tbNew.setIcon(render_svg_icon(ADD_SVG))
+        self.form.tbDelete.setIcon(render_svg_icon(REMOVE_SVG))
+        self.form.tbImport.setIcon(render_svg_icon(IMPORT_SVG))
+        self.form.tbRestore.setIcon(render_svg_icon(_RESET_SVG))
         for btn in (
             self.form.tbNew,
             self.form.tbImport,
