@@ -1222,6 +1222,8 @@ class ProcessLibrary(QtWidgets.QDialog):
         self.tree_view = ProcessTreeView(self.form.twProcess)
         self.material_edit_view = MaterialEditView(self.form.twMaterialEdit)
 
+        self.form.hSplitter.setSizes([280, 920])
+
         self._configure_static_widgets()
         self._configure_toolbar_icons()
 
