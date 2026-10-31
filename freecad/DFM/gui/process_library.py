@@ -140,6 +140,24 @@ class ProcessLibraryModel:
             del self.active_material.rule_limits[rule]
             self.mark_dirty()
 
+    def reset_rule_field(self, rule: Rulebook, attr: str):
+        """Make one field of *rule* fall back to the Default material.
+
+        An empty value means "use Default" for numeric fields. When none of
+        the rule's fields keep a value of their own, the material's entry is
+        removed entirely; this is also how a severity is reset, since an
+        empty severity would otherwise override Default.
+        """
+        material = self.active_material
+        if not material or rule not in material.rule_limits:
+            return
+        limit = material.rule_limits[rule]
+        setattr(limit, attr, "")
+        attrs = SHAPE_FIELD_ATTRS.get(rule.shape, ())
+        if all(not getattr(limit, a, "") for a in attrs):
+            del material.rule_limits[rule]
+        self.mark_dirty()
+
     def update_active_rules(self, rules: list):
         if self.active_process:
             self.active_process.active_rules = rules
@@ -413,6 +431,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         self._values = values
         self._fields: dict[str, UnitInput] = {}
         self._initial: dict[str, str] = {}
+        self._reset_attrs: set[str] = set()
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(10)
@@ -497,7 +516,8 @@ class EditFeedbackDialog(QtWidgets.QDialog):
             field.line_edit().setFont(font)
             display = self._display_value(attr)
             field.set_text(display)
-            field.editing_finished.connect(lambda f=field, a=attr: self._refresh_override(f, a))
+            field.editing_finished.connect(lambda f=field, a=attr: self._on_tile_edited(f, a))
+            field.reset_clicked.connect(lambda f=field, a=attr: self._on_tile_reset(f, a))
             self._refresh_override(field, attr)
             field.setEnabled(self._values.is_active)
             tv.addWidget(field)
@@ -514,6 +534,19 @@ class EditFeedbackDialog(QtWidgets.QDialog):
             getattr(self._values.default_limit, attr, "") if self._values.default_limit else ""
         )
         return str(own if (own or self._values.is_default_material) else default)
+
+    def _default_value(self, attr: str) -> str:
+        limit = self._values.default_limit
+        return str(getattr(limit, attr, "") or "") if limit else ""
+
+    def _on_tile_edited(self, field: UnitInput, attr: str) -> None:
+        self._reset_attrs.discard(attr)
+        self._refresh_override(field, attr)
+
+    def _on_tile_reset(self, field: UnitInput, attr: str) -> None:
+        field.set_text(self._default_value(attr))
+        self._reset_attrs.add(attr)
+        self._refresh_override(field, attr)
 
     def _refresh_override(self, field: UnitInput, attr: str) -> None:
         default = (
@@ -615,9 +648,18 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         )
 
     def changed_values(self) -> dict[str, str]:
-        """Return the rule values the user edited, keyed by field attribute."""
+        """Return the rule values the user edited, keyed by field attribute.
+
+        A field reset to the Default material's value is returned as an
+        empty string, meaning "use Default".
+        """
         changed = {}
         for attr, field in self._fields.items():
+            if attr in self._reset_attrs:
+                own = getattr(self._values.limit, attr, "") if self._values.limit else ""
+                if own:
+                    changed[attr] = ""
+                continue
             value = field.text().strip()
             if value != self._initial[attr]:
                 changed[attr] = value
@@ -642,7 +684,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
 class MaterialEditView(QtCore.QObject):
     limit_changed = QtCore.Signal(object, str, str)
-    reset_requested = QtCore.Signal(object)
+    field_reset_requested = QtCore.Signal(object, str)
     rule_active_toggled = QtCore.Signal(object, bool)
     feedback_requested = QtCore.Signal(object)
 
@@ -810,7 +852,9 @@ class MaterialEditView(QtCore.QObject):
         card.value_changed.connect(
             lambda attr, val, r=rule: self._on_card_value_changed(r, attr, val)
         )
-        card.reset_requested.connect(lambda r=rule: self.reset_requested.emit(r))
+        card.field_reset_requested.connect(
+            lambda attr, r=rule: self.field_reset_requested.emit(r, attr)
+        )
         card.active_toggled.connect(lambda state, r=rule: self.rule_active_toggled.emit(r, state))
         card.feedback_requested.connect(lambda r=rule: self.feedback_requested.emit(r))
         card.dep_link_clicked.connect(self._on_dep_link_clicked)
@@ -1070,7 +1114,7 @@ class ProcessLibraryController(QtCore.QObject):
 
         edit = self.view.material_edit_view
         edit.limit_changed.connect(self.on_limit_changed)
-        edit.reset_requested.connect(self.on_limit_reset)
+        edit.field_reset_requested.connect(self.on_field_reset)
         edit.rule_active_toggled.connect(self.on_rule_toggled)
         edit.feedback_requested.connect(self.on_edit_feedback)
 
@@ -1344,7 +1388,10 @@ class ProcessLibraryController(QtCore.QObject):
         self.model.update_rule_criticality(rule, crit)
         changed = dlg.changed_values()
         for attr, value in changed.items():
-            self.model.update_rule_limit(rule, attr, value)
+            if value:
+                self.model.update_rule_limit(rule, attr, value)
+            else:
+                self.model.reset_rule_field(rule, attr)
         if changed:
             self.view.material_edit_view.refresh_rule(rule)
         self._update_dirty_state()
@@ -1353,8 +1400,8 @@ class ProcessLibraryController(QtCore.QObject):
         self.model.update_rule_limit(rule, attr, value)
         self._update_dirty_state()
 
-    def on_limit_reset(self, rule: Rulebook):
-        self.model.reset_rule_limit(rule)
+    def on_field_reset(self, rule: Rulebook, attr: str):
+        self.model.reset_rule_field(rule, attr)
         self.view.material_edit_view.refresh_rule(rule)
         self._update_dirty_state()
 

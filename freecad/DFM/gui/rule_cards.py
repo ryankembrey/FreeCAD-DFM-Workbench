@@ -156,6 +156,19 @@ _RESET_SVG = (
     b'</svg>'
 )
 
+# Same arrow drawn bolder, for the small reset button inside overridden
+# fields; at 14 px the regular stroke is too thin to read.
+_FIELD_RESET_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 26 26">'
+    b'<polyline points="1 4 1 10 7 10"'
+    b' fill="none" stroke="COLOR" stroke-width="3.5"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"'
+    b' fill="none" stroke="COLOR" stroke-width="3.5"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
 
 # -- Toolbar icons (same stroke style) ----------------------------------------
 
@@ -211,6 +224,7 @@ def render_svg_icon(
     color: QtGui.QColor,
     size: int = 20,
     device_ratio: float = 1.0,
+    opacities: Optional[dict] = None,
 ) -> QtGui.QIcon:
     """Render an SVG template (with ``COLOR`` placeholders) into a QIcon.
 
@@ -221,7 +235,7 @@ def render_svg_icon(
     data = svg_template.replace(b"COLOR", color.name().encode())
     renderer = QSvgRenderer(QtCore.QByteArray(data))
     icon = QtGui.QIcon()
-    for mode, opacity in _ICON_OPACITY.items():
+    for mode, opacity in (opacities or _ICON_OPACITY).items():
         px = QtGui.QPixmap(round(size * device_ratio), round(size * device_ratio))
         px.setDevicePixelRatio(device_ratio)
         px.fill(QtCore.Qt.GlobalColor.transparent)
@@ -242,11 +256,20 @@ class _ThemedSvgIcon(QtCore.QObject):
     whenever its style or palette changes.
     """
 
-    def __init__(self, button: QtWidgets.QAbstractButton, svg_template: bytes, size: int):
+    def __init__(
+        self,
+        button: QtWidgets.QAbstractButton,
+        svg_template: bytes,
+        size: int,
+        color: Optional[QtGui.QColor] = None,
+        opacities: Optional[dict] = None,
+    ):
         super().__init__(button)
+        self._opacities = opacities
         self._button = button
         self._svg = svg_template
         self._size = size
+        self._color = color
         self._key: Optional[tuple] = None
         button.installEventFilter(self)
         self.refresh()
@@ -263,13 +286,13 @@ class _ThemedSvgIcon(QtCore.QObject):
 
     def refresh(self) -> None:
         btn = self._button
-        color = self._text_color()
+        color = self._color or self._text_color()
         ratio = btn.devicePixelRatioF()
         key = (color.rgb(), ratio)
         if key == self._key:
             return
         self._key = key
-        btn.setIcon(render_svg_icon(self._svg, color, self._size, ratio))
+        btn.setIcon(render_svg_icon(self._svg, color, self._size, ratio, self._opacities))
 
     def _text_color(self) -> QtGui.QColor:
         """Return the color the theme uses for ordinary text next to the button.
@@ -298,10 +321,74 @@ def apply_svg_icon(
     button: QtWidgets.QAbstractButton,
     svg_template: bytes,
     size: int = 20,
+    color: Optional[QtGui.QColor] = None,
+    opacities: Optional[dict] = None,
 ) -> None:
-    """Give *button* a monochrome SVG icon that follows the theme."""
+    """Give *button* a monochrome SVG icon.
+
+    The icon follows the theme's text color, unless a fixed *color* is given.
+    """
     button.setIconSize(QtCore.QSize(size, size))
-    _ThemedSvgIcon(button, svg_template, size)
+    _ThemedSvgIcon(button, svg_template, size, color, opacities)
+
+
+class _FieldResetButton(QtWidgets.QAbstractButton):
+    """Small orange reset button shown next to a value that overrides Default.
+
+    It paints only its icon, never a background, so theme styles for tool
+    buttons cannot give it a panel that differs from the field behind it.
+    The icon is brighter on hover and faded when disabled.
+
+    It keeps its space while hidden, so fields line up whether or not they
+    are overridden.
+    """
+
+    _SIZE = 16
+    _ICON = 14
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.setFixedSize(self._SIZE, self._SIZE)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Reset to the Default material's value")
+        self.setAccessibleName("Reset to the Default material's value")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover)
+        # Full strength at rest: the softened default would wash out the orange.
+        full = {**_ICON_OPACITY, QtGui.QIcon.Mode.Normal: 1.0}
+        apply_svg_icon(self, _FIELD_RESET_SVG, self._ICON, QtGui.QColor(OVERRIDE_COLOR), full)
+        policy = self.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self.setSizePolicy(policy)
+        self.hide()
+
+    def sizeHint(self) -> QtCore.QSize:
+        return QtCore.QSize(self._SIZE, self._SIZE)
+
+    def enterEvent(self, event) -> None:
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        if not self.isEnabled():
+            mode = QtGui.QIcon.Mode.Disabled
+        elif self.underMouse() or self.isDown():
+            mode = QtGui.QIcon.Mode.Active
+        else:
+            mode = QtGui.QIcon.Mode.Normal
+        painter = QtGui.QPainter(self)
+        offset = (self._SIZE - self._ICON) / 2
+        self.icon().paint(
+            painter,
+            QtCore.QRect(round(offset), round(offset), self._ICON, self._ICON),
+            QtCore.Qt.AlignmentFlag.AlignCenter,
+            mode,
+        )
+        painter.end()
 
 
 class _SvgToolButton(QtWidgets.QToolButton):
@@ -354,6 +441,7 @@ class UnitInput(QtWidgets.QWidget):
     """A numeric input paired with a right-aligned unit label, styled as one field."""
 
     editing_finished = QtCore.Signal()
+    reset_clicked = QtCore.Signal()
 
     def __init__(self, unit: str, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -361,7 +449,7 @@ class UnitInput(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
 
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(2, 2, 6, 2)
+        layout.setContentsMargins(2, 2, 3, 2)
         layout.setSpacing(6)
 
         self._edit = _NumericLineEdit()
@@ -380,6 +468,11 @@ class UnitInput(QtWidgets.QWidget):
             unit_lbl.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             layout.addWidget(unit_lbl)
 
+        # Shown only while the value overrides the Default material.
+        self._reset_btn = _FieldResetButton(self)
+        self._reset_btn.clicked.connect(self.reset_clicked.emit)
+        layout.addWidget(self._reset_btn)
+
     def text(self) -> str:
         return self._edit.text()
 
@@ -390,6 +483,7 @@ class UnitInput(QtWidgets.QWidget):
         return self._edit
 
     def set_override(self, is_override: bool) -> None:
+        self._reset_btn.setVisible(is_override)
         self.setProperty("override", "true" if is_override else "false")
         self.style().unpolish(self)
         self.style().polish(self)
@@ -407,7 +501,7 @@ class UnitInput(QtWidgets.QWidget):
 
 class BaseRuleCard(QtWidgets.QFrame):
     value_changed = QtCore.Signal(str, str)
-    reset_requested = QtCore.Signal()
+    field_reset_requested = QtCore.Signal(str)  # field attribute, e.g. "limit"
     active_toggled = QtCore.Signal(bool)
     feedback_requested = QtCore.Signal()
     dep_link_clicked = QtCore.Signal(object)  # emits the target Rulebook member
@@ -443,7 +537,6 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._build_fields()
         self._load_values()
         self._refresh_active_style()
-        self._refresh_reset_state()
 
     def refresh(
         self,
@@ -464,7 +557,6 @@ class BaseRuleCard(QtWidgets.QFrame):
 
         self._load_values()
         self._refresh_active_style()
-        self._refresh_reset_state()
 
     def _build_layout(self) -> None:
         outer = QtWidgets.QHBoxLayout(self)
@@ -522,14 +614,6 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._feedback_btn.clicked.connect(self.feedback_requested.emit)
         outer.addWidget(self._feedback_btn)
 
-        self._reset = _SvgToolButton(
-            _RESET_SVG,
-            "Reset to Default material's values",
-            self,
-        )
-        self._reset.clicked.connect(self.reset_requested.emit)
-        outer.addWidget(self._reset)
-
     def _on_check_toggled(self, checked: bool) -> None:
         if self._loading:
             return
@@ -557,6 +641,7 @@ class BaseRuleCard(QtWidgets.QFrame):
 
     def _wire_field(self, field: UnitInput, attr: str) -> None:
         field.editing_finished.connect(lambda f=field, a=attr: self._on_field_changed(f, a))
+        field.reset_clicked.connect(lambda a=attr: self.field_reset_requested.emit(a))
 
     def _on_field_changed(self, field: UnitInput, attr: str) -> None:
         if self._loading:
@@ -564,7 +649,6 @@ class BaseRuleCard(QtWidgets.QFrame):
         value = field.text().strip()
         self.value_changed.emit(attr, value)
         self._refresh_override_state(field, attr, value)
-        self._refresh_reset_state()
 
     def _refresh_override_state(self, field: UnitInput, attr: str, value: str) -> None:
         def_val = getattr(self._default_limit, attr, "") if self._default_limit else ""
@@ -580,18 +664,6 @@ class BaseRuleCard(QtWidgets.QFrame):
         field.set_text(str(display))
         self._loading = False
         self._refresh_override_state(field, attr, str(display))
-
-    def _has_overrides(self) -> bool:
-        for field in self.findChildren(UnitInput):
-            if field.is_override():
-                return True
-        for combo in self.findChildren(QtWidgets.QComboBox):
-            if combo.property("override") == "true":
-                return True
-        return False
-
-    def _refresh_reset_state(self) -> None:
-        self._reset.setEnabled(self._is_active and self._has_overrides())
 
     def _refresh_active_style(self) -> None:
         self.setProperty("active", "true" if self._is_active else "false")
@@ -612,13 +684,11 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._feedback_btn.setEnabled(editable)
         if editable:
             self._refresh_active_style()
-            self._refresh_reset_state()
         else:
             self._name_lbl.setEnabled(False)
             if self._desc_lbl is not None:
                 self._desc_lbl.setEnabled(False)
             self._fields_host.setEnabled(False)
-            self._reset.setEnabled(False)
 
     def _apply_opacity(self, opacity: float) -> None:
         if self._opacity_effect is None:
@@ -823,9 +893,26 @@ class BinaryCard(BaseRuleCard):
 
         self._combo = QtWidgets.QComboBox()
         self._combo.addItems(["ERROR", "WARNING"])
-        self._combo.setFixedWidth(110)
+        # Combo plus its reset button take the width of a value field when the
+        # text allows, so columns line up; it never shrinks below its text.
+        self._combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents
+        )
+        self._combo.setMinimumWidth(
+            max(110 - _FieldResetButton._SIZE - 3, self._combo.sizeHint().width())
+        )
         self._combo.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        col.addWidget(self._combo)
+
+        combo_row = QtWidgets.QHBoxLayout()
+        combo_row.setContentsMargins(0, 0, 0, 0)
+        combo_row.setSpacing(3)
+        combo_row.addWidget(self._combo)
+        self._combo_reset = _FieldResetButton(self)
+        self._combo_reset.clicked.connect(
+            lambda: self.field_reset_requested.emit("binary_severity")
+        )
+        combo_row.addWidget(self._combo_reset)
+        col.addLayout(combo_row)
 
         self._fields_row.addStretch()
         self._fields_row.addLayout(col)
@@ -853,6 +940,7 @@ class BinaryCard(BaseRuleCard):
     def _refresh_combo_override(self, value: str) -> None:
         def_val = self._severity_default()
         is_override = bool(value and value != def_val and not self._is_default)
+        self._combo_reset.setVisible(is_override)
         self._combo.setProperty("override", "true" if is_override else "false")
         self._combo.style().unpolish(self._combo)
         self._combo.style().polish(self._combo)
@@ -862,7 +950,6 @@ class BinaryCard(BaseRuleCard):
             return
         self.value_changed.emit("binary_severity", text)
         self._refresh_combo_override(text)
-        self._refresh_reset_state()
 
     def get_field_value(self, attr: str) -> str:
         if attr == "binary_severity":
