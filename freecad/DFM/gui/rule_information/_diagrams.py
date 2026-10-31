@@ -8,7 +8,7 @@ Every diagram is a pair of panels: a design to avoid on the left (red cross)
 and a preferred design on the right (green tick). The viewBox is 340 x 165
 for all diagrams, and each panel is 170 units wide.
 
-Templates use placeholder tokens for colours, replaced at render time so the
+Templates use placeholder tokens for colors, replaced at render time so the
 diagrams stay readable in any FreeCAD theme. Templates must stay within the
 SVG Tiny 1.2 subset that QtSvg supports (no ``clipPath``, no filters).
 
@@ -693,35 +693,35 @@ DIAGRAMS: dict[Rulebook, RuleDiagram] = {
     ),
     Rulebook.MIN_DRAFT_ANGLE: RuleDiagram(
         svg=_DRAFT_ANGLE_SVG,
-        brief="Inclination of faces relative to the mould pull direction.",
+        brief="Inclination of faces relative to the pull direction.",
     ),
     Rulebook.NO_UNDERCUTS: RuleDiagram(
         svg=_UNDERCUT_SVG,
-        brief="Geometry trapped by the mould that prevents clean ejection.",
+        brief="Features hidden behind other geometry along the pull direction.",
     ),
     Rulebook.SHARP_INTERNAL_CORNERS: RuleDiagram(
         svg=_SHARP_INTERNAL_SVG,
-        brief="Concave intersections where material flow is restricted.",
+        brief="Concave edges without a radius, which concentrate stress.",
     ),
     Rulebook.SHARP_EXTERNAL_CORNERS: RuleDiagram(
         svg=_SHARP_EXTERNAL_SVG,
-        brief="Convex intersections that require EDM to machine in the mould.",
+        brief="Convex edges without a radius, which are fragile and hard to produce.",
     ),
     Rulebook.MAX_OVERHANG_ANGLE: RuleDiagram(
         svg=_OVERHANG_ANGLE_SVG,
-        brief="Angle of downward-facing surfaces relative to the build direction.",
+        brief="Angle of downward-facing surfaces, measured from the vertical.",
     ),
     Rulebook.MAX_BRIDGE_SPAN: RuleDiagram(
         svg=_BRIDGE_SPAN_SVG,
-        brief="Horizontal distance printed without support between two anchors.",
+        brief="Horizontal distance spanned without support between two supported regions.",
     ),
     Rulebook.MAX_BED_CONTACT_AREA: RuleDiagram(
         svg=_BED_CONTACT_SVG,
-        brief="Flat area touching the print bed, affecting warping risk.",
+        brief="Area of a flat face resting on the build platform, which affects warping.",
     ),
     Rulebook.MAX_CUSP_HEIGHT: RuleDiagram(
         svg=_CUSP_HEIGHT_SVG,
-        brief="Layer step deviation on shallow slopes, measured normal to the surface.",
+        brief="Stair-step deviation on shallow slopes, measured normal to the surface.",
     ),
     Rulebook.MAX_SUPPORT_MATERIAL: RuleDiagram(
         svg=_SUPPORT_MATERIAL_SVG,

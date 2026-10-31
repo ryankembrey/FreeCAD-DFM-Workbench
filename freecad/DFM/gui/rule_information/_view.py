@@ -42,7 +42,7 @@ class RuleDiagramView(QtWidgets.QWidget):
         Parent widget.
 
     The diagram is rendered when the widget is shown and again whenever the
-    style or palette changes, so its colours always match the theme the
+    style or palette changes, so its colors always match the theme the
     widget is drawn in, wherever it is embedded.
     """
 
@@ -118,8 +118,8 @@ class RuleDiagramView(QtWidgets.QWidget):
             lbl.setFont(font)
             grid.addWidget(lbl, row, 0)
 
-            # Rich text colour, because a theme stylesheet's ``color`` would
-            # override a palette colour on the label.
+            # Rich text color, because a theme stylesheet's ``color`` would
+            # override a palette color on the label.
             val = QtWidgets.QLabel(self)
             val.setTextFormat(QtCore.Qt.TextFormat.RichText)
             val.setText(self._value_text(attr))
@@ -160,10 +160,10 @@ class RuleDiagramView(QtWidgets.QWidget):
         try:
             pal = self._drawn_palette()
             if self._brief is not None:
-                colour = QtGui.QColor(pal.color(QtGui.QPalette.ColorRole.WindowText))
-                colour.setAlphaF(_BRIEF_ALPHA)
+                color = QtGui.QColor(pal.color(QtGui.QPalette.ColorRole.WindowText))
+                color.setAlphaF(_BRIEF_ALPHA)
                 brief_pal = self._brief.palette()
-                brief_pal.setColor(QtGui.QPalette.ColorRole.WindowText, colour)
+                brief_pal.setColor(QtGui.QPalette.ColorRole.WindowText, color)
                 self._brief.setPalette(brief_pal)
             if self._image is not None:
                 pixmap = render_diagram(self._rule, pal, DEFAULT_WIDTH)
@@ -173,13 +173,13 @@ class RuleDiagramView(QtWidgets.QWidget):
             self._rendering = False
 
     def _drawn_palette(self) -> QtGui.QPalette:
-        """Return a palette holding the colours this widget is drawn with.
+        """Return a palette holding the colors this widget is drawn with.
 
         FreeCAD themes are stylesheets, and a stylesheet only reaches a
         widget's palette once the widget is polished. Polishing first makes
-        the background and text colours match what is actually drawn. The
-        text colour is read from a label, since stylesheets usually set the
-        text colour on labels rather than on plain widgets.
+        the background and text colors match what is actually drawn. The
+        text color is read from a label, since stylesheets usually set the
+        text color on labels rather than on plain widgets.
         """
         role = QtGui.QPalette.ColorRole
         self.ensurePolished()
@@ -190,7 +190,7 @@ class RuleDiagramView(QtWidgets.QWidget):
         pal = QtGui.QPalette(self.palette())
         pal.setColor(role.Window, window.palette().color(role.Window))
 
-        # Our own labels carry custom colours, so read the text colour from
+        # Our own labels carry custom colors, so read the text color from
         # a fresh, unstyled label instead.
         probe = QtWidgets.QLabel(self)
         probe.ensurePolished()

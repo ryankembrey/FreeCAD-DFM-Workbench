@@ -2,15 +2,15 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Render SVG diagram templates into QPixmap using palette-derived colours.
+"""Render SVG diagram templates into QPixmap using palette-derived colors.
 
-The renderer substitutes placeholder tokens in the SVG bytes with colours
+The renderer substitutes placeholder tokens in the SVG bytes with colors
 derived from the active QPalette, so diagrams follow the FreeCAD theme.
 
 Outlines use ``WindowText`` because the panel paints the diagram directly on
-the ``Window`` colour. The part body is a blend of the two rather than a
+the ``Window`` color. The part body is a blend of the two rather than a
 fixed palette role such as ``Mid``, which some themes set almost equal to
-the window colour. The blend always sits between the background and the
+the window color. The blend always sits between the background and the
 outlines, so the body stays visible in light, dark and custom themes.
 """
 
@@ -20,14 +20,14 @@ from PySide6.QtSvg import QSvgRenderer
 from ...core.rules import Rulebook
 from ._diagrams import DIAGRAMS
 
-# Base annotation colours. The accent matches link text and icons elsewhere.
+# Base annotation colors. The accent matches link text and icons elsewhere.
 # ``themed_svg`` adjusts their lightness when a theme would make them hard to
 # read, keeping the hue.
 _ACCENT = b"#5b9bd5"
 _BAD = b"#d9534f"
 _GOOD = b"#4caf50"
 
-# Share of the foreground colour mixed into the background for the part body.
+# Share of the foreground color mixed into the background for the part body.
 _BODY_BLEND = 0.28
 
 DEFAULT_WIDTH = 340
@@ -56,31 +56,31 @@ def _luminance(c: QtGui.QColor) -> float:
 
 
 def _contrast(a: QtGui.QColor, b: QtGui.QColor) -> float:
-    """WCAG contrast ratio between two colours (1.0 to 21.0)."""
+    """WCAG contrast ratio between two colors (1.0 to 21.0)."""
     hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
     return (hi + 0.05) / (lo + 0.05)
 
 
 def _legible(
-    colour: bytes,
+    color: bytes,
     toward: QtGui.QColor,
     against: tuple[tuple[QtGui.QColor, float], ...],
 ) -> bytes:
-    """Return *colour*, adjusted only as far as needed to be legible.
+    """Return *color*, adjusted only as far as needed to be legible.
 
     The hue and saturation are kept. Lightness is moved towards *toward*
-    (the theme's text colour, which always contrasts with the background)
-    until *colour* meets every ``(background, minimum ratio)`` pair in
-    *against*. In typical light and dark themes the colour changes little
+    (the theme's text color, which always contrasts with the background)
+    until *color* meets every ``(background, minimum ratio)`` pair in
+    *against*. In typical light and dark themes the color changes little
     or not at all; in low-contrast themes it shifts further.
     """
-    c = QtGui.QColor(colour.decode())
+    c = QtGui.QColor(color.decode())
 
     def ok(col: QtGui.QColor) -> bool:
         return all(_contrast(col, bg) >= ratio for bg, ratio in against)
 
     if ok(c):
-        return colour
+        return color
 
     h, s, lightness, _ = c.getHslF()
     step = 0.01 if toward.lightnessF() > lightness else -0.01
@@ -93,7 +93,7 @@ def _legible(
 
 
 def themed_svg(svg: bytes, palette: QtGui.QPalette) -> bytes:
-    """Return *svg* with every colour placeholder replaced for *palette*."""
+    """Return *svg* with every color placeholder replaced for *palette*."""
     window = palette.color(QtGui.QPalette.ColorRole.Window)
     text = palette.color(QtGui.QPalette.ColorRole.WindowText)
     if _contrast(text, window) < 3.0:
