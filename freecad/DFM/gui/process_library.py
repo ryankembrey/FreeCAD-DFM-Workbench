@@ -291,6 +291,12 @@ class ParameterEdit(QtWidgets.QPlainTextEdit):
 
     focused = QtCore.Signal()
 
+    def sizeHint(self) -> QtCore.QSize:
+        # Prefer the minimum height rather than Qt's tall default, so dialogs
+        # open compact and the boxes grow only when the dialog is resized.
+        hint = super().sizeHint()
+        return QtCore.QSize(hint.width(), max(self.minimumHeight(), 0) or hint.height())
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self.focused.emit()
@@ -344,6 +350,9 @@ class RuleValueContext:
     """Shown for material (M) rules; ``None`` for process and setup rules."""
     derived_hint: str = ""
     """For setup (S) rules: where the values come from. Hides the inputs."""
+    is_active: bool = True
+    """Whether the rule is turned on. Values of a rule that is off are shown
+    but cannot be edited, matching the rule card."""
 
 
 _RULE_DIALOG_STYLE = CARD_STYLE + """
@@ -426,11 +435,6 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
 
-        # Open at the height the rule card needs; text boxes otherwise ask
-        # for far more height than their content uses. The dialog can still
-        # be resized, and the message boxes grow with it.
-        self.resize(self.sizeHint().width(), self.minimumSizeHint().height())
-
     # ------------------------------------------------------------------
     # Left: what the rule measures, its values and criticality
     # ------------------------------------------------------------------
@@ -456,6 +460,10 @@ class EditFeedbackDialog(QtWidgets.QDialog):
             if self._values.material_name:
                 col.addWidget(QtWidgets.QLabel(f"Values for {self._values.material_name}"))
             col.addLayout(self._build_value_tiles())
+            if not self._values.is_active:
+                note = QtWidgets.QLabel("Turn on this rule to edit its values.")
+                note.setStyleSheet("font-style: italic;")
+                col.addWidget(note)
 
         col.addStretch(1)
 
@@ -491,6 +499,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
             field.set_text(display)
             field.editing_finished.connect(lambda f=field, a=attr: self._refresh_override(f, a))
             self._refresh_override(field, attr)
+            field.setEnabled(self._values.is_active)
             tv.addWidget(field)
 
             self._fields[attr] = field
@@ -739,6 +748,7 @@ class MaterialEditView(QtCore.QObject):
             is_default_material=(self._material.name == "Default"),
             material_name=self._material.name if badge == "M" else None,
             derived_hint=derived.get(rule, "") if badge == "S" else "",
+            is_active=rule in self._active_rules,
         )
 
     def refresh_rule(self, rule: Rulebook) -> None:

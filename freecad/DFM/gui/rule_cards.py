@@ -510,7 +510,8 @@ class BaseRuleCard(QtWidgets.QFrame):
         if self._desc_lbl is not None:
             self._desc_lbl.setEnabled(self._is_active)
         self._fields_host.setEnabled(self._is_active)
-        self._feedback_btn.setEnabled(self._is_active)
+        # The rule details button stays enabled while the rule is off, so its
+        # diagram and feedback messages can still be viewed.
         self.style().unpolish(self)
         self.style().polish(self)
         if self._dep_info:

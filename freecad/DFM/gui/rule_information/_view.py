@@ -75,7 +75,7 @@ class RuleDiagramView(QtWidgets.QWidget):
         if diag is not None:
             self._image = QtWidgets.QLabel(self)
             self._image.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self._image.setMinimumSize(DEFAULT_WIDTH, int(DEFAULT_WIDTH * 165 / 340))
+            self._image.setFixedSize(DEFAULT_WIDTH, int(DEFAULT_WIDTH * 165 / 340))
             root.addWidget(self._image)
 
         if show_legend and not rule.is_binary:
