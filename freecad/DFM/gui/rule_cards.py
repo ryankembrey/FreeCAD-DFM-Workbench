@@ -5,6 +5,7 @@
 from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtSvg import QSvgRenderer
 
 from ..core.processes.process import ProcessArchetype, RuleLimit
 from ..core.rules import RuleDependency, Rulebook, RuleShape
@@ -135,6 +136,62 @@ def _make_scope_badge(badge_type: str) -> QtWidgets.QLabel:
     lbl.setStyleSheet(f"font-size: 11px; font-weight: bold; border-radius: 3px; {info['style']}")
     lbl.setToolTip(info["tooltip"])
     return lbl
+
+
+# -- Feedback icon (SVG that follows the palette text colour) ----------------
+
+_FEEDBACK_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<path d="M4,4 C2.9,4 2,4.9 2,6 V16 C2,17.1 2.9,18 4,18 H10 L12,22'
+    b' L14,18 H20 C21.1,18 22,17.1 22,16 V6 C22,4.9 21.1,4 20,4 Z"'
+    b' fill="none" stroke="COLOR" stroke-width="2" stroke-linejoin="round"/>'
+    b'<rect x="5.5" y="6" width="5" height="2" fill="COLOR"/>'
+    b'<rect x="5.5" y="10" width="5" height="2" fill="COLOR"/>'
+    b'<rect x="5.5" y="14" width="6.5" height="2" fill="COLOR"/>'
+    b'<polygon points="13,15 14,11 18,7 21,10 17,14"'
+    b' fill="none" stroke="COLOR" stroke-width="2" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
+_RESET_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<polyline points="1 4 1 10 7 10"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
+
+_ICON_COLOR = b"#5b9bd5"
+
+
+class _SvgToolButton(QtWidgets.QToolButton):
+    """Tool button with an SVG icon in the link accent colour (#5b9bd5)."""
+
+    def __init__(
+        self,
+        svg_template: bytes,
+        tooltip: str,
+        parent: Optional[QtWidgets.QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.setAutoRaise(True)
+        self.setIconSize(QtCore.QSize(20, 20))
+        self.setFixedSize(30, 30)
+        self.setToolTip(tooltip)
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+
+        data = svg_template.replace(b"COLOR", _ICON_COLOR)
+        renderer = QSvgRenderer(QtCore.QByteArray(data))
+        px = QtGui.QPixmap(20, 20)
+        px.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(px)
+        renderer.render(painter)
+        painter.end()
+        self.setIcon(QtGui.QIcon(px))
 
 
 # =============================================================================
@@ -330,35 +387,21 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._fields_row.setSpacing(10)
         outer.addWidget(self._fields_host)
 
-        self._feedback_btn = self._make_icon_button(
-            QtWidgets.QStyle.StandardPixmap.SP_FileDialogContentsView,
+        self._feedback_btn = _SvgToolButton(
+            _FEEDBACK_SVG,
             "Edit feedback messages and criticality",
-            self.feedback_requested.emit,
+            self,
         )
+        self._feedback_btn.clicked.connect(self.feedback_requested.emit)
         outer.addWidget(self._feedback_btn)
 
-        self._reset = self._make_icon_button(
-            QtWidgets.QStyle.StandardPixmap.SP_BrowserReload,
+        self._reset = _SvgToolButton(
+            _RESET_SVG,
             "Reset to Default material's values",
-            self.reset_requested.emit,
+            self,
         )
+        self._reset.clicked.connect(self.reset_requested.emit)
         outer.addWidget(self._reset)
-
-    def _make_icon_button(
-        self,
-        pixmap: QtWidgets.QStyle.StandardPixmap,
-        tooltip: str,
-        slot,
-    ) -> QtWidgets.QToolButton:
-        btn = QtWidgets.QToolButton()
-        btn.setAutoRaise(True)
-        btn.setIcon(self.style().standardIcon(pixmap))
-        btn.setIconSize(QtCore.QSize(18, 18))
-        btn.setFixedSize(28, 28)
-        btn.setToolTip(tooltip)
-        btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(slot)
-        return btn
 
     def _on_check_toggled(self, checked: bool) -> None:
         if self._loading:
