@@ -16,8 +16,8 @@ from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, Rulebook
 
 from .rule_cards import (
-    ADD_SVG, CARD_STYLE, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, UnitInput, build_card,
-    render_svg_icon,
+    ADD_SVG, CARD_STYLE, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, UnitInput, apply_svg_icon,
+    build_card,
 )
 from .rule_cards import _RESET_SVG, _resolve_badge
 
@@ -1429,10 +1429,10 @@ class ProcessLibrary(QtWidgets.QDialog):
         self.form.leSearchRules.setClearButtonEnabled(True)
 
     def _configure_toolbar_icons(self):
-        self.form.tbNew.setIcon(render_svg_icon(ADD_SVG))
-        self.form.tbDelete.setIcon(render_svg_icon(REMOVE_SVG))
-        self.form.tbImport.setIcon(render_svg_icon(IMPORT_SVG))
-        self.form.tbRestore.setIcon(render_svg_icon(_RESET_SVG))
+        apply_svg_icon(self.form.tbNew, ADD_SVG)
+        apply_svg_icon(self.form.tbDelete, REMOVE_SVG)
+        apply_svg_icon(self.form.tbImport, IMPORT_SVG)
+        apply_svg_icon(self.form.tbRestore, _RESET_SVG)
         for btn in (
             self.form.tbNew,
             self.form.tbImport,

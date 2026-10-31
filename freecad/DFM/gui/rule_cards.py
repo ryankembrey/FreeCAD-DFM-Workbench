@@ -33,10 +33,10 @@ QFrame#RuleCard QLabel:disabled {{
     border: none;
 }}
 
+/* Overrides are marked by the border only; the text keeps the theme
+   color so values stay readable. */
 QComboBox[override="true"] {{
     border: 1px solid {OVERRIDE_COLOR};
-    color: {OVERRIDE_COLOR};
-    font-weight: 500;
 }}
 
 QLabel[fieldLabel="true"] {{
@@ -53,7 +53,7 @@ QWidget#UnitInput {{
     border-radius: 3px;
 }}
 QWidget#UnitInput[override="true"] {{
-    border: 0.5px solid {OVERRIDE_COLOR};
+    border: 1px solid {OVERRIDE_COLOR};
 }}
 
 QWidget#UnitInput QLineEdit,
@@ -64,10 +64,6 @@ QWidget#UnitInput QLineEdit:hover {{
     border: none;
     padding: 2px 4px;
 }}
-QWidget#UnitInput[override="true"] QLineEdit {{
-    color: {OVERRIDE_COLOR};
-    font-weight: 500;
-}}
 
 QLabel[unitBadge="true"] {{
     font-size: 10px;
@@ -77,10 +73,6 @@ QWidget#UnitInput QLabel[unitBadge="true"],
 QWidget#UnitInput QLabel[unitBadge="true"]:enabled {{
     background-color: transparent;
     border: none;
-}}
-QWidget#UnitInput[override="true"] QLabel[unitBadge="true"] {{
-    color: {OVERRIDE_COLOR};
-    font-weight: 500;
 }}
 """
 
@@ -165,8 +157,6 @@ _RESET_SVG = (
 )
 
 
-_ICON_COLOR = b"#5b9bd5"
-
 # -- Toolbar icons (same stroke style) ----------------------------------------
 
 ADD_SVG = (
@@ -202,20 +192,120 @@ IMPORT_SVG = (
 )
 
 
-def render_svg_icon(svg_template: bytes, size: int = 20) -> QtGui.QIcon:
-    """Render an SVG template (with ``COLOR`` placeholder) into a QIcon."""
-    data = svg_template.replace(b"COLOR", _ICON_COLOR)
+# -- Monochrome, theme-aware icons -------------------------------------------
+#
+# Icons are drawn in the theme's text color, like FreeCAD's own toolbar icons,
+# so they read in light and dark themes alike. The state is shown by opacity:
+# full on hover, slightly softened at rest, and faded when disabled.
+
+_ICON_OPACITY = {
+    QtGui.QIcon.Mode.Normal: 0.85,
+    QtGui.QIcon.Mode.Active: 1.0,     # hover on auto-raise tool buttons
+    QtGui.QIcon.Mode.Selected: 1.0,
+    QtGui.QIcon.Mode.Disabled: 0.28,
+}
+
+
+def render_svg_icon(
+    svg_template: bytes,
+    color: QtGui.QColor,
+    size: int = 20,
+    device_ratio: float = 1.0,
+) -> QtGui.QIcon:
+    """Render an SVG template (with ``COLOR`` placeholders) into a QIcon.
+
+    The icon holds a pixmap for each mode (normal, hover, selected and
+    disabled), drawn in *color* at the opacity for that mode and at
+    *device_ratio* so it stays sharp on high-DPI screens.
+    """
+    data = svg_template.replace(b"COLOR", color.name().encode())
     renderer = QSvgRenderer(QtCore.QByteArray(data))
-    px = QtGui.QPixmap(size, size)
-    px.fill(QtCore.Qt.GlobalColor.transparent)
-    painter = QtGui.QPainter(px)
-    renderer.render(painter)
-    painter.end()
-    return QtGui.QIcon(px)
+    icon = QtGui.QIcon()
+    for mode, opacity in _ICON_OPACITY.items():
+        px = QtGui.QPixmap(round(size * device_ratio), round(size * device_ratio))
+        px.setDevicePixelRatio(device_ratio)
+        px.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(px)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.setOpacity(opacity)
+        renderer.render(painter, QtCore.QRectF(0, 0, size, size))
+        painter.end()
+        icon.addPixmap(px, mode)
+    return icon
+
+
+class _ThemedSvgIcon(QtCore.QObject):
+    """Keeps a button's SVG icon in the button's current text color.
+
+    FreeCAD themes are stylesheets, which only reach a widget's palette once
+    it is polished, so the color is read when the button is shown and again
+    whenever its style or palette changes.
+    """
+
+    def __init__(self, button: QtWidgets.QAbstractButton, svg_template: bytes, size: int):
+        super().__init__(button)
+        self._button = button
+        self._svg = svg_template
+        self._size = size
+        self._key: Optional[tuple] = None
+        button.installEventFilter(self)
+        self.refresh()
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() in (
+            QtCore.QEvent.Type.Show,
+            QtCore.QEvent.Type.StyleChange,
+            QtCore.QEvent.Type.PaletteChange,
+            QtCore.QEvent.Type.ScreenChangeInternal,
+        ):
+            self.refresh()
+        return False
+
+    def refresh(self) -> None:
+        btn = self._button
+        color = self._text_color()
+        ratio = btn.devicePixelRatioF()
+        key = (color.rgb(), ratio)
+        if key == self._key:
+            return
+        self._key = key
+        btn.setIcon(render_svg_icon(self._svg, color, self._size, ratio))
+
+    def _text_color(self) -> QtGui.QColor:
+        """Return the color the theme uses for ordinary text next to the button.
+
+        A button's own ``ButtonText`` color is not reliable: themes often set
+        it for filled push buttons (for example white text on a colored
+        button), which would make icons on a light background white. Instead,
+        read the color a plain label gets in the same place, which is the
+        text color the user sees around the icon.
+        """
+        host = self._button.parentWidget() or self._button
+        # Parented so it inherits the same stylesheets, but never shown: this
+        # can run while the host is being shown, which would otherwise show
+        # the probe on top of the icons.
+        probe = QtWidgets.QLabel(host)
+        probe.setAttribute(QtCore.Qt.WidgetAttribute.WA_DontShowOnScreen)
+        probe.hide()
+        probe.ensurePolished()
+        color = probe.palette().color(QtGui.QPalette.ColorRole.WindowText)
+        probe.setParent(None)
+        probe.deleteLater()
+        return color
+
+
+def apply_svg_icon(
+    button: QtWidgets.QAbstractButton,
+    svg_template: bytes,
+    size: int = 20,
+) -> None:
+    """Give *button* a monochrome SVG icon that follows the theme."""
+    button.setIconSize(QtCore.QSize(size, size))
+    _ThemedSvgIcon(button, svg_template, size)
 
 
 class _SvgToolButton(QtWidgets.QToolButton):
-    """Tool button with an SVG icon in the link accent colour (#5b9bd5)."""
+    """Auto-raise tool button with a monochrome, theme-aware SVG icon."""
 
     def __init__(
         self,
@@ -225,11 +315,10 @@ class _SvgToolButton(QtWidgets.QToolButton):
     ):
         super().__init__(parent)
         self.setAutoRaise(True)
-        self.setIconSize(QtCore.QSize(20, 20))
         self.setFixedSize(30, 30)
         self.setToolTip(tooltip)
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self.setIcon(render_svg_icon(svg_template))
+        apply_svg_icon(self, svg_template)
 
 
 # =============================================================================
