@@ -193,22 +193,37 @@ class ProcessTreeView(QtCore.QObject):
         self.tree.blockSignals(True)
         self.tree.clear()
 
+        first_cat = True
         for cat_name, processes in categories_dict.items():
             cat_node = QtWidgets.QTreeWidgetItem(self.tree)
-            cat_node.setText(0, cat_name)
+            cat_node.setText(0, cat_name.upper())
             cat_node.setFlags(cat_node.flags() & ~QtCore.Qt.ItemFlag.ItemIsSelectable)
-            font = cat_node.font(0)
-            font.setBold(True)
-            cat_node.setFont(0, font)
+
+            # Category headers: smaller, muted, uppercase structural labels
+            cat_font = cat_node.font(0)
+            cat_font.setPointSizeF(cat_font.pointSizeF() * 0.85)
+            cat_font.setLetterSpacing(QtGui.QFont.SpacingType.PercentageSpacing, 105)
+            cat_node.setFont(0, cat_font)
+
+            # Spacing above each category group (skip the first)
+            if not first_cat:
+                cat_node.setSizeHint(0, QtCore.QSize(-1, cat_node.sizeHint(0).height() + 10))
+            first_cat = False
 
             for process in processes:
+                mat_count = len(process.materials)
                 p_node = QtWidgets.QTreeWidgetItem(cat_node)
-                p_node.setText(0, process.name)
+                p_node.setText(0, f"{process.name} ({mat_count})")
                 p_node.setData(
                     0,
                     QtCore.Qt.ItemDataRole.UserRole,
                     {"type": "process", "name": process.name},
                 )
+
+                # Process names: bold
+                p_font = p_node.font(0)
+                p_font.setBold(True)
+                p_node.setFont(0, p_font)
 
                 mats = sorted(
                     process.materials.keys(),
@@ -222,6 +237,12 @@ class ProcessTreeView(QtCore.QObject):
                         QtCore.Qt.ItemDataRole.UserRole,
                         {"type": "material", "name": m_name, "process": process.name},
                     )
+
+                    # Default material: italic to indicate it's the template
+                    if m_name == "Default":
+                        m_font = m_node.font(0)
+                        m_font.setItalic(True)
+                        m_node.setFont(0, m_font)
 
         self.tree.expandAll()
         self.tree.blockSignals(False)
