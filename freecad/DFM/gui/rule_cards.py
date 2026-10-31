@@ -8,10 +8,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtSvg import QSvgRenderer
 
 from ..core.processes.process import ProcessArchetype, RuleLimit
-from ..core.rules import RuleDependency, Rulebook, RuleShape
+from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, RuleDependency, Rulebook, RuleShape
 
 
 OVERRIDE_COLOR = "#e8890c"
+CONFLICT_COLOR = "#d9534f"
 
 CARD_STYLE = f"""
 QFrame#RuleCard {{
@@ -54,6 +55,10 @@ QWidget#UnitInput {{
 }}
 QWidget#UnitInput[override="true"] {{
     border: 1px solid {OVERRIDE_COLOR};
+}}
+/* A target that is less strict than its limit; wins over the override mark. */
+QWidget#UnitInput[conflict="true"] {{
+    border: 1px solid {CONFLICT_COLOR};
 }}
 
 QWidget#UnitInput QLineEdit,
@@ -171,6 +176,15 @@ _FIELD_RESET_SVG = (
 
 
 # -- Toolbar icons (same stroke style) ----------------------------------------
+
+FILTER_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
 
 ADD_SVG = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
@@ -448,11 +462,16 @@ class UnitInput(QtWidgets.QWidget):
         self.setObjectName("UnitInput")
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
 
+        self._unit = unit
+        self._default_text = ""
+        self._conflict = ""
+
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(2, 2, 3, 2)
         layout.setSpacing(6)
 
         self._edit = _NumericLineEdit()
+        self._edit.setPlaceholderText("Not set")
         self._edit.setValidator(
             QtGui.QRegularExpressionValidator(
                 QtCore.QRegularExpression(r"^-?\d*\.?\d*$"), self._edit
@@ -482,18 +501,79 @@ class UnitInput(QtWidgets.QWidget):
     def line_edit(self) -> QtWidgets.QLineEdit:
         return self._edit
 
-    def set_override(self, is_override: bool) -> None:
+    def set_override(self, is_override: bool, default_value: str = "") -> None:
+        """Mark the value as differing from *default_value* (the Default material's)."""
+        self._default_text = default_value
         self._reset_btn.setVisible(is_override)
         self.setProperty("override", "true" if is_override else "false")
+        self._repolish()
+        self._update_tooltips()
+
+    def is_override(self) -> bool:
+        return self.property("override") == "true"
+
+    def set_conflict(self, message: str) -> None:
+        """Show a red border and *message* as the tool tip; "" clears it."""
+        if message == self._conflict:
+            return
+        self._conflict = message
+        self.setProperty("conflict", "true" if message else "false")
+        self._repolish()
+        self._update_tooltips()
+
+    def _repolish(self) -> None:
         self.style().unpolish(self)
         self.style().polish(self)
-
         for child in self.findChildren(QtWidgets.QWidget):
             child.style().unpolish(child)
             child.style().polish(child)
 
-    def is_override(self) -> bool:
-        return self.property("override") == "true"
+    def _update_tooltips(self) -> None:
+        default = f"{self._default_text} {self._unit}".strip() if self._default_text else "Not set"
+        lines = []
+        if self._conflict:
+            lines.append(self._conflict)
+        if self.is_override():
+            lines.append(f"Default: {default}")
+        self.setToolTip("\n".join(lines))
+        self._reset_btn.setToolTip(f"Reset to the Default material's value ({default})")
+
+
+# =============================================================================
+
+
+def limit_conflict_message(rule: Rulebook, first: str, second: str) -> str:
+    """Explain why *first* and *second* contradict each other, or return "".
+
+    For target-and-limit rules the target must be at least as strict as the
+    limit: no higher for "max" rules, no lower for "min" rules. For range
+    rules the lower bound must not exceed the upper bound. Empty or
+    non-numeric values are not checked.
+    """
+    try:
+        a, b = float(first), float(second)
+    except (TypeError, ValueError):
+        return ""
+    labels = rule.field_labels
+    unit = rule.unit or ""
+
+    def show(text: str) -> str:
+        return f"{text} {unit}".strip()
+
+    if rule.shape is RuleShape.MIN_AND_MAX and a > b:
+        return f"{labels[0]} {show(first)} is greater than {labels[1]} {show(second)}."
+    if rule.shape is RuleShape.TARGET_AND_LIMIT:
+        if rule.comparison == "max" and a > b:
+            return (
+                f"{labels[0]} {show(first)} is above {labels[1]} {show(second)}. "
+                "The target should not be less strict than the limit."
+            )
+        if rule.comparison == "min" and a < b:
+            return (
+                f"{labels[0]} {show(first)} is below {labels[1]} {show(second)}. "
+                "The target should not be less strict than the limit."
+            )
+    return ""
 
 
 # =============================================================================
@@ -505,6 +585,7 @@ class BaseRuleCard(QtWidgets.QFrame):
     active_toggled = QtCore.Signal(bool)
     feedback_requested = QtCore.Signal()
     dep_link_clicked = QtCore.Signal(object)  # emits the target Rulebook member
+    criticality_changed = QtCore.Signal(object)  # emits the chosen Criticality
 
     def __init__(
         self,
@@ -536,6 +617,7 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._build_layout()
         self._build_fields()
         self._load_values()
+        self._refresh_conflicts()
         self._refresh_active_style()
 
     def refresh(
@@ -556,7 +638,60 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._loading = False
 
         self._load_values()
+        self._refresh_conflicts()
         self._refresh_active_style()
+
+    @property
+    def badge_type(self) -> str:
+        """Scope of the rule: "M" (material), "P" (process) or "S" (setup)."""
+        return self._badge_type
+
+    @property
+    def is_active(self) -> bool:
+        return self._is_active
+
+    def has_overrides(self) -> bool:
+        """Whether any value on the card differs from the Default material."""
+        for field in self.findChildren(UnitInput):
+            if field.is_override():
+                return True
+        for combo in self.findChildren(QtWidgets.QComboBox):
+            if combo.property("override") == "true":
+                return True
+        return False
+
+    def set_criticality(self, criticality: Optional[Criticality]) -> None:
+        """Show *criticality* as a small chip after the rule name."""
+        self._criticality = criticality
+        if criticality is None:
+            self._crit_lbl.hide()
+            return
+        # Critical is red; other levels keep the theme's text color.
+        critical = criticality is Criticality.CRITICAL
+        color = f"color: {CONFLICT_COLOR};" if critical else ""
+        border = CONFLICT_COLOR if critical else "rgba(127, 127, 127, 140)"
+        self._crit_lbl.setText(criticality.label)
+        self._crit_lbl.setToolTip(
+            f"Criticality: {criticality.label}. Click to change."
+            if self._crit_editable else f"Criticality: {criticality.label}"
+        )
+        self._crit_lbl.setStyleSheet(
+            f"QLabel {{ {color} border: 1px solid {border}; border-radius: 3px;"
+            " padding: 0px 4px; font-size: 10px; background: transparent; }"
+        )
+        self._crit_lbl.show()
+
+    def _refresh_conflicts(self) -> None:
+        """Mark both fields red when the target contradicts the limit."""
+        attrs = SHAPE_FIELD_ATTRS.get(self.rule.shape, ())
+        if len(attrs) != 2:
+            return
+        fields = [self.get_field_widget(a) for a in attrs]
+        if any(f is None for f in fields):
+            return
+        message = limit_conflict_message(self.rule, fields[0].text(), fields[1].text())
+        for field in fields:
+            field.set_conflict(message)
 
     def _build_layout(self) -> None:
         outer = QtWidgets.QHBoxLayout(self)
@@ -579,6 +714,14 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._name_lbl = QtWidgets.QLabel(self.rule.label)
         self._name_lbl.setStyleSheet("font-weight: 500;")
         title_row.addWidget(self._name_lbl)
+        # Criticality chip; clicking it opens a menu to change the level.
+        self._criticality: Optional[Criticality] = None
+        self._crit_editable = True
+        self._crit_lbl = QtWidgets.QLabel()
+        self._crit_lbl.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._crit_lbl.installEventFilter(self)
+        self._crit_lbl.hide()
+        title_row.addWidget(self._crit_lbl)
         title_row.addStretch()
         name_col.addLayout(title_row)
 
@@ -649,11 +792,12 @@ class BaseRuleCard(QtWidgets.QFrame):
         value = field.text().strip()
         self.value_changed.emit(attr, value)
         self._refresh_override_state(field, attr, value)
+        self._refresh_conflicts()
 
     def _refresh_override_state(self, field: UnitInput, attr: str, value: str) -> None:
         def_val = getattr(self._default_limit, attr, "") if self._default_limit else ""
         is_override = bool(value and value != str(def_val) and not self._is_default)
-        field.set_override(is_override)
+        field.set_override(is_override, str(def_val or ""))
 
     def _load_field(self, field: UnitInput, attr: str) -> None:
         val = getattr(self._material_limit, attr, "") if self._material_limit else ""
@@ -678,8 +822,42 @@ class BaseRuleCard(QtWidgets.QFrame):
         if self._dep_info:
             self._refresh_dep_description()
 
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if (
+            obj is self._crit_lbl
+            and event.type() == QtCore.QEvent.Type.MouseButtonRelease
+            and event.button() == QtCore.Qt.MouseButton.LeftButton
+            and self._crit_editable
+        ):
+            self._show_criticality_menu()
+            return True
+        return super().eventFilter(obj, event)
+
+    def _show_criticality_menu(self) -> None:
+        menu = QtWidgets.QMenu(self)
+        group = QtGui.QActionGroup(menu)
+        for level in Criticality:
+            action = menu.addAction(level.label)
+            action.setCheckable(True)
+            action.setChecked(level is self._criticality)
+            action.triggered.connect(lambda _=False, lv=level: self._choose_criticality(lv))
+            group.addAction(action)
+        menu.exec(self._crit_lbl.mapToGlobal(QtCore.QPoint(0, self._crit_lbl.height())))
+
+    def _choose_criticality(self, level: Criticality) -> None:
+        if level is not self._criticality:
+            self.set_criticality(level)
+            self.criticality_changed.emit(level)
+
     def set_editable(self, editable: bool) -> None:
         """Disable inputs; the theme's disabled palette provides the dimming."""
+        self._crit_editable = editable
+        self._crit_lbl.setCursor(
+            QtCore.Qt.CursorShape.PointingHandCursor if editable
+            else QtCore.Qt.CursorShape.ArrowCursor
+        )
+        if self._criticality is not None:
+            self.set_criticality(self._criticality)  # refresh the tool tip
         self._check.setEnabled(editable)
         self._feedback_btn.setEnabled(editable)
         if editable:
@@ -892,7 +1070,9 @@ class BinaryCard(BaseRuleCard):
         col.addWidget(lbl)
 
         self._combo = QtWidgets.QComboBox()
-        self._combo.addItems(["ERROR", "WARNING"])
+        # Labels follow FreeCAD's sentence case; the stored value stays uppercase.
+        self._combo.addItem("Error", "ERROR")
+        self._combo.addItem("Warning", "WARNING")
         # Combo plus its reset button take the width of a value field when the
         # text allows, so columns line up; it never shrinks below its text.
         self._combo.setSizeAdjustPolicy(
@@ -916,7 +1096,7 @@ class BinaryCard(BaseRuleCard):
 
         self._fields_row.addStretch()
         self._fields_row.addLayout(col)
-        self._combo.currentTextChanged.connect(self._on_severity_changed)
+        self._combo.currentIndexChanged.connect(self._on_severity_changed)
 
     def _load_values(self) -> None:
         def_val = self._severity_default()
@@ -926,7 +1106,7 @@ class BinaryCard(BaseRuleCard):
         display = def_val if self._is_default else (override_val or def_val)
 
         self._loading = True
-        idx = self._combo.findText(display)
+        idx = self._combo.findData(display)
         if idx >= 0:
             self._combo.setCurrentIndex(idx)
         self._loading = False
@@ -941,19 +1121,23 @@ class BinaryCard(BaseRuleCard):
         def_val = self._severity_default()
         is_override = bool(value and value != def_val and not self._is_default)
         self._combo_reset.setVisible(is_override)
+        default_label = self._combo.itemText(max(0, self._combo.findData(def_val)))
+        self._combo.setToolTip(f"Default: {default_label}" if is_override else "")
+        self._combo_reset.setToolTip(f"Reset to the Default material's value ({default_label})")
         self._combo.setProperty("override", "true" if is_override else "false")
         self._combo.style().unpolish(self._combo)
         self._combo.style().polish(self._combo)
 
-    def _on_severity_changed(self, text: str) -> None:
+    def _on_severity_changed(self, _index: int) -> None:
         if self._loading:
             return
-        self.value_changed.emit("binary_severity", text)
-        self._refresh_combo_override(text)
+        value = self._combo.currentData()
+        self.value_changed.emit("binary_severity", value)
+        self._refresh_combo_override(value)
 
     def get_field_value(self, attr: str) -> str:
         if attr == "binary_severity":
-            return self._combo.currentText()
+            return self._combo.currentData() or ""
         return ""
 
 
@@ -990,7 +1174,8 @@ class DerivedRuleCard(BaseRuleCard):
 
     def _build_fields(self) -> None:
         lbl = QtWidgets.QLabel(self._hint)
-        lbl.setStyleSheet("font-style: italic; font-size: 11px; color: palette(mid);")
+        # Italic marks it as a note; it keeps the theme's text color to stay readable.
+        lbl.setStyleSheet("font-style: italic; font-size: 11px;")
         lbl.setWordWrap(True)
         lbl.setMinimumWidth(180)
         self._fields_row.addWidget(lbl)

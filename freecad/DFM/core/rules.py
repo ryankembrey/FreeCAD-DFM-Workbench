@@ -97,7 +97,7 @@ class Rulebook(Enum):
         shape=RuleShape.TARGET_AND_LIMIT,
         unit="°",
         comparison="min",
-        description="Minimum inclination of faces relative to a reference axis.",
+        description="Minimum inclination of faces relative to the pull direction.",
     )
     MIN_WALL_THICKNESS = RuleType(
         "Minimum Wall Thickness",
@@ -118,7 +118,7 @@ class Rulebook(Enum):
         "Undercut",
         shape=RuleShape.BINARY,
         unit=None,
-        description="Geometry occluded by other features along a reference axis.",
+        description="Geometry hidden behind other features along the pull direction.",
     )
     SHARP_INTERNAL_CORNERS = RuleType(
         "Sharp Internal Corners",
@@ -138,7 +138,7 @@ class Rulebook(Enum):
         unit="°",
         comparison="max",
         field_labels=("Aim for", "At most"),
-        description="Maximum unsupported surface angle relative to the print orientation.",
+        description="Maximum angle of unsupported downward-facing surfaces, from the vertical.",
     )
     MAX_BRIDGE_SPAN = RuleType(
         "Maximum Bridge Span",
@@ -154,7 +154,7 @@ class Rulebook(Enum):
         unit="mm²",
         comparison="max",
         field_labels=("Aim for", "At most"),
-        description="Maximum area of a single flat face on the print bed.",
+        description="Maximum area of a single flat face on the build platform.",
     )
     MAX_CUSP_HEIGHT = RuleType(
         "Maximum Cusp Height",
@@ -162,7 +162,7 @@ class Rulebook(Enum):
         unit="mm",
         comparison="max",
         field_labels=("Aim for", "At most"),
-        description="Maximum layer step height on sloped surfaces due to staircase effect.",
+        description="Maximum stair-step deviation on sloped surfaces.",
     )
     MAX_SUPPORT_MATERIAL = RuleType(
         "Maximum Support Material",

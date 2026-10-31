@@ -4,7 +4,7 @@
 
 import dataclasses
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6 import QtWidgets, QtCore, QtGui
 
@@ -16,8 +16,8 @@ from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, Rulebook
 
 from .rule_cards import (
-    ADD_SVG, CARD_STYLE, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, UnitInput, apply_svg_icon,
-    build_card,
+    ADD_SVG, CARD_STYLE, FILTER_SVG, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, UnitInput,
+    apply_svg_icon, build_card, limit_conflict_message,
 )
 from .rule_cards import _RESET_SVG, _resolve_badge
 
@@ -55,13 +55,61 @@ class ProcessLibraryModel:
         self.is_dirty = False
         self.active_process: Optional[Process] = None
         self.active_material: Optional[Material] = None
+        # What has unsaved changes, for the markers in the tree.
+        self._dirty_processes: set[str] = set()
+        self._dirty_materials: set[tuple[str, str]] = set()
 
     def mark_dirty(self):
+        """Record an unsaved change to the active process (or its settings)."""
         self.is_dirty = True
+        if self.active_process:
+            self._dirty_processes.add(self.active_process.name)
+
+    def _mark_material_dirty(self):
+        """Record an unsaved change to the active material's values."""
+        self.mark_dirty()
+        if self.active_process and self.active_material:
+            self._dirty_materials.add((self.active_process.name, self.active_material.name))
+
+    def is_material_dirty(self, process_name: str, material_name: str) -> bool:
+        return (process_name, material_name) in self._dirty_materials
+
+    def is_process_dirty(self, process_name: str) -> bool:
+        return process_name in self._dirty_processes
+
+    def _clear_dirty(self, process_name: Optional[str] = None):
+        if process_name is None:
+            self._dirty_processes.clear()
+            self._dirty_materials.clear()
+            return
+        self._dirty_processes.discard(process_name)
+        self._dirty_materials = {k for k in self._dirty_materials if k[0] != process_name}
+
+    def override_count(self, process: Process, material_name: str) -> int:
+        """Number of per-material rules whose values differ from Default."""
+        if material_name == "Default":
+            return 0
+        material = process.materials.get(material_name)
+        default = process.materials.get("Default")
+        if not material:
+            return 0
+        count = 0
+        for rule, limit in material.rule_limits.items():
+            if not rule.per_material:
+                continue
+            default_limit = default.rule_limits.get(rule) if default else None
+            for attr in SHAPE_FIELD_ATTRS.get(rule.shape, ()):
+                own = getattr(limit, attr, "")
+                base = getattr(default_limit, attr, "") if default_limit else ""
+                if own and str(own) != str(base or ""):
+                    count += 1
+                    break
+        return count
 
     def save(self):
         self.registry.save_all_processes()
         self.is_dirty = False
+        self._clear_dirty()
 
     def get_categorized_processes(self) -> dict:
         return {
@@ -103,6 +151,7 @@ class ProcessLibraryModel:
         )
         self.registry.add_process(new_process)
         self.mark_dirty()
+        self._dirty_processes.add(name)
         return True
 
     def add_material(self, name: str) -> bool:
@@ -112,6 +161,7 @@ class ProcessLibraryModel:
             name=name, category="", is_active=True, rule_limits={}
         )
         self.mark_dirty()
+        self._dirty_materials.add((self.active_process.name, name))
         return True
 
     def delete_material(self, name: str) -> bool:
@@ -133,12 +183,12 @@ class ProcessLibraryModel:
         if rule not in self.active_material.rule_limits:
             self.active_material.rule_limits[rule] = RuleLimit()
         setattr(self.active_material.rule_limits[rule], attr, value)
-        self.mark_dirty()
+        self._mark_material_dirty()
 
     def reset_rule_limit(self, rule: Rulebook):
         if self.active_material and rule in self.active_material.rule_limits:
             del self.active_material.rule_limits[rule]
-            self.mark_dirty()
+            self._mark_material_dirty()
 
     def reset_rule_field(self, rule: Rulebook, attr: str):
         """Make one field of *rule* fall back to the Default material.
@@ -156,7 +206,7 @@ class ProcessLibraryModel:
         attrs = SHAPE_FIELD_ATTRS.get(rule.shape, ())
         if all(not getattr(limit, a, "") for a in attrs):
             del material.rule_limits[rule]
-        self.mark_dirty()
+        self._mark_material_dirty()
 
     def update_active_rules(self, rules: list):
         if self.active_process:
@@ -179,7 +229,8 @@ class ProcessLibraryModel:
         if success:
             self.active_process = self.registry.get_process_by_name(process_name)
             self.active_material = None
-            self.is_dirty = False
+            self._clear_dirty(process_name)
+            self.is_dirty = bool(self._dirty_processes)
         return success
 
     def delete_process(self, process_name: str) -> bool:
@@ -192,11 +243,63 @@ class ProcessLibraryModel:
     def import_process(self, filepath: str) -> tuple[bool, str]:
         success, result = self.registry.import_process_from_file(Path(filepath))
         if success:
-            self.mark_dirty()
+            self.is_dirty = True
+            self._dirty_processes.add(result)
         return success, result
 
 
 # =============================================================================
+
+
+_UNSAVED_MARK = " \u2022"
+_COUNT_ROLE = QtCore.Qt.ItemDataRole.UserRole + 1
+
+
+class _TreeCountDelegate(QtWidgets.QStyledItemDelegate):
+    """Draws a muted, right-aligned note (such as "4 overrides") on tree rows."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        note = index.data(_COUNT_ROLE)
+        if not note:
+            return
+        # Fit the note after the item's text: full ("4 overrides"), then just
+        # the number, then nothing, so it never overlaps a long name.
+        opt = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        style = opt.widget.style() if opt.widget else QtWidgets.QApplication.style()
+        text_rect = style.subElementRect(
+            QtWidgets.QStyle.SubElement.SE_ItemViewItemText, opt, opt.widget
+        )
+        text_end = text_rect.left() + opt.fontMetrics.horizontalAdvance(opt.text)
+        small = QtGui.QFont(option.font)
+        small.setPointSizeF(small.pointSizeF() * 0.85)
+        fm = QtGui.QFontMetrics(small)
+        right = option.rect.right() - 8
+        for candidate in (note, note.split(" ")[0]):
+            if text_end + 12 + fm.horizontalAdvance(candidate) <= right:
+                note = candidate
+                break
+        else:
+            return
+
+        painter.save()
+        selected = bool(option.state & QtWidgets.QStyle.StateFlag.State_Selected)
+        role = (
+            QtGui.QPalette.ColorRole.HighlightedText if selected
+            else QtGui.QPalette.ColorRole.Text
+        )
+        color = QtGui.QColor(option.palette.color(role))
+        color.setAlphaF(0.85 if selected else 0.55)
+        painter.setFont(small)
+        painter.setPen(color)
+        rect = option.rect.adjusted(0, 0, -8, 0)
+        painter.drawText(
+            rect,
+            int(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter),
+            note,
+        )
+        painter.restore()
 
 
 class ProcessTreeView(QtCore.QObject):
@@ -207,7 +310,45 @@ class ProcessTreeView(QtCore.QObject):
         self.tree = tree
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(15)
+        self.tree.setItemDelegate(_TreeCountDelegate(self.tree))
         self.tree.itemSelectionChanged.connect(self._on_selection)
+
+    def update_markers(self, model: "ProcessLibraryModel") -> None:
+        """Refresh unsaved dots and override counts without rebuilding the tree."""
+        processes = {
+            p.name: p for group in model.get_categorized_processes().values() for p in group
+        }
+        for node in self._iter_nodes():
+            data = node.data(0, QtCore.Qt.ItemDataRole.UserRole)
+            if not data:
+                continue
+            if data.get("type") == "process":
+                process = processes.get(data["name"])
+                if not process:
+                    continue
+                dirty = model.is_process_dirty(process.name)
+                node.setText(
+                    0, f"{process.name} ({len(process.materials)})" + (_UNSAVED_MARK if dirty else "")
+                )
+                node.setToolTip(0, "Unsaved changes" if dirty else "")
+            elif data.get("type") == "material":
+                process = processes.get(data["process"])
+                if not process:
+                    continue
+                name = data["name"]
+                dirty = model.is_material_dirty(process.name, name)
+                count = model.override_count(process, name)
+                node.setText(0, name + (_UNSAVED_MARK if dirty else ""))
+                note = f"{count} override" + ("" if count == 1 else "s") if count else ""
+                node.setData(0, _COUNT_ROLE, note)
+                tips = []
+                if count:
+                    tips.append(
+                        f"{count} rule{'' if count == 1 else 's'} differ from the Default material"
+                    )
+                if dirty:
+                    tips.append("Unsaved changes")
+                node.setToolTip(0, "\n".join(tips))
 
     def populate(self, categories_dict: dict):
         self.tree.blockSignals(True)
@@ -554,8 +695,19 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         )
         value = field.text().strip()
         field.set_override(
-            bool(value and value != str(default) and not self._values.is_default_material)
+            bool(value and value != str(default) and not self._values.is_default_material),
+            str(default or ""),
         )
+        self._refresh_conflicts()
+
+    def _refresh_conflicts(self) -> None:
+        attrs = SHAPE_FIELD_ATTRS.get(self._rule.shape, ())
+        if len(attrs) != 2 or any(a not in self._fields for a in attrs):
+            return
+        first, second = (self._fields[a] for a in attrs)
+        message = limit_conflict_message(self._rule, first.text(), second.text())
+        first.set_conflict(message)
+        second.set_conflict(message)
 
     # ------------------------------------------------------------------
     # Right: feedback messages
@@ -682,11 +834,30 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 # =============================================================================
 
 
+_PREF_PATH = "User parameter:BaseApp/Preferences/Mod/DFM"
+_PREF_OFF_COLLAPSED = "ProcessLibraryOffRulesCollapsed"
+
+
+def _get_pref_bool(name: str, default: bool) -> bool:
+    try:
+        return App.ParamGet(_PREF_PATH).GetBool(name, default)
+    except Exception:
+        return default
+
+
+def _set_pref_bool(name: str, value: bool) -> None:
+    try:
+        App.ParamGet(_PREF_PATH).SetBool(name, value)
+    except Exception:
+        pass
+
+
 class MaterialEditView(QtCore.QObject):
     limit_changed = QtCore.Signal(object, str, str)
     field_reset_requested = QtCore.Signal(object, str)
     rule_active_toggled = QtCore.Signal(object, bool)
     feedback_requested = QtCore.Signal(object)
+    criticality_changed = QtCore.Signal(object, object)  # Rulebook, Criticality
 
     def __init__(self, scroll_area: QtWidgets.QScrollArea):
         super().__init__()
@@ -710,6 +881,16 @@ class MaterialEditView(QtCore.QObject):
         self._editable: bool = True
         self._archetype: Optional[ProcessArchetype] = None
 
+        # Filters; kept when switching material.
+        self._search = ""
+        self._only_overridden = False
+        self._only_on = False
+        self._scopes: set[str] = {"M", "P", "S"}
+
+        # Collapsible section holding the rules that are off.
+        self._off_collapsed = _get_pref_bool(_PREF_OFF_COLLAPSED, True)
+        self._off_header: Optional[QtWidgets.QToolButton] = None
+
     def populate(
         self,
         material: Material,
@@ -717,6 +898,7 @@ class MaterialEditView(QtCore.QObject):
         active_rules: list,
         editable: bool = True,
         archetype: Optional[ProcessArchetype] = None,
+        criticality_of: Optional[Callable[[Rulebook], Criticality]] = None,
     ) -> None:
         """Full rebuild. Used when switching material or process."""
         scroll_pos = self.scroll.verticalScrollBar().value()
@@ -743,13 +925,18 @@ class MaterialEditView(QtCore.QObject):
                 archetype=archetype,
             )
             card.set_editable(editable)
+            if criticality_of is not None:
+                card.set_criticality(criticality_of(rule))
             if editable:
                 self._wire_card(card, rule)
             self._layout.addWidget(card)
             self._cards[rule] = card
 
+        self._off_header = self._make_off_header()
         self._layout.addStretch(1)
         self._wire_dependencies()
+        self._reorder_cards()
+        self._apply_filters()
 
         QtCore.QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(scroll_pos))
 
@@ -775,6 +962,7 @@ class MaterialEditView(QtCore.QObject):
             )
 
         self._reorder_cards()
+        self._apply_filters()
 
     def rule_context(self, rule: Rulebook) -> Optional[RuleValueContext]:
         """Return what the rule dialog needs to show and edit *rule*'s values."""
@@ -818,16 +1006,76 @@ class MaterialEditView(QtCore.QObject):
                 if dep_card and card:
                     new_val = card.get_field_value(dep.source_field)
                     dep_card.update_dep_value(new_val)
+        self._apply_filters()
+
+    def set_criticality(self, rule: Rulebook, criticality: Criticality) -> None:
+        card = self._cards.get(rule)
+        if card:
+            card.set_criticality(criticality)
 
     def clear(self) -> None:
         self._clear()
 
+    # -- Filtering -------------------------------------------------------------
+
     def filter_rules(self, text: str) -> None:
-        term = text.lower().strip()
+        self._search = text.lower().strip()
+        self._apply_filters()
+
+    def set_filters(self, only_overridden: bool, only_on: bool, scopes: set[str]) -> None:
+        self._only_overridden = only_overridden
+        self._only_on = only_on
+        self._scopes = set(scopes)
+        self._apply_filters()
+
+    def _passes_filters(self, card: BaseRuleCard) -> bool:
+        term = self._search
+        if term and term not in card.rule.label.lower() and term not in (
+            card.rule.description or ""
+        ).lower():
+            return False
+        if self._only_overridden and not card.has_overrides():
+            return False
+        if self._only_on and not card.is_active:
+            return False
+        return card.badge_type in self._scopes
+
+    def _apply_filters(self) -> None:
+        off_matching = 0
+        # While searching, show matching rules that are off even if collapsed.
+        show_off = not self._off_collapsed or bool(self._search)
         for card in self._cards.values():
-            label_match = term in card.rule.label.lower()
-            desc_match = term in (card.rule.description or "").lower()
-            card.setVisible(label_match or desc_match)
+            passes = self._passes_filters(card)
+            if passes and not card.is_active:
+                off_matching += 1
+            card.setVisible(passes and (card.is_active or show_off))
+        if self._off_header is not None:
+            self._off_header.setVisible(off_matching > 0)
+            self._off_header.setText(f"Off ({off_matching})")
+            self._off_header.setArrowType(
+                QtCore.Qt.ArrowType.DownArrow if show_off else QtCore.Qt.ArrowType.RightArrow
+            )
+
+    # -- Off section -----------------------------------------------------------
+
+    def _make_off_header(self) -> QtWidgets.QToolButton:
+        header = QtWidgets.QToolButton(self._container)
+        header.setObjectName("OffSectionHeader")
+        header.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        header.setAutoRaise(True)
+        header.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        header.setToolTip("Show or hide the rules that are turned off")
+        font = header.font()
+        font.setBold(True)
+        header.setFont(font)
+        header.clicked.connect(self._toggle_off_section)
+        self._layout.addWidget(header)
+        return header
+
+    def _toggle_off_section(self) -> None:
+        self._off_collapsed = not self._off_collapsed
+        _set_pref_bool(_PREF_OFF_COLLAPSED, self._off_collapsed)
+        self._apply_filters()
 
     def _sorted_rules(self, active_rules) -> list:
         return sorted(
@@ -836,17 +1084,22 @@ class MaterialEditView(QtCore.QObject):
         )
 
     def _reorder_cards(self) -> None:
-        """Move card widgets in the layout to match sorted order without rebuilding."""
-        desired_order = self._sorted_rules(self._active_rules)
-
-        for i, rule in enumerate(desired_order):
+        """Order the layout as: rules that are on, the Off header, rules that are off."""
+        desired: list[QtWidgets.QWidget] = []
+        for rule in self._sorted_rules(self._active_rules):
+            if rule not in self._active_rules and self._off_header is not None \
+                    and self._off_header not in desired:
+                desired.append(self._off_header)
             card = self._cards.get(rule)
-            if not card:
-                continue
-            current_index = self._layout.indexOf(card)
-            if current_index != i:
-                self._layout.removeWidget(card)
-                self._layout.insertWidget(i, card)
+            if card:
+                desired.append(card)
+        if self._off_header is not None and self._off_header not in desired:
+            desired.append(self._off_header)
+
+        for i, widget in enumerate(desired):
+            if self._layout.indexOf(widget) != i:
+                self._layout.removeWidget(widget)
+                self._layout.insertWidget(i, widget)
 
     def _wire_card(self, card: BaseRuleCard, rule: Rulebook) -> None:
         card.value_changed.connect(
@@ -857,6 +1110,9 @@ class MaterialEditView(QtCore.QObject):
         )
         card.active_toggled.connect(lambda state, r=rule: self.rule_active_toggled.emit(r, state))
         card.feedback_requested.connect(lambda r=rule: self.feedback_requested.emit(r))
+        card.criticality_changed.connect(
+            lambda level, r=rule: self.criticality_changed.emit(r, level)
+        )
         card.dep_link_clicked.connect(self._on_dep_link_clicked)
 
     # -- Cross-rule dependency helpers -----------------------------------------
@@ -867,6 +1123,7 @@ class MaterialEditView(QtCore.QObject):
         """Forward to the model signal, then update any dependent cards."""
         self.limit_changed.emit(rule, attr, value)
         self._update_dependent_cards(rule, attr, value)
+        self._apply_filters()
 
     def _wire_dependencies(self) -> None:
         """Set initial inline dependency values after cards are built."""
@@ -935,6 +1192,7 @@ class MaterialEditView(QtCore.QObject):
 
     def _clear(self) -> None:
         self._cards.clear()
+        self._off_header = None
         while self._layout.count():
             item = self._layout.takeAt(0)
             widget = item.widget()
@@ -1096,6 +1354,7 @@ class ProcessLibraryController(QtCore.QObject):
         self._connect_signals()
         self._refresh_process_tree()
         self._auto_select_first()
+        self._update_dirty_state()
 
     def _connect_signals(self):
         f = self.view.form
@@ -1106,6 +1365,11 @@ class ProcessLibraryController(QtCore.QObject):
         f.leSearchRules.textChanged.connect(self.view.material_edit_view.filter_rules)
         f.buttonBox.accepted.connect(self.on_save)
         f.buttonBox.rejected.connect(self.on_reject)
+        self.view.filters_changed.connect(self.view.material_edit_view.set_filters)
+        save_shortcut = QtGui.QShortcut(
+            QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Save), self.view
+        )
+        save_shortcut.activated.connect(self.on_save_in_place)
 
         tree = self.view.tree_view
         tree.selection_changed.connect(self.on_tree_selection_changed)
@@ -1117,12 +1381,20 @@ class ProcessLibraryController(QtCore.QObject):
         edit.field_reset_requested.connect(self.on_field_reset)
         edit.rule_active_toggled.connect(self.on_rule_toggled)
         edit.feedback_requested.connect(self.on_edit_feedback)
+        edit.criticality_changed.connect(self.on_criticality_changed)
 
     def _update_dirty_state(self):
         self.view.set_dirty_title(self.model.is_dirty)
+        save_btn = self.view.form.buttonBox.button(
+            QtWidgets.QDialogButtonBox.StandardButton.Save
+        )
+        if save_btn is not None:
+            save_btn.setEnabled(self.model.is_dirty)
+        self.view.tree_view.update_markers(self.model)
 
     def _refresh_process_tree(self):
         self.view.tree_view.populate(self.model.get_categorized_processes())
+        self.view.tree_view.update_markers(self.model)
 
     def _auto_select_first(self):
         for processes in self.model.get_categorized_processes().values():
@@ -1175,6 +1447,7 @@ class ProcessLibraryController(QtCore.QObject):
             self.view.material_edit_view.populate(
                 default_mat, default_mat, process.active_rules,
                 editable=False, archetype=process.archetype,
+                criticality_of=process.get_criticality,
             )
 
     def _display_material(self, process_name: str, mat_name: str):
@@ -1183,11 +1456,12 @@ class ProcessLibraryController(QtCore.QObject):
         if not (process and material):
             return
         self.view.set_process_label(process.name, process.description)
-        self.view.set_material_edit_title(f"Editing {material.name}")
+        self.view.set_material_edit_title(f"Editing {material.name} ({process.name})")
         default_mat = process.materials.get("Default", material)
         self.view.material_edit_view.populate(
             material, default_mat, process.active_rules,
             editable=True, archetype=process.archetype,
+            criticality_of=process.get_criticality,
         )
 
     def on_new_request(self):
@@ -1303,6 +1577,7 @@ class ProcessLibraryController(QtCore.QObject):
         if self.model.restore_default(process.name):
             self._refresh_process_tree()
             self.view.tree_view.select_process(process.name)
+            self._update_dirty_state()
 
     def on_add_material(self, process_name: Optional[str] = None):
         """Updated: Removed category gathering and processing."""
@@ -1386,6 +1661,7 @@ class ProcessLibraryController(QtCore.QObject):
         warn, err, crit = dlg.get_data()
         process.rule_feedback[rule] = RuleFeedback(warn, err)
         self.model.update_rule_criticality(rule, crit)
+        self.view.material_edit_view.set_criticality(rule, crit)
         changed = dlg.changed_values()
         for attr, value in changed.items():
             if value:
@@ -1396,6 +1672,10 @@ class ProcessLibraryController(QtCore.QObject):
             self.view.material_edit_view.refresh_rule(rule)
         self._update_dirty_state()
 
+    def on_criticality_changed(self, rule: Rulebook, criticality: Criticality):
+        self.model.update_rule_criticality(rule, criticality)
+        self._update_dirty_state()
+
     def on_limit_changed(self, rule: Rulebook, attr: str, value: str):
         self.model.update_rule_limit(rule, attr, value)
         self._update_dirty_state()
@@ -1403,6 +1683,19 @@ class ProcessLibraryController(QtCore.QObject):
     def on_field_reset(self, rule: Rulebook, attr: str):
         self.model.reset_rule_field(rule, attr)
         self.view.material_edit_view.refresh_rule(rule)
+        self._update_dirty_state()
+
+    def on_save_in_place(self):
+        """Save without closing the library (Ctrl+S)."""
+        if not self.model.is_dirty:
+            return
+        try:
+            self.model.save()
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(
+                self.view, "Save Error", f"Failed to save process data: {e}"
+            )
+            return
         self._update_dirty_state()
 
     def on_save(self):
@@ -1433,6 +1726,8 @@ class ProcessLibraryController(QtCore.QObject):
 
 
 class ProcessLibrary(QtWidgets.QDialog):
+    filters_changed = QtCore.Signal(bool, bool, set)  # overridden only, on only, scopes
+
     def __init__(self, parent=None):
         super().__init__(parent or Gui.getMainWindow())
 
@@ -1460,6 +1755,7 @@ class ProcessLibrary(QtWidgets.QDialog):
 
         self._configure_static_widgets()
         self._configure_toolbar_icons()
+        self._build_filter_button()
 
         find_shortcut = QtGui.QShortcut(
             QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Find), self
@@ -1488,6 +1784,69 @@ class ProcessLibrary(QtWidgets.QDialog):
         ):
             btn.setIconSize(QtCore.QSize(20, 20))
             btn.setFixedSize(28, 28)
+
+    _SCOPE_ACTIONS = (
+        ("M", "Material rules"),
+        ("P", "Process rules"),
+        ("S", "Setup rules"),
+    )
+
+    def _build_filter_button(self) -> None:
+        """Add a Filter menu beside the rule search box."""
+        btn = QtWidgets.QToolButton(self.form.gbMaterialEdit)
+        btn.setText("Filter")
+        btn.setToolTip("Filter the rules shown")
+        btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        btn.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        btn.setAutoRaise(True)
+        apply_svg_icon(btn, FILTER_SVG, 16)
+        self._filter_btn = btn
+
+        menu = QtWidgets.QMenu(btn)
+        self._act_overridden = menu.addAction("Overridden only")
+        self._act_overridden.setToolTip("Show only rules that differ from the Default material")
+        self._act_on = menu.addAction("On only")
+        self._act_on.setToolTip("Hide the rules that are turned off")
+        menu.addSection("Scope")
+        self._scope_actions: dict[str, QtGui.QAction] = {}
+        for key, text in self._SCOPE_ACTIONS:
+            self._scope_actions[key] = menu.addAction(text)
+        for act in (self._act_overridden, self._act_on, *self._scope_actions.values()):
+            act.setCheckable(True)
+            act.toggled.connect(self._emit_filters)
+        for act in self._scope_actions.values():
+            act.setChecked(True)
+        menu.addSeparator()
+        menu.addAction("Clear Filters").triggered.connect(self._clear_filters)
+        menu.setToolTipsVisible(True)
+        btn.setMenu(menu)
+
+        # Put the search box and the button on one row.
+        layout = self.form.gbMaterialEdit.layout()
+        search = self.form.leSearchRules
+        index = layout.indexOf(search)
+        layout.removeWidget(search)
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(6)
+        row.addWidget(search, stretch=1)
+        row.addWidget(btn)
+        layout.insertLayout(index, row)
+
+    def _clear_filters(self) -> None:
+        for act in (self._act_overridden, self._act_on):
+            act.setChecked(False)
+        for act in self._scope_actions.values():
+            act.setChecked(True)
+
+    def _emit_filters(self) -> None:
+        scopes = {k for k, act in self._scope_actions.items() if act.isChecked()}
+        active = (
+            int(self._act_overridden.isChecked())
+            + int(self._act_on.isChecked())
+            + (len(self._scope_actions) - len(scopes))
+        )
+        self._filter_btn.setText(f"Filter ({active})" if active else "Filter")
+        self.filters_changed.emit(self._act_overridden.isChecked(), self._act_on.isChecked(), scopes)
 
     def set_dirty_title(self, is_dirty: bool):
         self.setWindowTitle("DFM Process Library" + (" *" if is_dirty else ""))
