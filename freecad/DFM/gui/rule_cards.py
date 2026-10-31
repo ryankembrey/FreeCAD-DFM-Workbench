@@ -427,7 +427,7 @@ class BaseRuleCard(QtWidgets.QFrame):
 
         self._feedback_btn = _SvgToolButton(
             _FEEDBACK_SVG,
-            "Edit feedback messages and criticality",
+            "Rule details, criticality and feedback messages",
             self,
         )
         self._feedback_btn.clicked.connect(self.feedback_requested.emit)
