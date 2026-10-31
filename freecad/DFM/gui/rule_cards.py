@@ -7,7 +7,7 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..core.processes.process import ProcessArchetype, RuleLimit
-from ..core.rules import Rulebook, RuleShape
+from ..core.rules import RuleDependency, Rulebook, RuleShape
 
 
 OVERRIDE_COLOR = "#e8890c"
@@ -82,6 +82,59 @@ QWidget#UnitInput[override="true"] QLabel[unitBadge="true"] {{
     font-weight: 500;
 }}
 """
+
+
+# -- Scope badge styles (M / P / S) ------------------------------------------
+
+BADGE_STYLES = {
+    "M": {
+        "tooltip": "Material: threshold varies per material",
+        "style": (
+            "color: #c89b2b; background: rgba(200,155,43,0.12);"
+            " border: 1px solid rgba(200,155,43,0.35);"
+        ),
+    },
+    "P": {
+        "tooltip": "Process: same threshold for all materials",
+        "style": (
+            "color: #5b9bd5; background: rgba(91,155,213,0.12);"
+            " border: 1px solid rgba(91,155,213,0.35);"
+        ),
+    },
+    "S": {
+        "tooltip": "Setup: derived from analysis task configuration",
+        "style": (
+            "color: #8a8a8a; background: rgba(138,138,138,0.12);"
+            " border: 1px solid rgba(138,138,138,0.35);"
+        ),
+    },
+}
+
+
+# =============================================================================
+
+
+def _resolve_badge(
+    rule: Rulebook,
+    archetype: Optional[ProcessArchetype],
+) -> str:
+    """Determine the M/P/S badge letter for a rule card."""
+    if archetype is not None and rule in archetype.derived_rules:
+        return "S"
+    if not rule.per_material:
+        return "P"
+    return "M"
+
+
+def _make_scope_badge(badge_type: str) -> QtWidgets.QLabel:
+    """Create a small coloured scope badge (M, P or S)."""
+    info = BADGE_STYLES.get(badge_type, BADGE_STYLES["M"])
+    lbl = QtWidgets.QLabel(badge_type)
+    lbl.setFixedSize(18, 18)
+    lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    lbl.setStyleSheet(f"font-size: 11px; font-weight: bold; border-radius: 3px; {info['style']}")
+    lbl.setToolTip(info["tooltip"])
+    return lbl
 
 
 # =============================================================================
@@ -173,6 +226,7 @@ class BaseRuleCard(QtWidgets.QFrame):
     reset_requested = QtCore.Signal()
     active_toggled = QtCore.Signal(bool)
     feedback_requested = QtCore.Signal()
+    dep_link_clicked = QtCore.Signal(object)  # emits the target Rulebook member
 
     def __init__(
         self,
@@ -181,6 +235,7 @@ class BaseRuleCard(QtWidgets.QFrame):
         default_limit: Optional[RuleLimit],
         is_default_material: bool,
         is_active: bool,
+        badge_type: str = "M",
         parent: Optional[QtWidgets.QWidget] = None,
     ):
         super().__init__(parent)
@@ -190,8 +245,15 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._default_limit = default_limit
         self._is_default = is_default_material
         self._is_active = is_active
+        self._badge_type = badge_type
         self._loading = False
         self._opacity_effect: Optional[QtWidgets.QGraphicsOpacityEffect] = None
+
+        # Dependency display state
+        self._dep_info: Optional[RuleDependency] = rule.dependency
+        self._dep_value: str = ""
+
+        self._desc_lbl: Optional[QtWidgets.QLabel] = None
 
         self._build_layout()
         self._build_fields()
@@ -232,15 +294,34 @@ class BaseRuleCard(QtWidgets.QFrame):
 
         name_col = QtWidgets.QVBoxLayout()
         name_col.setSpacing(2)
+
+        # Title row: scope badge + rule name
+        title_row = QtWidgets.QHBoxLayout()
+        title_row.setSpacing(6)
+        self._badge_lbl = _make_scope_badge(self._badge_type)
+        title_row.addWidget(self._badge_lbl)
         self._name_lbl = QtWidgets.QLabel(self.rule.label)
         self._name_lbl.setStyleSheet("font-weight: 500;")
-        name_col.addWidget(self._name_lbl)
+        title_row.addWidget(self._name_lbl)
+        title_row.addStretch()
+        name_col.addLayout(title_row)
 
-        if self.rule.description:
-            self._desc_lbl = QtWidgets.QLabel(self.rule.description)
-            self._desc_lbl.setStyleSheet("font-size: 11px;")
-            self._desc_lbl.setWordWrap(True)
-            name_col.addWidget(self._desc_lbl)
+        # Description (with optional inline dependency link)
+        self._desc_lbl = QtWidgets.QLabel()
+        self._desc_lbl.setStyleSheet("font-size: 11px;")
+        self._desc_lbl.setWordWrap(True)
+        if self._dep_info:
+            self._desc_lbl.setTextFormat(QtCore.Qt.TextFormat.RichText)
+            self._desc_lbl.setTextInteractionFlags(
+                QtCore.Qt.TextInteractionFlag.LinksAccessibleByMouse
+            )
+            self._desc_lbl.linkActivated.connect(self._on_dep_link_activated)
+            self._desc_lbl.linkHovered.connect(self._on_dep_link_hovered)
+            self._refresh_dep_description()
+        else:
+            self._desc_lbl.setText(self.rule.description or "")
+        name_col.addWidget(self._desc_lbl)
+
         outer.addLayout(name_col, stretch=1)
 
         self._fields_host = QtWidgets.QWidget()
@@ -351,6 +432,8 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._feedback_btn.setEnabled(self._is_active)
         self.style().unpolish(self)
         self.style().polish(self)
+        if self._dep_info:
+            self._refresh_dep_description()
 
     def set_editable(self, editable: bool) -> None:
         """Disable inputs; the theme's disabled palette provides the dimming."""
@@ -371,6 +454,71 @@ class BaseRuleCard(QtWidgets.QFrame):
             self._opacity_effect = QtWidgets.QGraphicsOpacityEffect(self)
             self.setGraphicsEffect(self._opacity_effect)
         self._opacity_effect.setOpacity(opacity)
+
+    # -- Inline dependency display --------------------------------------------
+
+    def _refresh_dep_description(self) -> None:
+        """Rebuild the description HTML with the current dependency value."""
+        if not self._dep_info or self._desc_lbl is None:
+            return
+
+        val = self._dep_value
+        unit = self._dep_info.unit
+        display = f"{val}{unit}" if val else "—"
+
+        before = self._dep_info.desc_before
+        after = self._dep_info.desc_after
+        source_name = self._dep_info.source_rule
+
+        link_html = (
+            f'<a href="dep:{source_name}" '
+            f'style="color:#5b9bd5; font-weight:bold; font-style:italic; '
+            f'text-decoration:none">{display}</a>'
+        )
+        self._desc_lbl.setText(f"{before}{link_html}{after}")
+
+    def _on_dep_link_activated(self, url: str) -> None:
+        if url.startswith("dep:"):
+            rule_name = url[4:]
+            try:
+                target_rule = Rulebook[rule_name]
+                self.dep_link_clicked.emit(target_rule)
+            except KeyError:
+                pass
+
+    def _on_dep_link_hovered(self, url: str) -> None:
+        if self._desc_lbl is None:
+            return
+        if url and self._dep_info:
+            try:
+                source = Rulebook[self._dep_info.source_rule]
+                field_label = source.field_label_for(self._dep_info.source_field)
+                self._desc_lbl.setToolTip(f"{source.label} → {field_label}")
+            except KeyError:
+                self._desc_lbl.setToolTip("")
+        else:
+            self._desc_lbl.setToolTip("")
+
+    def update_dep_value(self, value: str) -> None:
+        """Update the inline dependency value in the description."""
+        self._dep_value = value
+        self._refresh_dep_description()
+
+    # -- Field value access (for dependency wiring) ---------------------------
+
+    def get_field_value(self, attr: str) -> str:
+        """Return the current display value of a field by attribute name.
+
+        Overridden by subclasses that have editable inputs.
+        """
+        return ""
+
+    def get_field_widget(self, attr: str) -> Optional["UnitInput"]:
+        """Return the UnitInput widget for a field by attribute name.
+
+        Overridden by subclasses that have editable inputs.
+        """
+        return None
 
     def _build_fields(self) -> None:
         raise NotImplementedError
@@ -396,6 +544,20 @@ class TargetAndLimitCard(BaseRuleCard):
         self._load_field(self._target_field, "target")
         self._load_field(self._limit_field, "limit")
 
+    def get_field_value(self, attr: str) -> str:
+        if attr == "target":
+            return self._target_field.text()
+        if attr == "limit":
+            return self._limit_field.text()
+        return ""
+
+    def get_field_widget(self, attr: str) -> Optional[UnitInput]:
+        if attr == "target":
+            return self._target_field
+        if attr == "limit":
+            return self._limit_field
+        return None
+
 
 # =============================================================================
 
@@ -409,6 +571,16 @@ class TargetOnlyCard(BaseRuleCard):
     def _load_values(self) -> None:
         self._load_field(self._target_field, "target")
 
+    def get_field_value(self, attr: str) -> str:
+        if attr == "target":
+            return self._target_field.text()
+        return ""
+
+    def get_field_widget(self, attr: str) -> Optional[UnitInput]:
+        if attr == "target":
+            return self._target_field
+        return None
+
 
 # =============================================================================
 
@@ -421,6 +593,16 @@ class LimitOnlyCard(BaseRuleCard):
 
     def _load_values(self) -> None:
         self._load_field(self._limit_field, "limit")
+
+    def get_field_value(self, attr: str) -> str:
+        if attr == "limit":
+            return self._limit_field.text()
+        return ""
+
+    def get_field_widget(self, attr: str) -> Optional[UnitInput]:
+        if attr == "limit":
+            return self._limit_field
+        return None
 
 
 # =============================================================================
@@ -439,6 +621,20 @@ class MinAndMaxCard(BaseRuleCard):
     def _load_values(self) -> None:
         self._load_field(self._min_field, "min_value")
         self._load_field(self._max_field, "max_value")
+
+    def get_field_value(self, attr: str) -> str:
+        if attr == "min_value":
+            return self._min_field.text()
+        if attr == "max_value":
+            return self._max_field.text()
+        return ""
+
+    def get_field_widget(self, attr: str) -> Optional[UnitInput]:
+        if attr == "min_value":
+            return self._min_field
+        if attr == "max_value":
+            return self._max_field
+        return None
 
 
 # =============================================================================
@@ -497,6 +693,11 @@ class BinaryCard(BaseRuleCard):
         self._refresh_combo_override(text)
         self._refresh_reset_state()
 
+    def get_field_value(self, attr: str) -> str:
+        if attr == "binary_severity":
+            return self._combo.currentText()
+        return ""
+
 
 # =============================================================================
 
@@ -515,10 +716,19 @@ class DerivedRuleCard(BaseRuleCard):
         is_default_material: bool,
         is_active: bool,
         hint: str = "",
+        badge_type: str = "S",
         parent: Optional[QtWidgets.QWidget] = None,
     ):
         self._hint = hint
-        super().__init__(rule, material_limit, default_limit, is_default_material, is_active, parent)
+        super().__init__(
+            rule,
+            material_limit,
+            default_limit,
+            is_default_material,
+            is_active,
+            badge_type,
+            parent,
+        )
 
     def _build_fields(self) -> None:
         lbl = QtWidgets.QLabel(self._hint)
@@ -553,15 +763,30 @@ def build_card(
     parent: Optional[QtWidgets.QWidget] = None,
     archetype: Optional[ProcessArchetype] = None,
 ) -> BaseRuleCard:
+    badge_type = _resolve_badge(rule, archetype)
+
     # If the archetype derives this rule at runtime, show a hint instead of inputs
     if archetype is not None:
         derived = archetype.derived_rules
         if rule in derived:
             return DerivedRuleCard(
-                rule, material_limit, default_limit,
-                is_default_material, is_active,
-                hint=derived[rule], parent=parent,
+                rule,
+                material_limit,
+                default_limit,
+                is_default_material,
+                is_active,
+                hint=derived[rule],
+                badge_type=badge_type,
+                parent=parent,
             )
 
     card_cls = _CARD_CLASSES[rule.shape]
-    return card_cls(rule, material_limit, default_limit, is_default_material, is_active, parent)
+    return card_cls(
+        rule,
+        material_limit,
+        default_limit,
+        is_default_material,
+        is_active,
+        badge_type,
+        parent,
+    )

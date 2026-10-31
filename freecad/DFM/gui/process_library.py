@@ -518,6 +518,7 @@ class MaterialEditView(QtCore.QObject):
             self._cards[rule] = card
 
         self._layout.addStretch(1)
+        self._wire_dependencies()
 
         QtCore.QTimer.singleShot(0, lambda: self.scroll.verticalScrollBar().setValue(scroll_pos))
 
@@ -559,6 +560,16 @@ class MaterialEditView(QtCore.QObject):
             is_default_material=(self._material.name == "Default"),
             is_active=rule in self._active_rules,
         )
+        # Push refreshed values to any cards that depend on this rule.
+        for r in Rulebook:
+            dep = r.dependency
+            if dep is None:
+                continue
+            if dep.source_rule == rule.name:
+                dep_card = self._cards.get(r)
+                if dep_card and card:
+                    new_val = card.get_field_value(dep.source_field)
+                    dep_card.update_dep_value(new_val)
 
     def clear(self) -> None:
         self._clear()
@@ -590,10 +601,87 @@ class MaterialEditView(QtCore.QObject):
                 self._layout.insertWidget(i, card)
 
     def _wire_card(self, card: BaseRuleCard, rule: Rulebook) -> None:
-        card.value_changed.connect(lambda attr, val, r=rule: self.limit_changed.emit(r, attr, val))
+        card.value_changed.connect(
+            lambda attr, val, r=rule: self._on_card_value_changed(r, attr, val)
+        )
         card.reset_requested.connect(lambda r=rule: self.reset_requested.emit(r))
         card.active_toggled.connect(lambda state, r=rule: self.rule_active_toggled.emit(r, state))
         card.feedback_requested.connect(lambda r=rule: self.feedback_requested.emit(r))
+        card.dep_link_clicked.connect(self._on_dep_link_clicked)
+
+    # -- Cross-rule dependency helpers -----------------------------------------
+
+    def _on_card_value_changed(
+        self, rule: Rulebook, attr: str, value: str,
+    ) -> None:
+        """Forward to the model signal, then update any dependent cards."""
+        self.limit_changed.emit(rule, attr, value)
+        self._update_dependent_cards(rule, attr, value)
+
+    def _wire_dependencies(self) -> None:
+        """Set initial inline dependency values after cards are built."""
+        for rule in Rulebook:
+            dep = rule.dependency
+            if dep is None:
+                continue
+            dep_card = self._cards.get(rule)
+            source_rule = Rulebook[dep.source_rule]
+            source_card = self._cards.get(source_rule)
+            if dep_card and source_card:
+                initial_value = source_card.get_field_value(dep.source_field)
+                dep_card.update_dep_value(initial_value)
+
+    def _update_dependent_cards(
+        self, changed_rule: Rulebook, attr: str, value: str,
+    ) -> None:
+        """When a source rule's value changes, push it to dependent cards."""
+        for rule in Rulebook:
+            dep = rule.dependency
+            if dep is None:
+                continue
+            if dep.source_rule == changed_rule.name and dep.source_field == attr:
+                dep_card = self._cards.get(rule)
+                if dep_card:
+                    dep_card.update_dep_value(value)
+
+    def _on_dep_link_clicked(self, target_rule: Rulebook) -> None:
+        """Scroll to the source rule card and flash the linked field."""
+        card = self._cards.get(target_rule)
+        if not card:
+            return
+
+        # Find which field to highlight by looking up the dependency that
+        # points at target_rule.
+        source_field = None
+        for rule in Rulebook:
+            dep = rule.dependency
+            if dep and dep.source_rule == target_rule.name:
+                source_field = dep.source_field
+                break
+
+        widget = card.get_field_widget(source_field) if source_field else None
+        if not widget:
+            return
+
+        self.scroll.ensureWidgetVisible(card, 50, 50)
+        self._pulse_field(widget)
+
+    _PULSE_FIELD_STYLE = (
+        "QWidget#UnitInput { border: 1.5px solid #5b9bd5; border-radius: 3px; }"
+    )
+
+    def _pulse_field(self, widget: QtWidgets.QWidget) -> None:
+        """Flash a UnitInput border blue twice."""
+        # pulse 1: on
+        widget.setStyleSheet(self._PULSE_FIELD_STYLE)
+        # pulse 1: off
+        QtCore.QTimer.singleShot(250, lambda w=widget: w.setStyleSheet(""))
+        # pulse 2: on
+        QtCore.QTimer.singleShot(500, lambda w=widget: w.setStyleSheet(self._PULSE_FIELD_STYLE))
+        # pulse 2: off
+        QtCore.QTimer.singleShot(750, lambda w=widget: w.setStyleSheet(""))
+
+    # -------------------------------------------------------------------------
 
     def _clear(self) -> None:
         self._cards.clear()

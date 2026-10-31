@@ -29,6 +29,25 @@ class RuleShape(Enum):
 
 
 @dataclass(frozen=True)
+class RuleDependency:
+    """Declares that a rule's description references a value from another rule.
+
+    source_rule is the *name* of the Rulebook member (a string, to avoid
+    forward-referencing the enum before it is defined).
+    source_field is the RuleLimit attribute to read ("target", "limit", …).
+    desc_before / desc_after are the prose fragments that wrap the inline
+    value in the card description.
+    unit is appended to the displayed value (e.g. "°").
+    """
+
+    source_rule: str  # Rulebook member name, resolved at runtime
+    source_field: str
+    desc_before: str
+    desc_after: str
+    unit: str = ""
+
+
+@dataclass(frozen=True)
 class RuleType:
     """Static metadata for one rule.
 
@@ -37,6 +56,10 @@ class RuleType:
     (e.g. "of wall thickness"), empty for absolute values.
     field_labels overrides the shape's default input labels.
     description is one short line shown under the rule name.
+    per_material controls whether thresholds vary per material (True)
+    or are the same for all materials in a process (False).
+    dependency, when set, links part of the card description to a
+    value from another rule.
     """
 
     label: str
@@ -46,6 +69,8 @@ class RuleType:
     unit_suffix: str = ""
     description: str = ""
     field_labels: tuple[str, ...] = ()
+    per_material: bool = True
+    dependency: Optional[RuleDependency] = None
 
 
 SHAPE_DEFAULT_LABELS: dict[RuleShape, tuple[str, ...]] = {
@@ -54,6 +79,15 @@ SHAPE_DEFAULT_LABELS: dict[RuleShape, tuple[str, ...]] = {
     RuleShape.LIMIT_ONLY: ("At most",),
     RuleShape.MIN_AND_MAX: ("Between", "and"),
     RuleShape.BINARY: ("If detected",),
+}
+
+# Maps each shape to its field attribute names, in the same order as the labels.
+SHAPE_FIELD_ATTRS: dict[RuleShape, tuple[str, ...]] = {
+    RuleShape.TARGET_AND_LIMIT: ("target", "limit"),
+    RuleShape.TARGET_ONLY: ("target",),
+    RuleShape.LIMIT_ONLY: ("limit",),
+    RuleShape.MIN_AND_MAX: ("min_value", "max_value"),
+    RuleShape.BINARY: ("binary_severity",),
 }
 
 
@@ -130,6 +164,22 @@ class Rulebook(Enum):
         field_labels=("Aim for", "At most"),
         description="Maximum layer step height on sloped surfaces due to staircase effect.",
     )
+    MAX_SUPPORT_MATERIAL = RuleType(
+        "Maximum Support Material",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="max",
+        field_labels=("Aim for", "At most"),
+        description="Estimated percentage of surface area requiring support material.",
+        per_material=False,
+        dependency=RuleDependency(
+            source_rule="MAX_OVERHANG_ANGLE",
+            source_field="limit",
+            desc_before="Percentage of surface area exceeding the ",
+            desc_after=" overhang limit.",
+            unit="°",
+        ),
+    )
 
     @property
     def id(self) -> str:
@@ -164,7 +214,24 @@ class Rulebook(Enum):
         return self.value.comparison
 
     @property
+    def per_material(self) -> bool:
+        return self.value.per_material
+
+    @property
     def field_labels(self) -> tuple[str, ...]:
         if self.value.field_labels:
             return self.value.field_labels
         return SHAPE_DEFAULT_LABELS[self.shape]
+
+    @property
+    def dependency(self) -> Optional["RuleDependency"]:
+        return self.value.dependency
+
+    def field_label_for(self, attr: str) -> str:
+        """Return the display label for a field attribute (e.g. 'limit' → 'At most')."""
+        attrs = SHAPE_FIELD_ATTRS.get(self.shape, ())
+        labels = self.field_labels
+        try:
+            return labels[attrs.index(attr)]
+        except (ValueError, IndexError):
+            return attr
