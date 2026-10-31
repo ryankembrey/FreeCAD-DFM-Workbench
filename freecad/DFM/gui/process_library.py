@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+import contextlib
+import copy
 import dataclasses
 from pathlib import Path
 from typing import Callable, Optional
@@ -16,7 +18,8 @@ from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, Rulebook
 
 from .rule_cards import (
-    ADD_SVG, CARD_STYLE, FILTER_SVG, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, UnitInput,
+    ADD_SVG, CARD_STYLE, FILTER_SVG, IMPORT_SVG, REDO_SVG, REMOVE_SVG, UNDO_SVG, BaseRuleCard,
+    UnitInput,
     apply_svg_icon, build_card, limit_conflict_message,
 )
 from .rule_cards import _RESET_SVG, _resolve_badge
@@ -46,44 +49,83 @@ QToolButton:hover {
 # =============================================================================
 
 
+_UNDO_LIMIT = 100
+
+
+@dataclasses.dataclass
+class _UndoStep:
+    """One undoable change: a copy of a process as it was before (or after) it."""
+
+    label: str
+    process_name: str
+    process: Process
+    material_name: Optional[str]
+
+
+def _process_state(process: Process) -> tuple:
+    """Comparable state of *process*; the order of active rules does not matter."""
+    return tuple(
+        frozenset(value) if f.name == "active_rules" else value
+        for f in dataclasses.fields(process)
+        for value in (getattr(process, f.name),)
+    )
+
+
 class ProcessLibraryModel:
-    """Application state, data persistence, and active selections."""
+    """Application state, data persistence, undo history and active selections.
+
+    Unsaved changes are found by comparing each process with a copy taken
+    when it was last loaded or saved, so undoing back to the saved state
+    clears them again.
+
+    Undo works on snapshots: before a change, a copy of the affected process
+    is stored, and undo puts that copy back. Changes that write to or delete
+    files at once (adding, deleting, importing or restoring a whole process)
+    are not undoable and clear that process's history.
+    """
 
     def __init__(self):
         self.registry = ProcessRegistry.get_instance()
         self.registry.discover_processes()
-        self.is_dirty = False
         self.active_process: Optional[Process] = None
         self.active_material: Optional[Material] = None
-        # What has unsaved changes, for the markers in the tree.
-        self._dirty_processes: set[str] = set()
-        self._dirty_materials: set[tuple[str, str]] = set()
 
-    def mark_dirty(self):
-        """Record an unsaved change to the active process (or its settings)."""
-        self.is_dirty = True
-        if self.active_process:
-            self._dirty_processes.add(self.active_process.name)
+        self._saved: dict[str, Process] = {}
+        self._snapshot_saved()
 
-    def _mark_material_dirty(self):
-        """Record an unsaved change to the active material's values."""
-        self.mark_dirty()
-        if self.active_process and self.active_material:
-            self._dirty_materials.add((self.active_process.name, self.active_material.name))
+        self._undo: list[_UndoStep] = []
+        self._redo: list[_UndoStep] = []
+        self._group_depth = 0
 
-    def is_material_dirty(self, process_name: str, material_name: str) -> bool:
-        return (process_name, material_name) in self._dirty_materials
+    # -- Unsaved changes -------------------------------------------------------
+
+    def _snapshot_saved(self, process_name: Optional[str] = None):
+        if process_name is None:
+            self._saved = {n: copy.deepcopy(p) for n, p in self.registry.processes.items()}
+            return
+        process = self.registry.processes.get(process_name)
+        if process is None:
+            self._saved.pop(process_name, None)
+        else:
+            self._saved[process_name] = copy.deepcopy(process)
+
+    @property
+    def is_dirty(self) -> bool:
+        return any(self.is_process_dirty(name) for name in self.registry.processes)
 
     def is_process_dirty(self, process_name: str) -> bool:
-        return process_name in self._dirty_processes
+        current = self.registry.processes.get(process_name)
+        saved = self._saved.get(process_name)
+        if current is None or saved is None:
+            return current is not saved
+        return _process_state(current) != _process_state(saved)
 
-    def _clear_dirty(self, process_name: Optional[str] = None):
-        if process_name is None:
-            self._dirty_processes.clear()
-            self._dirty_materials.clear()
-            return
-        self._dirty_processes.discard(process_name)
-        self._dirty_materials = {k for k in self._dirty_materials if k[0] != process_name}
+    def is_material_dirty(self, process_name: str, material_name: str) -> bool:
+        current = self.registry.processes.get(process_name)
+        saved = self._saved.get(process_name)
+        cur_mat = current.materials.get(material_name) if current else None
+        saved_mat = saved.materials.get(material_name) if saved else None
+        return cur_mat != saved_mat
 
     def override_count(self, process: Process, material_name: str) -> int:
         """Number of per-material rules whose values differ from Default."""
@@ -108,8 +150,79 @@ class ProcessLibraryModel:
 
     def save(self):
         self.registry.save_all_processes()
-        self.is_dirty = False
-        self._clear_dirty()
+        self._snapshot_saved()
+
+    # -- Undo and redo ---------------------------------------------------------
+
+    @contextlib.contextmanager
+    def undo_group(self, label: str, material_name: Optional[str] = None):
+        """Record every change made inside the block as one undo step.
+
+        A copy of the active process is taken on entry. If the process ends
+        up unchanged, no step is recorded. Nested groups join the outer one.
+        """
+        step = None
+        redo = None
+        if self._group_depth == 0 and self.active_process is not None:
+            if material_name is None and self.active_material is not None:
+                material_name = self.active_material.name
+            step = _UndoStep(
+                label, self.active_process.name, copy.deepcopy(self.active_process), material_name
+            )
+            redo = list(self._redo)
+        self._group_depth += 1
+        try:
+            yield
+        finally:
+            self._group_depth -= 1
+            if step is not None:
+                current = self.registry.processes.get(step.process_name)
+                if current is not None and _process_state(current) != _process_state(step.process):
+                    self._undo.append(step)
+                    del self._undo[:-_UNDO_LIMIT]
+                    self._redo.clear()
+                else:
+                    self._redo = redo
+
+    @property
+    def undo_label(self) -> str:
+        return self._undo[-1].label if self._undo else ""
+
+    @property
+    def redo_label(self) -> str:
+        return self._redo[-1].label if self._redo else ""
+
+    def undo(self) -> Optional[tuple[str, Optional[str]]]:
+        """Undo the last change; return the (process, material) it was made in."""
+        return self._swap(self._undo, self._redo)
+
+    def redo(self) -> Optional[tuple[str, Optional[str]]]:
+        """Redo the last undone change; return the (process, material) it was made in."""
+        return self._swap(self._redo, self._undo)
+
+    def _swap(self, source: list, target: list) -> Optional[tuple[str, Optional[str]]]:
+        while source:
+            step = source.pop()
+            current = self.registry.processes.get(step.process_name)
+            if current is None:
+                continue  # the process no longer exists
+            target.append(
+                _UndoStep(step.label, step.process_name, copy.deepcopy(current), step.material_name)
+            )
+            self.registry.processes[step.process_name] = step.process
+            self.active_process = step.process
+            material = step.material_name
+            if material not in step.process.materials:
+                material = "Default" if "Default" in step.process.materials else None
+            self.active_material = step.process.materials.get(material) if material else None
+            return step.process_name, material
+        return None
+
+    def _forget_history(self, process_name: str):
+        self._undo = [s for s in self._undo if s.process_name != process_name]
+        self._redo = [s for s in self._redo if s.process_name != process_name]
+
+    # -- Queries ---------------------------------------------------------------
 
     def get_categorized_processes(self) -> dict:
         return {
@@ -129,10 +242,84 @@ class ProcessLibraryModel:
             self.active_material = None
         return self.active_material
 
+    def is_builtin(self, process_name: str) -> bool:
+        return self.registry.is_builtin(process_name)
+
+    def has_user_override(self, process_name: str) -> bool:
+        return self.registry.has_user_override(process_name)
+
+    # -- Undoable edits --------------------------------------------------------
+
     def update_rule_feedback(self, rule: Rulebook, warning_msg: str, error_msg: str):
-        if self.active_process:
+        if not self.active_process:
+            return
+        with self.undo_group(f"Edit feedback for {rule.label}"):
             self.active_process.rule_feedback[rule] = RuleFeedback(warning_msg, error_msg)
-            self.mark_dirty()
+
+    def add_material(self, name: str) -> bool:
+        if not self.active_process or name in self.active_process.materials:
+            return False
+        with self.undo_group(f"Add material {name}", material_name=name):
+            self.active_process.materials[name] = Material(
+                name=name, category="", is_active=True, rule_limits={}
+            )
+        return True
+
+    def delete_material(self, name: str) -> bool:
+        if (
+            not self.active_process
+            or name not in self.active_process.materials
+            or name == "Default"
+        ):
+            return False
+        with self.undo_group(f"Delete material {name}", material_name=name):
+            del self.active_process.materials[name]
+        if self.active_material and self.active_material.name == name:
+            self.active_material = None
+        return True
+
+    def update_rule_limit(self, rule: Rulebook, attr: str, value: str):
+        if not self.active_material:
+            return
+        with self.undo_group(f"Edit {rule.label} ({rule.field_label_for(attr)})"):
+            if rule not in self.active_material.rule_limits:
+                self.active_material.rule_limits[rule] = RuleLimit()
+            setattr(self.active_material.rule_limits[rule], attr, value)
+
+    def reset_rule_limit(self, rule: Rulebook):
+        if self.active_material and rule in self.active_material.rule_limits:
+            with self.undo_group(f"Reset {rule.label}"):
+                del self.active_material.rule_limits[rule]
+
+    def reset_rule_field(self, rule: Rulebook, attr: str):
+        """Make one field of *rule* fall back to the Default material.
+
+        An empty value means "use Default" for numeric fields. When none of
+        the rule's fields keep a value of their own, the material's entry is
+        removed entirely; this is also how a severity is reset, since an
+        empty severity would otherwise override Default.
+        """
+        material = self.active_material
+        if not material or rule not in material.rule_limits:
+            return
+        with self.undo_group(f"Reset {rule.label} ({rule.field_label_for(attr)})"):
+            limit = material.rule_limits[rule]
+            setattr(limit, attr, "")
+            attrs = SHAPE_FIELD_ATTRS.get(rule.shape, ())
+            if all(not getattr(limit, a, "") for a in attrs):
+                del material.rule_limits[rule]
+
+    def update_active_rules(self, rules: list, label: str = "Change active rules"):
+        if self.active_process:
+            with self.undo_group(label):
+                self.active_process.active_rules = rules
+
+    def update_rule_criticality(self, rule: Rulebook, criticality: Criticality):
+        if self.active_process:
+            with self.undo_group(f"Change criticality of {rule.label}"):
+                self.active_process.rule_criticality[rule] = criticality
+
+    # -- Whole-process changes (not undoable) ----------------------------------
 
     def add_process(self, name: str, category: str, archetype: ProcessArchetype = ProcessArchetype.GENERIC) -> bool:
         if self.registry.get_process_by_name(name):
@@ -150,101 +337,34 @@ class ProcessLibraryModel:
             },
         )
         self.registry.add_process(new_process)
-        self.mark_dirty()
-        self._dirty_processes.add(name)
+        self._forget_history(name)
         return True
-
-    def add_material(self, name: str) -> bool:
-        if not self.active_process or name in self.active_process.materials:
-            return False
-        self.active_process.materials[name] = Material(
-            name=name, category="", is_active=True, rule_limits={}
-        )
-        self.mark_dirty()
-        self._dirty_materials.add((self.active_process.name, name))
-        return True
-
-    def delete_material(self, name: str) -> bool:
-        if (
-            not self.active_process
-            or name not in self.active_process.materials
-            or name == "Default"
-        ):
-            return False
-        del self.active_process.materials[name]
-        if self.active_material and self.active_material.name == name:
-            self.active_material = None
-        self.mark_dirty()
-        return True
-
-    def update_rule_limit(self, rule: Rulebook, attr: str, value: str):
-        if not self.active_material:
-            return
-        if rule not in self.active_material.rule_limits:
-            self.active_material.rule_limits[rule] = RuleLimit()
-        setattr(self.active_material.rule_limits[rule], attr, value)
-        self._mark_material_dirty()
-
-    def reset_rule_limit(self, rule: Rulebook):
-        if self.active_material and rule in self.active_material.rule_limits:
-            del self.active_material.rule_limits[rule]
-            self._mark_material_dirty()
-
-    def reset_rule_field(self, rule: Rulebook, attr: str):
-        """Make one field of *rule* fall back to the Default material.
-
-        An empty value means "use Default" for numeric fields. When none of
-        the rule's fields keep a value of their own, the material's entry is
-        removed entirely; this is also how a severity is reset, since an
-        empty severity would otherwise override Default.
-        """
-        material = self.active_material
-        if not material or rule not in material.rule_limits:
-            return
-        limit = material.rule_limits[rule]
-        setattr(limit, attr, "")
-        attrs = SHAPE_FIELD_ATTRS.get(rule.shape, ())
-        if all(not getattr(limit, a, "") for a in attrs):
-            del material.rule_limits[rule]
-        self._mark_material_dirty()
-
-    def update_active_rules(self, rules: list):
-        if self.active_process:
-            self.active_process.active_rules = rules
-            self.mark_dirty()
-
-    def update_rule_criticality(self, rule: Rulebook, criticality: Criticality):
-        if self.active_process:
-            self.active_process.rule_criticality[rule] = criticality
-            self.mark_dirty()
-
-    def is_builtin(self, process_name: str) -> bool:
-        return self.registry.is_builtin(process_name)
-
-    def has_user_override(self, process_name: str) -> bool:
-        return self.registry.has_user_override(process_name)
 
     def restore_default(self, process_name: str) -> bool:
         success = self.registry.restore_default(process_name)
         if success:
             self.active_process = self.registry.get_process_by_name(process_name)
             self.active_material = None
-            self._clear_dirty(process_name)
-            self.is_dirty = bool(self._dirty_processes)
+            self._snapshot_saved(process_name)
+            self._forget_history(process_name)
         return success
 
     def delete_process(self, process_name: str) -> bool:
         success = self.registry.delete_custom_process(process_name)
-        if success and self.active_process and self.active_process.name == process_name:
-            self.active_process = None
-            self.active_material = None
+        if success:
+            self._snapshot_saved(process_name)
+            self._forget_history(process_name)
+            if self.active_process and self.active_process.name == process_name:
+                self.active_process = None
+                self.active_material = None
         return success
 
     def import_process(self, filepath: str) -> tuple[bool, str]:
         success, result = self.registry.import_process_from_file(Path(filepath))
         if success:
-            self.is_dirty = True
-            self._dirty_processes.add(result)
+            # Import writes the process to disk, so it starts out saved.
+            self._snapshot_saved(result)
+            self._forget_history(result)
         return success, result
 
 
@@ -1371,6 +1491,15 @@ class ProcessLibraryController(QtCore.QObject):
         )
         save_shortcut.activated.connect(self.on_save_in_place)
 
+        self.view.tbUndo.clicked.connect(self.on_undo)
+        self.view.tbRedo.clicked.connect(self.on_redo)
+        for key, slot in (
+            (QtGui.QKeySequence.StandardKey.Undo, self.on_undo),
+            (QtGui.QKeySequence.StandardKey.Redo, self.on_redo),
+        ):
+            shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), self.view)
+            shortcut.activated.connect(slot)
+
         tree = self.view.tree_view
         tree.selection_changed.connect(self.on_tree_selection_changed)
         tree.tree.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1391,6 +1520,33 @@ class ProcessLibraryController(QtCore.QObject):
         if save_btn is not None:
             save_btn.setEnabled(self.model.is_dirty)
         self.view.tree_view.update_markers(self.model)
+        self.view.set_history_state(self.model.undo_label, self.model.redo_label)
+
+    def on_undo(self):
+        self._show_after_history(self.model.undo())
+
+    def on_redo(self):
+        self._show_after_history(self.model.redo())
+
+    def _show_after_history(self, where: Optional[tuple[str, Optional[str]]]):
+        """Show the process and material an undone or redone change was made in."""
+        if where is None:
+            return
+        process_name, material_name = where
+        tree = self.view.tree_view
+        tree.tree.blockSignals(True)
+        self._refresh_process_tree()
+        if material_name:
+            tree.select_material(process_name, material_name)
+        else:
+            tree.select_process(process_name)
+        tree.tree.blockSignals(False)
+        payload = (
+            {"type": "material", "name": material_name, "process": process_name}
+            if material_name else {"type": "process", "name": process_name}
+        )
+        self.on_tree_selection_changed(payload, clear_search=False)
+        self._update_dirty_state()
 
     def _refresh_process_tree(self):
         self.view.tree_view.populate(self.model.get_categorized_processes())
@@ -1413,13 +1569,14 @@ class ProcessLibraryController(QtCore.QObject):
             }
         )
 
-    def on_tree_selection_changed(self, payload: dict):
+    def on_tree_selection_changed(self, payload: dict, clear_search: bool = True):
         node_type = payload.get("type")
         name = payload.get("name")
         if not isinstance(name, str) or not name:
             return
 
-        self.view.form.leSearchRules.clear()
+        if clear_search:
+            self.view.form.leSearchRules.clear()
 
         is_builtin = self.model.is_builtin(name) if node_type == "process" else False
         has_override = self.model.has_user_override(name) if node_type == "process" else False
@@ -1643,7 +1800,9 @@ class ProcessLibraryController(QtCore.QObject):
             rules.add(rule)
         else:
             rules.discard(rule)
-        self.model.update_active_rules(list(rules))
+        self.model.update_active_rules(
+            list(rules), f"Turn {'on' if is_active else 'off'} {rule.label}"
+        )
         self._update_dirty_state()
         self.view.material_edit_view.refresh_active_rules(process.active_rules)
 
@@ -1659,15 +1818,16 @@ class ProcessLibraryController(QtCore.QObject):
         if not dlg.exec():
             return
         warn, err, crit = dlg.get_data()
-        process.rule_feedback[rule] = RuleFeedback(warn, err)
-        self.model.update_rule_criticality(rule, crit)
-        self.view.material_edit_view.set_criticality(rule, crit)
         changed = dlg.changed_values()
-        for attr, value in changed.items():
-            if value:
-                self.model.update_rule_limit(rule, attr, value)
-            else:
-                self.model.reset_rule_field(rule, attr)
+        with self.model.undo_group(f"Edit {rule.label}"):
+            self.model.update_rule_feedback(rule, warn, err)
+            self.model.update_rule_criticality(rule, crit)
+            for attr, value in changed.items():
+                if value:
+                    self.model.update_rule_limit(rule, attr, value)
+                else:
+                    self.model.reset_rule_field(rule, attr)
+        self.view.material_edit_view.set_criticality(rule, crit)
         if changed:
             self.view.material_edit_view.refresh_rule(rule)
         self._update_dirty_state()
@@ -1755,6 +1915,7 @@ class ProcessLibrary(QtWidgets.QDialog):
 
         self._configure_static_widgets()
         self._configure_toolbar_icons()
+        self._build_history_buttons()
         self._build_filter_button()
 
         find_shortcut = QtGui.QShortcut(
@@ -1784,6 +1945,34 @@ class ProcessLibrary(QtWidgets.QDialog):
         ):
             btn.setIconSize(QtCore.QSize(20, 20))
             btn.setFixedSize(28, 28)
+
+    def _build_history_buttons(self) -> None:
+        """Add Undo and Redo buttons to the end of the tree toolbar."""
+        layout = self.form.fTreeHeader.layout()
+        layout.addSpacing(6)
+        for attr, svg, name in (("tbUndo", UNDO_SVG, "Undo"), ("tbRedo", REDO_SVG, "Redo")):
+            btn = QtWidgets.QToolButton(self.form.fTreeHeader)
+            btn.setAutoRaise(True)
+            btn.setFixedSize(28, 28)
+            btn.setAccessibleName(name)
+            apply_svg_icon(btn, svg, 20)
+            btn.setEnabled(False)
+            layout.addWidget(btn)
+            setattr(self, attr, btn)
+        self.set_history_state("", "")
+
+    def set_history_state(self, undo_label: str, redo_label: str) -> None:
+        native = QtGui.QKeySequence.SequenceFormat.NativeText
+        undo_key = QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Undo).toString(native)
+        redo_key = QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.Redo).toString(native)
+        self.tbUndo.setEnabled(bool(undo_label))
+        self.tbRedo.setEnabled(bool(redo_label))
+        self.tbUndo.setToolTip(
+            f"Undo {undo_label} ({undo_key})" if undo_label else f"Undo ({undo_key})"
+        )
+        self.tbRedo.setToolTip(
+            f"Redo {redo_label} ({redo_key})" if redo_label else f"Redo ({redo_key})"
+        )
 
     _SCOPE_ACTIONS = (
         ("M", "Material rules"),

@@ -177,6 +177,28 @@ _FIELD_RESET_SVG = (
 
 # -- Toolbar icons (same stroke style) ----------------------------------------
 
+UNDO_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<polyline points="9 14 4 9 9 4"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
+REDO_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<polyline points="15 14 20 9 15 4"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"'
+    b' fill="none" stroke="COLOR" stroke-width="2"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'</svg>'
+)
+
 FILTER_SVG = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
     b'<polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5"'
