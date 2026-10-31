@@ -4,11 +4,22 @@
 
 """Visual rule information system.
 
-Provides illustrated popup panels explaining what each DFM rule measures.
-Designed to be invoked from any part of the UI — process library cards,
-results panels, or anywhere a Rulebook reference is available.
+Explains what each DFM rule measures with a bad / good diagram and the
+rule's target and limit values. Usable anywhere a Rulebook reference is
+available.
+
+Public API
+----------
+``RuleDiagramView``
+    Embeddable widget: brief, diagram and target / limit legend. Used by the
+    rule editing dialog in the process library.
+``RuleInfoPanel``
+    Popup wrapping a ``RuleDiagramView`` with the rule title, shown next to
+    an anchor widget with ``show_near(anchor)``. Intended for the results
+    panel.
 """
 
 from ._panel import RuleInfoPanel
+from ._view import RuleDiagramView
 
-__all__ = ["RuleInfoPanel"]
+__all__ = ["RuleDiagramView", "RuleInfoPanel"]

@@ -9,14 +9,9 @@ from PySide6.QtSvg import QSvgRenderer
 
 from ..core.processes.process import ProcessArchetype, RuleLimit
 from ..core.rules import RuleDependency, Rulebook, RuleShape
-from .rule_information import RuleInfoPanel
 
 
 OVERRIDE_COLOR = "#e8890c"
-
-# Delay before the rule info panel opens on hover, so passing the pointer
-# over the button on the way somewhere else does not flash the panel.
-_INFO_HOVER_DELAY_MS = 250
 
 CARD_STYLE = f"""
 QFrame#RuleCard {{
@@ -169,16 +164,6 @@ _RESET_SVG = (
     b'</svg>'
 )
 
-
-_INFO_SVG = (
-    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
-    b'<circle cx="12" cy="12" r="10"'
-    b' fill="none" stroke="COLOR" stroke-width="2"/>'
-    b'<line x1="12" y1="16" x2="12" y2="12"'
-    b' stroke="COLOR" stroke-width="2" stroke-linecap="round"/>'
-    b'<circle cx="12" cy="8" r="1" fill="COLOR"/>'
-    b'</svg>'
-)
 
 _ICON_COLOR = b"#5b9bd5"
 
@@ -440,24 +425,9 @@ class BaseRuleCard(QtWidgets.QFrame):
         self._fields_row.setSpacing(10)
         outer.addWidget(self._fields_host)
 
-        # The info panel opens on hover, so the button has no tool tip of its
-        # own (it would appear on top of the panel). Clicking also opens the
-        # panel, so it stays reachable from the keyboard.
-        self._info_panel: Optional[RuleInfoPanel] = None
-        self._info_hover_timer = QtCore.QTimer(self)
-        self._info_hover_timer.setSingleShot(True)
-        self._info_hover_timer.setInterval(_INFO_HOVER_DELAY_MS)
-        self._info_hover_timer.timeout.connect(self._show_info_panel)
-
-        self._info_btn = _SvgToolButton(_INFO_SVG, "", self)
-        self._info_btn.setAccessibleName("What does this rule measure?")
-        self._info_btn.clicked.connect(self._show_info_panel)
-        self._info_btn.installEventFilter(self)
-        outer.addWidget(self._info_btn)
-
         self._feedback_btn = _SvgToolButton(
             _FEEDBACK_SVG,
-            "Edit feedback messages and criticality",
+            "Rule details, criticality and feedback messages",
             self,
         )
         self._feedback_btn.clicked.connect(self.feedback_requested.emit)
@@ -475,32 +445,6 @@ class BaseRuleCard(QtWidgets.QFrame):
         if self._loading:
             return
         self.active_toggled.emit(checked)
-
-    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        if obj is self._info_btn:
-            etype = event.type()
-            if etype == QtCore.QEvent.Type.Enter:
-                self._info_hover_timer.start()
-            elif etype in (QtCore.QEvent.Type.Leave, QtCore.QEvent.Type.Hide):
-                self._info_hover_timer.stop()
-                self._hide_info_panel()
-        return super().eventFilter(obj, event)
-
-    def _show_info_panel(self) -> None:
-        if self._info_panel is not None:
-            return
-        panel = RuleInfoPanel(self.rule, self._material_limit, parent=self)
-        panel.destroyed.connect(self._on_info_panel_destroyed)
-        self._info_panel = panel
-        panel.show_near(self._info_btn)
-
-    def _hide_info_panel(self) -> None:
-        if self._info_panel is not None:
-            panel, self._info_panel = self._info_panel, None
-            panel.close()
-
-    def _on_info_panel_destroyed(self) -> None:
-        self._info_panel = None
 
     def _make_field(self, label_text: str) -> tuple[QtWidgets.QVBoxLayout, UnitInput]:
         col = QtWidgets.QVBoxLayout()

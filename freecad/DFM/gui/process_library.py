@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+import dataclasses
 from pathlib import Path
 from typing import Optional
 
@@ -12,14 +13,15 @@ import FreeCADGui as Gui  # type: ignore
 
 from ..core.processes.process import Material, Process, ProcessArchetype, RuleFeedback, RuleLimit
 from ..core.registries.process_registry import ProcessRegistry
-from ..core.rules import Criticality, Rulebook
+from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, Rulebook
 
 from .rule_cards import (
-    ADD_SVG, CARD_STYLE, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, build_card,
+    ADD_SVG, CARD_STYLE, IMPORT_SVG, REMOVE_SVG, BaseRuleCard, UnitInput, build_card,
     render_svg_icon,
 )
-from .rule_cards import _RESET_SVG
+from .rule_cards import _RESET_SVG, _resolve_badge
 
+from .rule_information import RuleDiagramView
 from .utils import resources  # noqa: F401
 
 
@@ -287,6 +289,12 @@ class ProcessTreeView(QtCore.QObject):
 class ParameterEdit(QtWidgets.QPlainTextEdit):
     """Text editor that suggests {placeholders} when '{' is typed."""
 
+    focused = QtCore.Signal()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.focused.emit()
+
     def __init__(self, placeholders, parent=None):
         super().__init__(parent)
         self.completer = QtWidgets.QCompleter(placeholders, self)
@@ -323,55 +331,92 @@ class ParameterEdit(QtWidgets.QPlainTextEdit):
 # =============================================================================
 
 
+@dataclasses.dataclass
+class RuleValueContext:
+    """Everything the rule dialog needs to show and edit a rule's values."""
+
+    limit: Optional[RuleLimit]
+    """The current material's own values (may be ``None``)."""
+    default_limit: Optional[RuleLimit]
+    """The Default material's values, used when the material has none."""
+    is_default_material: bool
+    material_name: Optional[str] = None
+    """Shown for material (M) rules; ``None`` for process and setup rules."""
+    derived_hint: str = ""
+    """For setup (S) rules: where the values come from. Hides the inputs."""
+
+
+_RULE_DIALOG_STYLE = CARD_STYLE + """
+QFrame#RuleInfoCard {
+    border: 1px solid palette(mid);
+    border-radius: 6px;
+    background-color: rgba(127, 127, 127, 18);
+}
+QFrame#RuleInfoCard QLabel {
+    background-color: transparent;
+}
+QFrame#ValueTile {
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    background-color: transparent;
+}
+QToolButton#ParamChip {
+    border: 1px solid palette(mid);
+    border-radius: 10px;
+    padding: 2px 9px;
+}
+QToolButton#ParamChip:hover {
+    background-color: rgba(127, 127, 127, 40);
+}
+"""
+
+
 class EditFeedbackDialog(QtWidgets.QDialog):
-    """Warning and error message editor with placeholder autocompletion."""
+    """Rule details and feedback editor.
+
+    The left card explains the rule (brief and bad / good diagram) and edits
+    its values and criticality. The right column edits the warning and error
+    messages; clicking a parameter chip inserts it into the message box that
+    was used last.
+    """
 
     ALLOWED_TAGS = {"measured", "limit", "target"}
+    PARAMS = (
+        ("measured", "Current measured value"),
+        ("limit", "The threshold value"),
+        ("target", "The ideal target value"),
+    )
 
     def __init__(
         self,
         process_name: str,
-        rule_name: str,
+        rule: Rulebook,
         feedback: RuleFeedback,
         criticality: Criticality,
+        values: RuleValueContext,
         parent=None,
     ):
         super().__init__(parent)
-        self.setWindowTitle(f"Edit Feedback: {rule_name}")
-        self.setMinimumWidth(480)
-        self.setMinimumHeight(450)
+        self.setWindowTitle(f"Edit Rule: {rule.label}")
+        self.setStyleSheet(_RULE_DIALOG_STYLE)
+
+        self._rule = rule
+        self._values = values
+        self._fields: dict[str, UnitInput] = {}
+        self._initial: dict[str, str] = {}
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(10)
 
-        layout.addWidget(self._build_header(process_name, rule_name, criticality))
+        title = QtWidgets.QLabel(f"{rule.label} ({process_name})")
+        title.setStyleSheet("font-size: 14px; font-weight: bold;")
+        layout.addWidget(title)
 
-        line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        layout.addWidget(line)
-        layout.addSpacing(10)
-
-        params = list(self.ALLOWED_TAGS)
-        self.warn_edit = self._build_message_field(
-            layout,
-            ":/icons/dfm_warning.svg",
-            "Warning Message",
-            feedback.warning_msg,
-            params,
-            "e.g., Feature is too small ({measured}), minimum required is {limit}",
-        )
-        layout.addSpacing(10)
-        self.err_edit = self._build_message_field(
-            layout,
-            ":/icons/dfm_error.svg",
-            "Error Message",
-            feedback.error_msg,
-            params,
-            "e.g., Critical failure: {measured} is far below the {limit} limit.",
-        )
-
-        layout.addSpacing(10)
-        layout.addWidget(self._build_help_panel())
+        body = QtWidgets.QHBoxLayout()
+        body.setSpacing(14)
+        body.addWidget(self._build_rule_card(criticality))
+        body.addLayout(self._build_messages(feedback), stretch=1)
+        layout.addLayout(body)
 
         self.buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok
@@ -381,16 +426,38 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
 
-    def _build_header(
-        self, process_name: str, rule_name: str, criticality: Criticality
-    ) -> QtWidgets.QWidget:
-        container = QtWidgets.QWidget()
-        vbox = QtWidgets.QVBoxLayout(container)
-        vbox.setContentsMargins(0, 0, 0, 10)
+        # Open at the height the rule card needs; text boxes otherwise ask
+        # for far more height than their content uses. The dialog can still
+        # be resized, and the message boxes grow with it.
+        self.resize(self.sizeHint().width(), self.minimumSizeHint().height())
 
-        title = QtWidgets.QLabel(f"{rule_name} ({process_name})")
-        title.setStyleSheet("font-size: 14px; font-weight: bold;")
-        vbox.addWidget(title)
+    # ------------------------------------------------------------------
+    # Left: what the rule measures, its values and criticality
+    # ------------------------------------------------------------------
+
+    def _build_rule_card(self, criticality: Criticality) -> QtWidgets.QFrame:
+        card = QtWidgets.QFrame()
+        card.setObjectName("RuleInfoCard")
+        col = QtWidgets.QVBoxLayout(card)
+        col.setContentsMargins(12, 12, 12, 12)
+        col.setSpacing(10)
+
+        view = RuleDiagramView(self._rule, show_legend=False, parent=card)
+        col.addWidget(view)
+        # The card is exactly as wide as the diagram; inputs fit within it.
+        card.setFixedWidth(view.minimumSizeHint().width() + 24)
+
+        if self._values.derived_hint:
+            hint = QtWidgets.QLabel(self._values.derived_hint)
+            hint.setWordWrap(True)
+            hint.setStyleSheet("font-style: italic;")
+            col.addWidget(hint)
+        elif not self._rule.is_binary:
+            if self._values.material_name:
+                col.addWidget(QtWidgets.QLabel(f"Values for {self._values.material_name}"))
+            col.addLayout(self._build_value_tiles())
+
+        col.addStretch(1)
 
         crit_row = QtWidgets.QHBoxLayout()
         crit_row.addWidget(QtWidgets.QLabel("Criticality"))
@@ -401,8 +468,84 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         self.crit_combo.setFixedWidth(110)
         crit_row.addWidget(self.crit_combo)
         crit_row.addStretch()
-        vbox.addLayout(crit_row)
-        return container
+        col.addLayout(crit_row)
+        return card
+
+    def _build_value_tiles(self) -> QtWidgets.QHBoxLayout:
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(8)
+        attrs = SHAPE_FIELD_ATTRS.get(self._rule.shape, ())
+        for attr, label in zip(attrs, self._rule.field_labels):
+            tile = QtWidgets.QFrame()
+            tile.setObjectName("ValueTile")
+            tv = QtWidgets.QVBoxLayout(tile)
+            tv.setContentsMargins(8, 6, 8, 8)
+            tv.setSpacing(4)
+            tv.addWidget(QtWidgets.QLabel(label))
+
+            field = UnitInput(self._rule.unit or "", tile)
+            font = field.line_edit().font()
+            font.setPointSizeF(font.pointSizeF() * 1.2)
+            field.line_edit().setFont(font)
+            display = self._display_value(attr)
+            field.set_text(display)
+            field.editing_finished.connect(lambda f=field, a=attr: self._refresh_override(f, a))
+            self._refresh_override(field, attr)
+            tv.addWidget(field)
+
+            self._fields[attr] = field
+            self._initial[attr] = display
+            row.addWidget(tile, stretch=1)
+        return row
+
+    def _display_value(self, attr: str) -> str:
+        """Match the rule card: own value, else the Default material's."""
+        own = getattr(self._values.limit, attr, "") if self._values.limit else ""
+        default = (
+            getattr(self._values.default_limit, attr, "") if self._values.default_limit else ""
+        )
+        return str(own if (own or self._values.is_default_material) else default)
+
+    def _refresh_override(self, field: UnitInput, attr: str) -> None:
+        default = (
+            getattr(self._values.default_limit, attr, "") if self._values.default_limit else ""
+        )
+        value = field.text().strip()
+        field.set_override(
+            bool(value and value != str(default) and not self._values.is_default_material)
+        )
+
+    # ------------------------------------------------------------------
+    # Right: feedback messages
+    # ------------------------------------------------------------------
+
+    def _build_messages(self, feedback: RuleFeedback) -> QtWidgets.QVBoxLayout:
+        col = QtWidgets.QVBoxLayout()
+        col.setSpacing(10)
+
+        tags = [tag for tag, _ in self.PARAMS]
+        self.warn_edit = self._build_message_field(
+            col,
+            ":/icons/dfm_warning.svg",
+            "Warning Message",
+            feedback.warning_msg,
+            tags,
+            "e.g., Feature is too small ({measured}), minimum required is {limit}",
+        )
+        self.err_edit = self._build_message_field(
+            col,
+            ":/icons/dfm_error.svg",
+            "Error Message",
+            feedback.error_msg,
+            tags,
+            "e.g., Critical failure: {measured} is far below the {limit} limit.",
+        )
+        self._last_edit: ParameterEdit = self.warn_edit
+        for edit in (self.warn_edit, self.err_edit):
+            edit.focused.connect(lambda e=edit: setattr(self, "_last_edit", e))
+
+        col.addLayout(self._build_param_chips())
+        return col
 
     def _build_message_field(
         self,
@@ -414,6 +557,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         placeholder_hint: str,
     ) -> ParameterEdit:
         header = QtWidgets.QHBoxLayout()
+        header.setSpacing(6)
         icon = QtWidgets.QLabel()
         icon.setPixmap(QtGui.QIcon(icon_path).pixmap(16, 16))
         header.addWidget(icon)
@@ -426,33 +570,33 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         edit = ParameterEdit(placeholders, self)
         edit.setPlainText(initial_text)
         edit.setPlaceholderText(placeholder_hint)
-        parent_layout.addWidget(edit)
+        edit.setMinimumHeight(edit.fontMetrics().lineSpacing() * 4 + 14)
+        edit.setMinimumWidth(360)
+        parent_layout.addWidget(edit, stretch=1)
         return edit
 
-    def _build_help_panel(self) -> QtWidgets.QWidget:
-        panel = QtWidgets.QWidget()
-        panel.setObjectName("HelpContainer")
-        panel.setStyleSheet(
-            "#HelpContainer { border: 1px solid palette(mid); border-radius: 4px; }"
-        )
-        grid = QtWidgets.QGridLayout(panel)
-        grid.setContentsMargins(10, 10, 10, 10)
-        grid.setSpacing(6)
+    def _build_param_chips(self) -> QtWidgets.QHBoxLayout:
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(6)
+        row.addWidget(QtWidgets.QLabel("Insert:"))
+        for tag, description in self.PARAMS:
+            chip = QtWidgets.QToolButton()
+            chip.setObjectName("ParamChip")
+            chip.setText(f"{{{tag}}}")
+            chip.setToolTip(description)
+            chip.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+            chip.clicked.connect(lambda _=False, t=tag: self._insert_param(t))
+            row.addWidget(chip)
+        row.addStretch()
+        return row
 
-        title = QtWidgets.QLabel("Available Parameters")
-        title.setStyleSheet("font-weight: bold; margin-bottom: 2px;")
-        grid.addWidget(title, 0, 0, 1, 2)
+    def _insert_param(self, tag: str) -> None:
+        self._last_edit.insertPlainText(f"{{{tag}}}")
+        self._last_edit.setFocus()
 
-        rows = [
-            ("<b>{measured}</b>", "Current measured value"),
-            ("<b>{limit}</b>", "The threshold value"),
-            ("<b>{target}</b>", "The ideal target value"),
-        ]
-        for i, (code, desc) in enumerate(rows, start=1):
-            grid.addWidget(QtWidgets.QLabel(code), i, 0)
-            grid.addWidget(QtWidgets.QLabel(desc), i, 1)
-        grid.setColumnStretch(1, 1)
-        return panel
+    # ------------------------------------------------------------------
+    # Results
+    # ------------------------------------------------------------------
 
     def get_data(self) -> tuple[str, str, Criticality]:
         return (
@@ -460,6 +604,15 @@ class EditFeedbackDialog(QtWidgets.QDialog):
             self.err_edit.toPlainText().strip(),
             self.crit_combo.currentData(),
         )
+
+    def changed_values(self) -> dict[str, str]:
+        """Return the rule values the user edited, keyed by field attribute."""
+        changed = {}
+        for attr, field in self._fields.items():
+            value = field.text().strip()
+            if value != self._initial[attr]:
+                changed[attr] = value
+        return changed
 
     def accept(self):
         import re
@@ -504,6 +657,7 @@ class MaterialEditView(QtCore.QObject):
         self._default_material: Optional[Material] = None
         self._active_rules: list = []
         self._editable: bool = True
+        self._archetype: Optional[ProcessArchetype] = None
 
     def populate(
         self,
@@ -520,6 +674,7 @@ class MaterialEditView(QtCore.QObject):
         self._default_material = default_material
         self._active_rules = list(active_rules)
         self._editable = editable
+        self._archetype = archetype
 
         self._clear()
 
@@ -569,6 +724,22 @@ class MaterialEditView(QtCore.QObject):
             )
 
         self._reorder_cards()
+
+    def rule_context(self, rule: Rulebook) -> Optional[RuleValueContext]:
+        """Return what the rule dialog needs to show and edit *rule*'s values."""
+        if not self._material:
+            return None
+        badge = _resolve_badge(rule, self._archetype)
+        derived = self._archetype.derived_rules if self._archetype else {}
+        return RuleValueContext(
+            limit=self._material.rule_limits.get(rule),
+            default_limit=(
+                self._default_material.rule_limits.get(rule) if self._default_material else None
+            ),
+            is_default_material=(self._material.name == "Default"),
+            material_name=self._material.name if badge == "M" else None,
+            derived_hint=derived.get(rule, "") if badge == "S" else "",
+        )
 
     def refresh_rule(self, rule: Rulebook) -> None:
         """Update a single card's values in place. Called after reset."""
@@ -1149,17 +1320,23 @@ class ProcessLibraryController(QtCore.QObject):
 
     def on_edit_feedback(self, rule: Rulebook):
         process = self.model.active_process
-        if not process:
+        values = self.view.material_edit_view.rule_context(rule)
+        if not process or values is None:
             return
         feedback = process.rule_feedback.get(rule) or RuleFeedback()
         criticality = process.get_criticality(rule)
 
-        dlg = EditFeedbackDialog(process.name, rule.label, feedback, criticality, self.view)
+        dlg = EditFeedbackDialog(process.name, rule, feedback, criticality, values, self.view)
         if not dlg.exec():
             return
         warn, err, crit = dlg.get_data()
         process.rule_feedback[rule] = RuleFeedback(warn, err)
         self.model.update_rule_criticality(rule, crit)
+        changed = dlg.changed_values()
+        for attr, value in changed.items():
+            self.model.update_rule_limit(rule, attr, value)
+        if changed:
+            self.view.material_edit_view.refresh_rule(rule)
         self._update_dirty_state()
 
     def on_limit_changed(self, rule: Rulebook, attr: str, value: str):
