@@ -61,6 +61,7 @@ class TaskResultsPresenter:
         self.view.on_material_changed = self.handle_material_changed
         self.view.on_filters_changed = self._handle_filters_changed
         self.view.on_markers_toggled = self._handle_markers_toggled
+        self._wire_report()
 
         self.history_manager = history_manager
         self.doc_name = doc_name
@@ -133,6 +134,8 @@ class TaskResultsPresenter:
             self._rule_limit,
             self._values_title,
         )
+        self._report_preview_stale = True
+        self._refresh_report_preview()
 
         # Activate viewport markers only when the toggle is on.
         if self._markers_active:
@@ -260,6 +263,145 @@ class TaskResultsPresenter:
             self.model.process.get_criticality,
         ):
             QMessageBox.information(self.view.form, "Done", "Export Successful")
+
+    # ── PDF report ──────────────────────────────────────
+
+    def _report_data(self):
+        from ...gui.report.data import ReportData
+
+        process = self.model.process
+        verdict, color = self.model.get_verdict()
+        doc = getattr(App, "ActiveDocument", None)
+        return ReportData(
+            document=(doc.Label if doc is not None else "") or self.doc_name,
+            model=self.bridge.target_object.Label,
+            process=process.name,
+            process_kind=process.archetype.label,
+            material=self._current_material,
+            verdict=verdict,
+            verdict_color=color,
+            grouped=self.model.get_grouped_results(),
+            active_rules=list(process.active_rules),
+            criticality=process.get_criticality,
+            rule_limit=self._rule_limit,
+            values_title=self._values_title,
+            feedback=process.rule_feedback.get,
+            derived_hint=lambda rule: process.archetype.derived_rules.get(rule, ""),
+        )
+
+    def _report_settings(self):
+        from ...gui.report.settings import ReportSettings
+
+        return ReportSettings.load().copy(**self._report_fields)
+
+    def _report_capture(self, settings):
+        from ...gui.report.capture import ViewportCapture
+
+        def show_markers():
+            if self._markers_active:
+                self._marker_controller.activate(
+                    self.model.results,
+                    show_errors=self.view.show_errors,
+                    show_warnings=self.view.show_warnings,
+                    show_ignored=self.view.show_ignored,
+                )
+
+        return ViewportCapture(
+            self.bridge, settings,
+            hide_annotations=self._marker_controller.deactivate,
+            show_annotations=show_markers,
+        )
+
+    def _remember_report_fields(self, settings) -> None:
+        self._report_fields = {k: getattr(settings, k) for k in ("project", "revision", "notes")}
+
+    def handle_configure_pdf(self):
+        """Open the Export PDF report dialog."""
+        from ...gui.report.dialog import ReportDialog
+
+        dialog = ReportDialog(
+            self._report_data(), self._report_settings(), self._report_capture,
+            parent=Gui.getMainWindow(),
+        )
+        dialog.exec()
+        self._remember_report_fields(dialog.settings)
+        self._refresh_report_preview(force=True)
+
+    def handle_export_pdf(self):
+        """Export a PDF report straight away, with the saved report settings."""
+        from ...gui.report.exporter import ask_path, export_pdf
+        from ...gui.report.template import get_template
+
+        data = self._report_data()
+        settings = self._report_settings()
+        path = ask_path(self.view.form, data, settings)
+        if not path:
+            return
+        export_pdf(Gui.getMainWindow(), path, data, settings, get_template(settings.template),
+                   self._report_capture(settings))
+
+    def _wire_report(self):
+        """Connect the Export tab's PDF report controls."""
+        # Report fields that belong to this document (project, revision,
+        # notes), kept while the panel is open so they aren't retyped.
+        self._report_fields: dict[str, str] = {}
+        self._report_preview_stale = True
+        tab = self.view.export_tab
+        tab.pdf_export_requested.connect(self.handle_export_pdf)
+        tab.pdf_configure_requested.connect(self.handle_configure_pdf)
+        tab.pdf_preset_changed.connect(lambda _mode: self._refresh_report_preview(force=True))
+        tab.preview_needed.connect(self._refresh_report_preview)
+
+    def _refresh_report_preview(self, force: bool = False):
+        """Give the Export tab a thumbnail and page count for each report preset.
+
+        Only done while the tab is visible; otherwise it's marked stale and
+        done when the tab is next shown.
+        """
+        tab = self.view.export_tab
+        if not tab.isVisible():
+            self._report_preview_stale = True
+            return
+        if not (force or self._report_preview_stale):
+            return
+        self._report_preview_stale = False
+
+        from ...gui.report.data import image_jobs
+        from ...gui.report.exporter import estimate_bytes, format_bytes
+        from ...gui.report.layout import ReportLayout, Typesetter, page_thumbnail
+        from ...gui.report.template import get_template
+
+        try:
+            data = self._report_data()
+            settings = self._report_settings()
+            tab.set_preset(settings.image_mode)
+            template = get_template(settings.template)
+            ts = Typesetter(template.font_family, template.font_scale)
+            ratio = tab.devicePixelRatioF()
+            previews, chosen = {}, None
+            for mode in ("none", "per_rule", "per_finding"):
+                preset = settings.copy(image_mode=mode)
+                layout = ReportLayout(data, preset, template, typesetter=ts)
+                pages = layout.build()
+                # The cover for Summary; the first rule page shows the images.
+                shown = pages[1] if mode != "none" and len(pages) > 1 else pages[0]
+                previews[mode] = (page_thumbnail(shown, template, ts, tab.tiles[mode].THUMB_W, ratio),
+                                  len(pages))
+                if mode == settings.image_mode:
+                    chosen = (layout, preset, len(pages))
+        except Exception as e:
+            App.Console.PrintWarning(f"DFM: could not preview the PDF report: {e}\n")
+            tab.set_presets({})
+            return
+
+        note = f"{template.name} template · {template.page_size}"
+        if chosen is not None:
+            layout, preset, n = chosen
+            jobs = image_jobs(data, preset)
+            note += f" · about {format_bytes(estimate_bytes(preset, layout, jobs, n))}"
+            if jobs:
+                note += ". Images are captured from the 3D view when you export."
+        tab.set_presets(previews, note)
 
     def handle_cleanup(self):
         self._marker_controller.deactivate()

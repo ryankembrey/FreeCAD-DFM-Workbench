@@ -14,6 +14,7 @@ from .gui.preferences import (
     DFMPreferencesResults,
     DFMPreferencesContour,
 )
+from .gui.report.preferences_page import DFMPreferencesReports
 from .gui import tools as _dfm_contour_tools
 from .app.shape_observer import install_observer
 
@@ -62,6 +63,7 @@ class DFMWorkbench(Gui.Workbench):
 Gui.addWorkbench(DFMWorkbench())
 Gui.addPreferencePage(DFMPreferencesGeneral, "DFM")
 Gui.addPreferencePage(DFMPreferencesResults, "DFM")
+Gui.addPreferencePage(DFMPreferencesReports, "DFM")
 Gui.addPreferencePage(DFMPreferencesAnalyzers, "DFM")
 Gui.addPreferencePage(DFMPreferencesContour, "DFM")
 

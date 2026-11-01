@@ -44,6 +44,7 @@ class DFMViewProvider:
         self._cam_animator = CameraAnimator()
         self._highlighted_faces: list[str] = []
         self._highlighted_edges: list[str] = []
+        self._highlight_pairs: tuple[list, list] = ([], [])
         self._original_transparency: int = target_object.ViewObject.Transparency
 
     def highlight_faces_by_index(self, index_color_pairs: list[tuple[int, str]]):
@@ -98,6 +99,7 @@ class DFMViewProvider:
         edge_color_pairs: list[tuple[int, str]],
     ):
         """Highlights both faces and edges simultaneously."""
+        self._highlight_pairs = (list(face_color_pairs), list(edge_color_pairs))
         self._overlay.remove()
         Gui.Selection.clearSelection()
 
@@ -156,6 +158,17 @@ class DFMViewProvider:
             return
 
         self._overlay.show(anchor, finding, color_hex)
+
+    def current_highlight(self) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+        """The face and edge pairs last passed to ``highlight_faces_and_edges_by_index``."""
+        if self._get_overlay() is None:
+            return ([], [])
+        faces, edges = self._highlight_pairs
+        return (list(faces), list(edges))
+
+    def overlay_object(self):
+        """The highlight overlay document object, or None when nothing is highlighted."""
+        return self._get_overlay()
 
     def remove_finding_overlay(self):
         """Hide the viewport overlay card, if shown."""
@@ -259,6 +272,7 @@ class DFMViewProvider:
                 App.Console.PrintWarning(f"Failed to remove DFM overlay: {e}\n")
         self._highlighted_faces = []
         self._highlighted_edges = []
+        self._highlight_pairs = ([], [])
 
     def _get_overlay(self):
         """Returns the live overlay document object, or None if it doesn't exist."""
