@@ -278,6 +278,12 @@ class AnalysisRunner:
 
         analyzer_instance = analyzer_class()
 
+        # Show this rule's message as soon as its work starts, not only when
+        # the analyzer reports its first face: its setup can take a moment,
+        # and the bar would otherwise sit on the previous message (#111).
+        if progress_cb:
+            progress_cb(step_offset, total_steps, progress_text)
+
         def on_progress(faces_done: int):
             if progress_cb:
                 progress_cb(step_offset + faces_done, total_steps, progress_text)

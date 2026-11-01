@@ -19,7 +19,7 @@ from OCP.TopAbs import TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
 from OCP.TopoDS import TopoDS_Shape, TopoDS_Face, TopoDS, TopoDS_Edge
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE
 from OCP.TopTools import TopTools_IndexedMapOfShape
-from OCP.TopExp import TopExp
+from OCP.TopExp import TopExp, TopExp_Explorer
 
 from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 
@@ -328,6 +328,63 @@ def optimize_face_uv_search(
     return current_best_uv, current_max_val, improvements
 
 
+# Recent get_extent_along results: several FDM analyzers ask for the same
+# shape's bed height in one run. Each entry is (shape, direction, result).
+_EXTENT_CACHE: list = []
+_EXTENT_CACHE_SIZE = 8
+
+
+def _z_range(shape: TopoDS_Shape, exact: bool) -> tuple[float, float]:
+    """(zmin, zmax) of *shape*'s bounding box; exact is tight but slow on curved faces."""
+    bbox = Bnd_Box()
+    if exact:
+        BRepBndLib.AddOptimal_s(shape, bbox, False, False)
+    else:
+        BRepBndLib.Add_s(shape, bbox, False)
+    corner_min, corner_max = bbox.CornerMin(), bbox.CornerMax()
+    return corner_min.Z(), corner_max.Z()
+
+
+def _exact_z_range(shape: TopoDS_Shape) -> tuple[float, float]:
+    """The exact Z extent of a shape, measuring only the faces that can set it.
+
+    An exact box (AddOptimal) is slow on B-spline faces: seconds for a
+    whole cast part. A loose box (Add) is instant and always encloses its
+    face, so a face can only hold the lowest point if its loose box reaches
+    below the lowest exact point found so far. Walking the faces lowest
+    loose box first, the exact box is needed for only a few of them, and
+    the answer is the same as measuring everything exactly (#111).
+    """
+    faces = []
+    explorer = TopExp_Explorer(shape, TopAbs_FACE)
+    while explorer.More():
+        face = explorer.Current()
+        faces.append((face, _z_range(face, exact=False)))
+        explorer.Next()
+    if not faces:
+        return _z_range(shape, exact=True)
+
+    exact: dict[int, tuple[float, float]] = {}
+
+    def exact_of(i: int) -> tuple[float, float]:
+        if i not in exact:
+            exact[i] = _z_range(faces[i][0], exact=True)
+        return exact[i]
+
+    lowest = float("inf")
+    for i in sorted(range(len(faces)), key=lambda k: faces[k][1][0]):
+        if faces[i][1][0] >= lowest:
+            break  # no face left can reach lower
+        lowest = min(lowest, exact_of(i)[0])
+
+    highest = float("-inf")
+    for i in sorted(range(len(faces)), key=lambda k: -faces[k][1][1]):
+        if faces[i][1][1] <= highest:
+            break
+        highest = max(highest, exact_of(i)[1])
+    return lowest, highest
+
+
 def get_extent_along(shape: TopoDS_Shape, direction: gp_Dir) -> tuple[float, float]:
     """Returns (min, max) of a shape's extent along an arbitrary direction.
 
@@ -335,6 +392,11 @@ def get_extent_along(shape: TopoDS_Shape, direction: gp_Dir) -> tuple[float, flo
     bounding box. Handles curved geometry correctly, unlike projecting vertices,
     which misses the extremes of an arc.
     """
+    for cached_shape, cached_dir, result in _EXTENT_CACHE:
+        if cached_shape.IsSame(shape) and cached_shape.Location().IsEqual(shape.Location()) \
+                and cached_dir.IsEqual(direction, 1e-9):
+            return result
+
     if direction.IsEqual(gp_Dir(0, 0, 1), 1e-4):
         moved = shape
     else:
@@ -345,10 +407,14 @@ def get_extent_along(shape: TopoDS_Shape, direction: gp_Dir) -> tuple[float, flo
         )
         moved = BRepBuilderAPI_Transform(shape, trsf, True).Shape()
 
-    bbox = Bnd_Box()
-    BRepBndLib.AddOptimal_s(moved, bbox)
-    _, _, zmin, _, _, zmax = bbox.Get()
-    return zmin, zmax
+    if moved.ShapeType() == TopAbs_FACE:
+        result = _z_range(moved, exact=True)  # a single face: nothing to prune
+    else:
+        result = _exact_z_range(moved)
+
+    _EXTENT_CACHE.insert(0, (shape, direction, result))
+    del _EXTENT_CACHE[_EXTENT_CACHE_SIZE:]
+    return result
 
 
 def project_onto(pnt: gp_Pnt, direction: gp_Dir) -> float:
