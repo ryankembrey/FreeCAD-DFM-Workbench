@@ -18,6 +18,11 @@ class CuspCheck(BaseCheck):
         return "Maximum Cusp Checker"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking cusp height"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "CUSP_ANALYZER"
 

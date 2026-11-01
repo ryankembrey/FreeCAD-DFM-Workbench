@@ -52,6 +52,8 @@ class ContourMeasure:
     # Fixed domain shown on the legend, or None to use the data's own min/max.
     range_limits = None
     needs_pull_direction = False
+    # What the progress bar says while measuring.
+    progress_text = "Measuring"
     # Optional on/off toggles (list of BoolOption) rendered by the panel.
     options = []
 
@@ -189,10 +191,11 @@ class DraftMeasure(ContourMeasure):
     default_range = (-3.0, 3.0)
     range_limits = (-90.0, 90.0)
     needs_pull_direction = True
+    progress_text = "Measuring draft angles"
     options = [
         BoolOption(
             "magnitude",
-            "Magnitude Only",
+            "Magnitude only",
             False,
             "Color by |draft| so both mold-half orientations read the same; "
             "the scale becomes 0 to 90.",
@@ -255,6 +258,7 @@ class ThicknessMeasure(ContourMeasure):
     range_step = 0.5
     range_decimals = 2
     needs_pull_direction = False
+    progress_text = "Measuring wall thickness"
     options = [
         ChoiceOption(
             "method",

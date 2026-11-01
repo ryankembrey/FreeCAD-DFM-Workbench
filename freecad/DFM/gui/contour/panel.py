@@ -17,16 +17,21 @@ from ..visuals import DirectionIndicator
 from ..utils import resources  # noqa: F401
 from ..utils.body_select import auto_select_body
 from ..utils.colormap_combo import populate_colormap_combo
-from ..utils.picking import (
-    PICK_BUTTON_STYLE,
-    CrossCursorOverride,
-    first_selected_subelement,
+from ..utils.arrow_flip import ArrowFlipper
+from ..utils.direction_row import (
+    AXES,
+    PICK_SVG,
+    DirectionRow,
+    ViewSwitch,
+    icon_button,
+    muted_color,
+    style_primary_button,
 )
+from ..utils.picking import CrossCursorOverride, first_selected_subelement
 from ..utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
 from ..utils.pull_preview import PullPreview
 from ..utils.qt_filters import EnterKeyFilter, EscapeFilter
 from ..utils.view import get_active_view, get_view_widget, pick_document_object
-from ..utils.widgets import make_flip_button
 
 from ...app.contour.meshing import generate_uniform_mesh
 from ...app.contour.colormap import COLORMAPS
@@ -36,6 +41,8 @@ from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend
 from .resolution import ResolutionField
 from . import document  # noqa: F401
+
+from ...app.contour.colormap import _HIGHLIGHT_IN as _FLAG_RGB
 
 _LEGEND_STATE = {"pos": None, "size": None, "horizontal": False}
 
@@ -63,19 +70,21 @@ class ContourTaskPanel:
         self.target_shape = None
 
         self.pull_dir = App.Vector(0, 0, 1)
-        self.pull_ref = "+Z (default)"
+        self.pull_ref = "+Z"
         self.pull_flipped = False
         self.pull_anchor = None
         self._preview: Optional[PullPreview] = None
         self._pull_indicator_hidden = False
         self.indicator = (
-            DirectionIndicator(PULL_DIRECTION_COLOR, "Pull Direction")
+            DirectionIndicator(PULL_DIRECTION_COLOR, "Pull direction")
             if measure.needs_pull_direction
             else None
         )
 
         self.picking_mode: Optional[str] = None
         self._cursor = CrossCursorOverride()
+        # The pull direction arrow flips when clicked in the 3D view.
+        self._flipper = ArrowFlipper()
 
         self._has_contour = False
         self._dirty = False
@@ -143,59 +152,43 @@ class ContourTaskPanel:
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(8)
 
-        obj_box = QtWidgets.QGroupBox("Object")
-        og = self._grid(obj_box)
-        self.pb_object = QtWidgets.QPushButton("Select Object")
-        self.pb_object.setCheckable(True)
-        self.pb_object.setMinimumHeight(28)
-        self.pb_object.setStyleSheet(PICK_BUTTON_STYLE)
-        self.pb_object.setToolTip("Pick the object, or preselect it before opening the tool.")
-        self.pb_object.clicked.connect(self._on_pick_object)
+        # Model: the name, then an icon button to pick it in the 3D view.
+        obj_box = QtWidgets.QGroupBox("Model")
+        orow = QtWidgets.QHBoxLayout(obj_box)
+        orow.setContentsMargins(8, 8, 8, 8)
+        orow.setSpacing(4)
         self.le_object = QtWidgets.QLineEdit()
         self.le_object.setReadOnly(True)
-        self.le_object.setMinimumHeight(28)
-        self.le_object.setPlaceholderText("No object selected")
-        og.addWidget(self.pb_object, 0, 0)
-        og.addWidget(self.le_object, 0, 1)
+        self.le_object.setPlaceholderText("No model selected")
+        self.pb_object = icon_button(
+            PICK_SVG, "Pick the model in the 3D view, or select it before opening the tool",
+            checkable=True)
+        self.pb_object.clicked.connect(self._on_pick_object)
+        orow.addWidget(self.le_object, 1)
+        orow.addWidget(self.pb_object)
         root.addWidget(obj_box)
 
-        if self.measure.needs_pull_direction:
-            pull_box = QtWidgets.QGroupBox("Pull Direction")
-            pg = self._grid(pull_box)
-            self.pb_pull = QtWidgets.QPushButton("Select Pull Direction")
-            self.pb_pull.setCheckable(True)
-            self.pb_pull.setMinimumHeight(28)
-            self.pb_pull.setStyleSheet(PICK_BUTTON_STYLE)
-            self.pb_pull.setToolTip(
-                "Pick a face or edge. Planar faces give their normal, cylindrical, conical "
-                "and toroidal faces and circular edges give their axis, other edges their "
-                "tangent. Defaults to +Z."
-            )
-            self.pb_pull.clicked.connect(self._on_pick_pull)
-            field = QtWidgets.QHBoxLayout()
-            field.setContentsMargins(0, 0, 0, 0)
-            field.setSpacing(4)
-            self.le_pull = QtWidgets.QLineEdit()
-            self.le_pull.setReadOnly(True)
-            self.le_pull.setMinimumHeight(28)
-            self.le_pull.setText(self.pull_ref)
-            self.flip_btn = make_flip_button(
-                self._on_flip_pull, tooltip="Flip the pull direction 180 degrees."
-            )
-            field.addWidget(self.le_pull, 1)
-            field.addWidget(self.flip_btn, 0)
-            fw = QtWidgets.QWidget()
-            fw.setLayout(field)
-            pg.addWidget(self.pb_pull, 0, 0)
-            pg.addWidget(fw, 0, 1)
-            root.addWidget(pull_box)
-        else:
-            self.pb_pull = None
-
-        if self.measure.options:
-            opt_box = QtWidgets.QGroupBox("Options")
+        # Settings: the pull direction (when the measure needs one) and the
+        # measure's own options.
+        self.direction_row = None
+        self.pb_pull = None
+        if self.measure.needs_pull_direction or self.measure.options:
+            opt_box = QtWidgets.QGroupBox("Settings")
             og2 = self._grid(opt_box)
             orow = 0
+            if self.measure.needs_pull_direction:
+                self.direction_row = DirectionRow("Pull direction")
+                self.direction_row.pick_btn.setToolTip(
+                    "Pick a face or edge. Planar faces give their normal; cylindrical, conical "
+                    "and toroidal faces and circular edges give their axis; other edges give "
+                    "their tangent.")
+                self.direction_row.axis_clicked.connect(self._on_pull_axis)
+                self.direction_row.pick_clicked.connect(self._on_pick_pull)
+                self.direction_row.flip_clicked.connect(self._on_flip_pull)
+                self.pb_pull = self.direction_row.pick_btn
+                self.flip_btn = self.direction_row.flip_btn
+                og2.addWidget(self.direction_row, orow, 0, 1, 2)
+                orow += 1
             for opt in self.measure.options:
                 if isinstance(opt, ChoiceOption):
                     og2.addWidget(QtWidgets.QLabel(opt.label), orow, 0)
@@ -220,23 +213,49 @@ class ContourTaskPanel:
                 orow += 1
             root.addWidget(opt_box)
 
-        cont_box = QtWidgets.QGroupBox("Contour")
-        cg = self._grid(cont_box)
-        cg.addWidget(QtWidgets.QLabel("Resolution"), 0, 0)
+        # Mesh: changes here need "Update contour".
+        mesh_box = QtWidgets.QGroupBox("Mesh")
+        mg = self._grid(mesh_box)
+        mg.addWidget(QtWidgets.QLabel("Resolution"), 0, 0)
         self.resolution = ResolutionField()
         self.resolution.changed.connect(self._on_resolution_changed)
-        cg.addWidget(self.resolution, 0, 1)
+        mg.addWidget(self.resolution, 0, 1)
+        # Right under the model, above the settings.
+        root.insertWidget(root.indexOf(obj_box) + 1, mesh_box)
 
-        cg.addWidget(QtWidgets.QLabel("Color map"), 1, 0)
+        # Display: applies straight away. Pick the view first; only the
+        # settings for that view show.
+        disp_box = QtWidgets.QGroupBox("Display")
+        cg = self._grid(disp_box)
+        self.cb_highlight = ViewSwitch("Color scale", "Pass/fail")
+        self.cb_highlight.buttons[0].setToolTip("Color every value along the color map")
+        self.cb_highlight.buttons[1].setToolTip(
+            "Flag values in a range red and show everything else gray")
+        self.cb_highlight.toggled.connect(self._on_highlight_toggled)
+        cg.addWidget(self.cb_highlight, 0, 0, 1, 2)
+        cg.setRowMinimumHeight(1, 2)
+
+        self.lbl_colormap = QtWidgets.QLabel("Color map")
+        cg.addWidget(self.lbl_colormap, 2, 0)
         self.cb_colormap = QtWidgets.QComboBox()
         populate_colormap_combo(self.cb_colormap, COLORMAPS.keys())
         self.cb_colormap.setCurrentText(self.measure.default_colormap)
         self._compact_combo(self.cb_colormap)
         self.cb_colormap.currentIndexChanged.connect(self._on_style_changed)
-        cg.addWidget(self.cb_colormap, 1, 1)
+        cg.addWidget(self.cb_colormap, 2, 1)
+
+        self.lbl_bands = QtWidgets.QLabel("Bands")
+        cg.addWidget(self.lbl_bands, 3, 0)
+        self.cb_bands = QtWidgets.QComboBox()
+        self.cb_bands.addItems(list(_BAND_STEPS.keys()))
+        self.cb_bands.setToolTip("Quantize colors into fixed steps of the measured value.")
+        self._compact_combo(self.cb_bands)
+        self.cb_bands.currentIndexChanged.connect(self._on_style_changed)
+        cg.addWidget(self.cb_bands, 3, 1)
 
         self.lbl_range = QtWidgets.QLabel("Range")
-        cg.addWidget(self.lbl_range, 2, 0)
+        self.lbl_range.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        cg.addWidget(self.lbl_range, 4, 0)
         default_opts = {o.id: o.default for o in self.measure.options}
         lo0, hi0 = self.measure.initial_range(default_opts) or (0.0, 1.0)
         bmin, bmax = self.measure.value_limits(default_opts) or (-1.0e6, 1.0e6)
@@ -255,7 +274,6 @@ class ContourTaskPanel:
             if self.measure.unit:
                 sb.setSuffix(f" {self.measure.unit}")
             sb.setValue(val)
-            sb.setToolTip("Set the color range. Also adjustable by dragging the legend ends.")
             sb.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
             )
@@ -266,52 +284,46 @@ class ContourTaskPanel:
         range_row.addWidget(self.sb_range_hi, 1)
         range_w = QtWidgets.QWidget()
         range_w.setLayout(range_row)
-        cg.addWidget(range_w, 2, 1)
+        cg.addWidget(range_w, 4, 1)
 
-        cg.addWidget(QtWidgets.QLabel("Bands"), 4, 0)
-        self.cb_bands = QtWidgets.QComboBox()
-        self.cb_bands.addItems(list(_BAND_STEPS.keys()))
-        self.cb_bands.setToolTip("Quantize colors into fixed steps of the measured value.")
-        self._compact_combo(self.cb_bands)
-        self.cb_bands.currentIndexChanged.connect(self._on_style_changed)
-        cg.addWidget(self.cb_bands, 4, 1)
+        self.lbl_flag_hint = QtWidgets.QLabel("Everything else is shown in gray.")
+        self.lbl_flag_hint.setStyleSheet("background: transparent;")
+        cg.addWidget(self.lbl_flag_hint, 5, 0, 1, 2)
 
         self.cb_smooth = QtWidgets.QCheckBox("Smooth shading")
+        self.cb_smooth.setChecked(True)  # saved analyses keep their own setting
         self.cb_smooth.setToolTip(
             "Blend colors across triangles so the mesh facets disappear. "
             "Off shows one flat color per triangle."
         )
         self.cb_smooth.toggled.connect(self._on_smooth_changed)
-        cg.addWidget(self.cb_smooth, 5, 0, 1, 2)
-
-        self.cb_highlight = QtWidgets.QCheckBox("Highlight range")
-        self.cb_highlight.setToolTip(
-            "Show a pass/fail view: values within the Range above are flagged "
-            "red, everything else muted gray. The Range spin boxes and the "
-            "legend handles set the flagged band."
-        )
-        self.cb_highlight.toggled.connect(self._on_highlight_toggled)
-        cg.addWidget(self.cb_highlight, 3, 0, 1, 2)
-        root.addWidget(cont_box)
+        cg.addWidget(self.cb_smooth, 6, 1)
+        root.addWidget(disp_box)
+        self._update_range_label()
 
         row = QtWidgets.QHBoxLayout()
-        self.pb_generate = QtWidgets.QPushButton("Generate Contour")
-        self.pb_generate.setMinimumHeight(30)
+        row.setContentsMargins(0, 6, 0, 0)
+        self.pb_generate = QtWidgets.QPushButton()
+        style_primary_button(self.pb_generate, "Generate contour")
         self.pb_generate.clicked.connect(self._on_generate)
 
         self.pb_clear = QtWidgets.QPushButton("Clear")
         self.pb_clear.setMinimumHeight(30)
         self.pb_clear.setEnabled(False)
         self.pb_clear.clicked.connect(self._on_clear)
-        row.addWidget(self.pb_generate, 1)
+        row.addWidget(self.pb_generate, 2)
         row.addWidget(self.pb_clear, 1)
         root.addLayout(row)
 
+        # One message at a time, in the bar itself.
         self.progress = QtWidgets.QProgressBar()
+        self.progress.setTextVisible(True)
+        self.progress.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.progress.hide()
         root.addWidget(self.progress)
 
         root.addStretch(1)
+        self._refresh_direction_row()
 
     def _auto_select(self):
         auto_select_body(self._apply_object)
@@ -424,23 +436,34 @@ class ContourTaskPanel:
             Gui.Selection.clearSelection()
             self._update_generate_state()
 
-    def _enter_pick(self, mode, button, hint):
+    def _enter_pick(self, mode):
         self._reset_pick_ui()
         self.picking_mode = mode
-        button.setChecked(True)
-        button.setText(hint)
         if mode == "pull":
             self._begin_pull_preview()
+            self._refresh_direction_row()
+        else:
+            self.pb_object.setChecked(True)
+            self.le_object.setText("")
+            self.le_object.setPlaceholderText("Click a model in the 3D view")
+        self._flipper.set_enabled(False)
         self._cursor.push()
 
     def _reset_pick_ui(self):
         self._end_pull_preview()
         self.pb_object.setChecked(False)
-        self.pb_object.setText("Select Object")
-        if self.pb_pull is not None:
-            self.pb_pull.setChecked(False)
-            self.pb_pull.setText("Select Pull Direction")
+        self.le_object.setText(self.target_object.Label if self.target_object is not None else "")
+        self.le_object.setPlaceholderText("No model selected")
+        self._refresh_direction_row()
+        self._flipper.set_enabled(True)
         self._cursor.pop()
+
+    def _refresh_direction_row(self):
+        if self.direction_row is None:
+            return
+        d = self.pull_dir
+        self.direction_row.set_state(
+            (d.x, d.y, d.z), self.pull_ref, self.pull_flipped, picking=self.picking_mode == "pull")
 
     def _on_escape(self):
         if self.picking_mode:
@@ -465,7 +488,7 @@ class ContourTaskPanel:
             Gui.Selection.clearSelection()
             self._update_generate_state()
             return
-        self._enter_pick("object", self.pb_object, "Click an object")
+        self._enter_pick("object")
 
     def _apply_object_from_selection(self):
         sel = Gui.Selection.getSelection()
@@ -497,13 +520,13 @@ class ContourTaskPanel:
             App.Console.PrintMessage(
                 "DFM contour: cleared so you can pick a new pull direction; regenerate when done.\n"
             )
-            self._enter_pick("pull", self.pb_pull, "Click a face or edge")
+            self._enter_pick("pull")
             return
         if self._apply_pull_from_selection():
             self._reset_pick_ui()
             Gui.Selection.clearSelection()
             return
-        self._enter_pick("pull", self.pb_pull, "Click a face or edge")
+        self._enter_pick("pull")
 
     def _apply_pull_from_selection(self):
         try:
@@ -522,7 +545,7 @@ class ContourTaskPanel:
             self.pull_anchor = App.Vector(pnt.x, pnt.y, pnt.z)
             self.pull_ref = name
             self.pull_flipped = False
-            self.le_pull.setText(name)
+            self._refresh_direction_row()
             self._refresh_arrow()
             self._mark_dirty()
             return True
@@ -531,10 +554,29 @@ class ContourTaskPanel:
             return False
 
     def _on_flip_pull(self):
+        if self.picking_mode == "pull":
+            return
         self.pull_dir = App.Vector(-self.pull_dir.x, -self.pull_dir.y, -self.pull_dir.z)
         self.pull_flipped = not self.pull_flipped
-        suffix = " (flipped)" if self.pull_flipped else ""
-        self.le_pull.setText(f"{self.pull_ref}{suffix}")
+        self._refresh_direction_row()
+        self._refresh_arrow()
+        self._mark_dirty()
+
+    def _on_pull_axis(self, vec):
+        """Point along an axis; clicking the current axis again reverses it."""
+        if self.picking_mode == "pull":
+            self.picking_mode = None
+            self._reset_pick_ui()
+        target = App.Vector(*vec)
+        if abs(abs(App.Vector(self.pull_dir).normalize().dot(target)) - 1.0) < 1e-6:
+            self._on_flip_pull()
+            return
+        name = [n for n, axis in AXES if axis == tuple(vec)][0]
+        self.pull_dir = target
+        self.pull_ref = f"+{name}"
+        self.pull_flipped = False
+        self.pull_anchor = None  # the arrow sits at the model's center
+        self._refresh_direction_row()
         self._refresh_arrow()
         self._mark_dirty()
 
@@ -547,6 +589,7 @@ class ContourTaskPanel:
         if anchor is None:
             return
         self.indicator.show(anchor, App.Vector(self.pull_dir.x, self.pull_dir.y, self.pull_dir.z))
+        self._flipper.add(self.indicator, self._on_flip_pull)
 
     def _band(self):
         return _BAND_STEPS.get(self.cb_bands.currentText(), 0.0)
@@ -569,9 +612,27 @@ class ContourTaskPanel:
         self._update_range_label()
 
     def _update_range_label(self):
-        on = bool(getattr(self, "cb_highlight", None) and self.cb_highlight.isChecked())
-        if hasattr(self, "lbl_range"):
-            self.lbl_range.setText("Flagged band" if on else "Range")
+        """Show the settings for the current view: color scale or pass/fail."""
+        if not hasattr(self, "lbl_range"):
+            return
+        flag = self.cb_highlight.isChecked()
+        for widget in (self.lbl_colormap, self.cb_colormap, self.lbl_bands, self.cb_bands):
+            widget.setVisible(not flag)
+        self.lbl_flag_hint.setVisible(flag)
+        if flag:
+            r, g, b = (round(c * 255) for c in _FLAG_RGB)
+            self.lbl_range.setText(
+                f'<span style="color: rgb({r}, {g}, {b})">\u25a0</span>&nbsp;Flag values from')
+            tip = ("Values in this range are flagged red. "
+                   "You can also drag the legend ends in the 3D view.")
+        else:
+            self.lbl_range.setText("Range")
+            tip = ("The values the color map spans. "
+                   "You can also drag the legend ends in the 3D view.")
+        for sb in (self.sb_range_lo, self.sb_range_hi):
+            sb.setToolTip(tip)
+        self.lbl_flag_hint.setStyleSheet(
+            f"background: transparent; color: {muted_color(self.lbl_flag_hint)};")
 
     def _options(self):
         out = {}
@@ -606,19 +667,19 @@ class ContourTaskPanel:
     def _update_generate_state(self):
         valid = self.target_object is not None and self.resolution.is_safe()
         if not self._has_contour:
-            self.pb_generate.setText("Generate Contour")
+            self.pb_generate.setText("Generate contour")
             self.pb_generate.setEnabled(valid)
             if self.target_object is None:
-                tip = "Select an object first."
+                tip = "Select a model first."
             elif not self.resolution.is_safe():
                 tip = "Resolution is too fine; choose a coarser one."
             else:
                 tip = "Run the contour."
         else:
-            self.pb_generate.setText("Update Contour")
+            self.pb_generate.setText("Update contour")
             self.pb_generate.setEnabled(valid and self._dirty)
             if self.target_object is None:
-                tip = "Select an object first."
+                tip = "Select a model first."
             elif not self.resolution.is_safe():
                 tip = "Resolution is too fine; choose a coarser one."
             elif self._dirty:
@@ -641,8 +702,10 @@ class ContourTaskPanel:
 
         self.pb_generate.setEnabled(False)
         self.progress.show()
-        self.progress.setRange(0, 0)
-        self.progress.setFormat("Meshing... %p%")
+        # Not a busy bar: Qt shows no text on one.
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
+        self.progress.setFormat("Meshing the model")
         QtWidgets.QApplication.processEvents()
         try:
             self._mesh = generate_uniform_mesh(self.target_shape, size)
@@ -661,7 +724,8 @@ class ContourTaskPanel:
         pull = App.Vector(self.pull_dir).normalize() if self.measure.needs_pull_direction else None
         self.progress.show()
         self.progress.setRange(0, len(self._mesh.triangles))
-        self.progress.setFormat("Measuring... %p%")
+        message = getattr(self.measure, "progress_text", "Measuring").replace("%", "%%")
+        self.progress.setFormat(f"{message}  %p%")
         try:
 
             def progress_cb(done, total):
@@ -1009,6 +1073,7 @@ class ContourTaskPanel:
             self.cb_highlight.blockSignals(True)
             self.cb_highlight.setChecked(bool(getattr(obj, "HighlightActive", False)))
             self.cb_highlight.blockSignals(False)
+            self._update_range_label()
             for oid, w in self._option_widgets.items():
                 if oid in (obj.Options or {}):
                     val = obj.Options[oid]
@@ -1019,7 +1084,9 @@ class ContourTaskPanel:
             if self.measure.needs_pull_direction:
                 self.pull_dir = App.Vector(obj.PullDirection)
                 self.pull_ref = obj.PullReference or self.pull_ref
-                self.le_pull.setText(self.pull_ref)
+                if self.pull_ref.endswith(" (default)"):  # saved by older versions
+                    self.pull_ref = self.pull_ref[: -len(" (default)")]
+                self._refresh_direction_row()
                 self._refresh_arrow()
             self._set_range_spins(obj.RangeLow, obj.RangeHigh)
 
@@ -1571,6 +1638,7 @@ class ContourTaskPanel:
             self._hover_label = None
         self._destroy_legend()
         clear_all()
+        self._flipper.detach()
         if self.indicator is not None:
             self.indicator.remove()
         try:

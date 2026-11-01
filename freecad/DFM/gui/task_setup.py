@@ -36,7 +36,10 @@ from ..gui.utils.picking import (
 from ..gui.utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
 from ..gui.utils.pull_preview import PullPreview
 from ..gui.utils.qt_filters import EscapeFilter
-from ..gui.utils.widgets import make_flip_button
+from ..gui.utils.direction_row import (
+    AXES, ICON_BUTTON_CSS, PICK_SVG, DirectionRow, axis_of, icon_button, is_element_ref, muted_color,
+    style_primary_button,
+)
 from ..gui.utils.arrow_flip import ArrowFlipper
 from ..gui.rule_cards import apply_svg_icon
 
@@ -47,64 +50,9 @@ _REQUIREMENT_LABELS = {
     ProcessRequirement.NEUTRAL_PLANE: "Neutral plane",
 }
 
-# A mouse pointer: "pick in the 3D view".
-PICK_SVG = (
-    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
-    b' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    b'<path d="M5 3l14 8-6.5 1.6L10 19z"/></svg>'
-)
-
-_AXES = (("X", (1.0, 0.0, 0.0)), ("Y", (0.0, 1.0, 0.0)), ("Z", (0.0, 0.0, 1.0)))
-
-_AXIS_CSS = """
-QToolButton { border: 1px solid rgba(127, 127, 127, 110); border-radius: 0px;
-              padding: 2px 5px; background: transparent; min-width: 22px; }
-QToolButton:hover { background: rgba(127, 127, 127, 40); }
-QToolButton:checked { background: rgba(127, 127, 127, 85); border-color: rgba(127, 127, 127, 170);
-                      font-weight: bold; }
-QToolButton#first { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
-QToolButton#last { border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
-QToolButton#mid, QToolButton#last { border-left: none; }
-"""
-
-# Push buttons, not tool buttons: some FreeCAD themes give tool buttons a
-# small fixed icon size, which shrank the pick icon to a dot. The icon size
-# is also set here, as a widget stylesheet outranks the theme's.
-_ICON_BUTTON_CSS = """
-QPushButton { border: 1px solid rgba(127, 127, 127, 110); border-radius: 3px; background: transparent;
-              padding: 0px; min-width: 0px; qproperty-iconSize: 16px 16px; }
-QPushButton:hover { background: rgba(127, 127, 127, 40); }
-QPushButton:checked { background: rgba(127, 127, 127, 85); border-color: rgba(127, 127, 127, 170); }
-"""
-
-_PLAY_SVG = (
-    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
-    b'<path d="M7 4l13 8-13 8z" fill="COLOR"/></svg>'
-)
-
-
-
-def _muted(widget: QtWidgets.QWidget, alpha: float = 0.65) -> str:
-    """The theme's text color, faded, as a CSS color for rich text."""
-    probe = QtWidgets.QLabel(widget)
-    probe.setAttribute(QtCore.Qt.WidgetAttribute.WA_DontShowOnScreen)
-    probe.hide()
-    probe.ensurePolished()
-    c = probe.palette().color(QtGui.QPalette.ColorRole.WindowText)
-    probe.setParent(None)
-    probe.deleteLater()
-    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})"
-
-
-def _icon_button(svg: bytes, tooltip: str, checkable: bool = False) -> QtWidgets.QPushButton:
-    btn = QtWidgets.QPushButton()
-    btn.setCheckable(checkable)
-    btn.setToolTip(tooltip)
-    btn.setFixedSize(28, 26)
-    btn.setStyleSheet(_ICON_BUTTON_CSS)
-    btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-    apply_svg_icon(btn, svg, 16)
-    return btn
+_muted = muted_color
+_icon_button = icon_button
+_ICON_BUTTON_CSS = ICON_BUTTON_CSS
 
 
 class RequirementHandler(QtCore.QObject):
@@ -223,6 +171,7 @@ class VectorRequirement(RequirementHandler):
         super().__init__(requirement)
         color = self._COLORS.get(requirement, (1.0, 0.15, 0.15))
         self.indicator = DirectionIndicator(color, self.label)
+        self.row: Optional[DirectionRow] = None
         self.axis_btns: list[QtWidgets.QToolButton] = []
         self.ref_label: Optional[QtWidgets.QLabel] = None
         # Set by the panel: where an axis direction's arrow sits, and what
@@ -235,47 +184,20 @@ class VectorRequirement(RequirementHandler):
 
     def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
         """Label, then the picked face (if any), +X/+Y/+Z, pick and flip."""
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(4)
-        lbl = QtWidgets.QLabel(self.label)
-        lbl.setMinimumHeight(28)
-        row.addWidget(lbl)
-        row.addStretch(1)
-
-        self.ref_label = QtWidgets.QLabel()
-        self.ref_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
-        row.addWidget(self.ref_label)
-        row.addSpacing(2)
-
-        axes = QtWidgets.QHBoxLayout()
-        axes.setSpacing(0)
-        self.axis_btns = []
-        for i, (name, vec) in enumerate(_AXES):
-            btn = QtWidgets.QToolButton()
-            btn.setText(f"+{name}")
-            btn.setCheckable(True)
-            btn.setObjectName("first" if i == 0 else ("last" if i == len(_AXES) - 1 else "mid"))
-            btn.setStyleSheet(_AXIS_CSS)
-            btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-            btn.setToolTip(f"Point along the {name} axis. Click again to reverse it.")
-            btn.clicked.connect(lambda _c=False, v=vec: self.set_axis(v))
-            axes.addWidget(btn)
-            self.axis_btns.append(btn)
-        row.addLayout(axes)
-        row.addSpacing(4)
-
-        self.pb = _icon_button(PICK_SVG, f"Pick a face or edge for the {self.label.lower()}",
-                               checkable=True)
-        self.pb.clicked.connect(lambda _checked=False: on_pick(self))
-        row.addWidget(self.pb)
-        self.flip_btn = make_flip_button(
-            lambda _checked=False: self.flip(), size=(28, 26), enabled=self.value is not None)
-        row.addWidget(self.flip_btn)
-        layout.addLayout(row)
+        self.row = DirectionRow(self.label)
+        self.row.axis_clicked.connect(self.set_axis)
+        self.row.pick_clicked.connect(lambda: on_pick(self))
+        self.row.flip_clicked.connect(self.flip)
+        self.pb = self.row.pick_btn
+        self.flip_btn = self.row.flip_btn
+        self.axis_btns = self.row.axis_btns
+        self.ref_label = self.row.ref_label
+        layout.addWidget(self.row)
         self.refresh_display()
 
     def detach(self) -> None:
         super().detach()
+        self.row = None
         self.axis_btns = []
         self.ref_label = None
 
@@ -283,39 +205,18 @@ class VectorRequirement(RequirementHandler):
         """(axis, sign) of the current direction when it lies along X, Y or Z; else (-1, 0)."""
         if self.value is None:
             return -1, 0
-        v = (self.value.X(), self.value.Y(), self.value.Z())
-        for i, (_n, axis) in enumerate(_AXES):
-            dot = sum(a * b for a, b in zip(v, axis))
-            if abs(abs(dot) - 1.0) < 1e-6:
-                return i, (1 if dot > 0 else -1)
-        return -1, 0
+        return axis_of((self.value.X(), self.value.Y(), self.value.Z()))
 
     def refresh_display(self) -> None:
-        index, sign = self._axis_index()
-        for i, btn in enumerate(self.axis_btns):
-            name = _AXES[i][0]
-            btn.setChecked(i == index)
-            prefix = "\u2212" if (i == index and sign < 0) else "+"
-            btn.setText(prefix + name)
-        if self.ref_label is not None:
-            if self.pb is not None and self.pb.isChecked():
-                text = self.pick_hint()
-            elif self.picked_element():
-                text = f"{self.ref}{' (flipped)' if self.flipped else ''}"
-            else:
-                text = ""
-            self.ref_label.setText(
-                f'<span style="color: {_muted(self.ref_label)}">{text}</span>' if text else "")
-            self.ref_label.setToolTip(
-                f"Uses the direction of {self.ref}{', reversed' if self.flipped else ''}"
-                if self.picked_element() else "")
-            self.ref_label.setVisible(bool(text))
-        if self.flip_btn is not None:
-            self.flip_btn.setEnabled(self.value is not None)
+        if self.row is None:
+            return
+        direction = None if self.value is None else (self.value.X(), self.value.Y(), self.value.Z())
+        self.row.set_state(direction, self.ref, self.flipped,
+                           picking=self.pb is not None and self.pb.isChecked(), hint=self.pick_hint())
 
     def picked_element(self) -> bool:
         """True when the direction comes from a face or edge, not an axis button."""
-        return bool(self.ref) and self.ref[0] not in "+-\u2212"
+        return is_element_ref(self.ref)
 
     def reset_ui(self) -> None:
         if self.pb is not None:
@@ -330,12 +231,12 @@ class VectorRequirement(RequirementHandler):
     def set_axis(self, vec: tuple) -> None:
         """Point along an axis; clicking the current axis again reverses it."""
         index, sign = self._axis_index()
-        target = [i for i, (_n, axis) in enumerate(_AXES) if axis == vec][0]
+        target = [i for i, (_n, axis) in enumerate(AXES) if axis == vec][0]
         if index == target:
             self.flip()
             return
         self.value = gp_Dir(*vec)
-        self.ref = f"+{_AXES[target][0]}"
+        self.ref = f"+{AXES[target][0]}"
         self.flipped = False
         self.pnt = self.center_provider()
         self.indicator.show(self.pnt, App.Vector(*vec))
@@ -636,16 +537,11 @@ class TaskSetup:
         run_layout = QtWidgets.QVBoxLayout(run_box)
         run_layout.setContentsMargins(0, 6, 0, 0)
         run_layout.setSpacing(4)
-        f.pbRunAnalysis.setText("Run analysis")
-        font = f.pbRunAnalysis.font()
-        font.setBold(True)
-        f.pbRunAnalysis.setFont(font)
-        f.pbRunAnalysis.setMinimumHeight(30)
+        style_primary_button(f.pbRunAnalysis, "Run analysis")
         f.pbRunAnalysis.setMinimumWidth(0)
         f.pbRunAnalysis.setMaximumWidth(16777215)
         f.pbRunAnalysis.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
                                       QtWidgets.QSizePolicy.Policy.Fixed)
-        apply_svg_icon(f.pbRunAnalysis, _PLAY_SVG, 14)
         run_layout.addWidget(f.pbRunAnalysis)
         form_layout.insertWidget(index, run_box)
         self.run_box = run_box

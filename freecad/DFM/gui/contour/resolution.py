@@ -25,7 +25,8 @@ class ResolutionField(QtWidgets.QWidget):
         self._shape = None
         self._safe = False
 
-        layout = QtWidgets.QVBoxLayout(self)
+        # Preset and size side by side, like the panel's other paired fields.
+        layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
@@ -34,7 +35,10 @@ class ResolutionField(QtWidgets.QWidget):
         self.combo.setCurrentText(get_default_resolution())
         self.combo.setToolTip("Element size preset, scaled to the part. Custom lets you type mm.")
         self.combo.currentIndexChanged.connect(self._on_combo)
-        layout.addWidget(self.combo)
+        self.combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                 QtWidgets.QSizePolicy.Policy.Fixed)
+        self.combo.setMinimumContentsLength(4)
+        layout.addWidget(self.combo, 1)
 
         self.spin = QtWidgets.QDoubleSpinBox()
         self.spin.setRange(get_min_element_size(), 100000.0)
@@ -43,7 +47,9 @@ class ResolutionField(QtWidgets.QWidget):
         self.spin.setSuffix(" mm")
         self.spin.setToolTip("Explicit element size. Smaller is finer and slower. Editing switches to Custom.")
         self.spin.valueChanged.connect(self._on_spin)
-        layout.addWidget(self.spin)
+        self.spin.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                QtWidgets.QSizePolicy.Policy.Fixed)
+        layout.addWidget(self.spin, 1)
 
         self._sync_spin_to_combo()
 
