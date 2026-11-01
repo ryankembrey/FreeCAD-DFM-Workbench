@@ -80,16 +80,15 @@ def get_face_uv_center(face: TopoDS_Face) -> tuple[float, float]:
 def get_face_uv_normal(face: TopoDS_Face, u: float, v: float) -> Optional[gp_Dir]:
     """Returns the normal of a TopoDS_Face at UV"""
 
+    # The one-argument BRep_Tool.Surface already returns the surface moved to
+    # the face's location (a FreeCAD Placement), so the normal is in model
+    # space as it is. Transforming it by the location again rotated it twice
+    # on placed parts, which sent thickness rays the wrong way (#112).
     surface = BRep_Tool.Surface_s(face)
     props = GeomLProp_SLProps(surface, u, v, 1, 1e-6)
 
     if props.IsNormalDefined():
-        pnt = props.Value()
         norm = props.Normal()
-
-        if not face.Location().IsIdentity():
-            pnt.Transform(face.Location().Transformation())
-            norm.Transform(face.Location().Transformation())
 
         if face.Orientation() == TopAbs_REVERSED:
             norm.Reverse()

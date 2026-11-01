@@ -6,7 +6,10 @@ import collections
 from typing import Any, Optional, Callable
 import math
 
-from OCP.TopoDS import TopoDS_Shape, TopoDS_Face
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+from OCP.TopExp import TopExp
+from OCP.TopoDS import TopoDS, TopoDS_Shape, TopoDS_Face
+from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
 from OCP.gp import gp_Lin
 from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
 from freecad.DFM.core.utils.geometry import EdgeIndex, FaceIndex
@@ -20,6 +23,14 @@ from ...core.utils import (
     yield_face_uv_grid,
     get_point_from_uv,
 )
+
+
+# Two hits this close together (mm), on faces that share an edge, are one
+# crossing: a ray through an edge is reported once for each face. Counted
+# twice, the pair reads as a wall of almost 0 mm and throws off the in/out
+# pairing for the rest of the ray. Real thin walls are between opposite
+# faces, which don't share an edge.
+EDGE_CROSSING_GAP = 0.02
 
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
@@ -61,6 +72,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
 
         self.face_seeds: dict[int, list[tuple[float, float, float]]] = collections.defaultdict(list)
         self.measured_faces: set[int] = set()
+        self._shared_edges = self._build_shared_edges(shape, face_index)
 
         results = {}
         for face in self.iter_faces(shape, progress_cb, check_abort):
@@ -68,6 +80,39 @@ class RayThicknessAnalyzer(BaseAnalyzer):
             if thicknesses:
                 results[("Face", face_index.index_of(face))] = thicknesses
         return results
+
+    @staticmethod
+    def _build_shared_edges(shape: TopoDS_Shape, face_index: FaceIndex) -> dict[tuple[int, int], list]:
+        """{(face, neighbour): [edges they share]} for every pair of faces meeting at an edge.
+
+        Used to recognise one ray crossing an edge, reported once per face.
+        """
+        edge_faces = TopTools_IndexedDataMapOfShapeListOfShape()
+        TopExp.MapShapesAndAncestors_s(shape, TopAbs_EDGE, TopAbs_FACE, edge_faces)
+        shared: dict[tuple[int, int], list] = collections.defaultdict(list)
+        for i in range(1, edge_faces.Extent() + 1):
+            edge = edge_faces.FindKey(i)
+            faces = sorted({face_index.index_of(TopoDS.Face_s(f)) for f in edge_faces.FindFromIndex(i)})
+            for a in faces:
+                for b in faces:
+                    if a != b:
+                        shared[(a, b)].append(edge)
+        return shared
+
+    def _merge_edge_crossings(self, hits: list) -> list:
+        """Count a ray through an edge once, not once per face that meets there."""
+        merged: list = []
+        for hit in hits:
+            if merged:
+                w0, face0 = merged[-1][0], merged[-1][1]
+                if hit[0] - w0 < EDGE_CROSSING_GAP and (
+                    hit[1].IsSame(face0)
+                    or (self.face_index.index_of(face0), self.face_index.index_of(hit[1]))
+                    in self._shared_edges
+                ):
+                    continue
+            merged.append(hit)
+        return merged
 
     def _ray_cast_for_face(self, face: TopoDS_Face) -> list[float]:
         """
@@ -151,6 +196,7 @@ class RayThicknessAnalyzer(BaseAnalyzer):
                     )
                 )
         hits.sort(key=lambda h: h[0])
+        hits = self._merge_edge_crossings(hits)
 
         if not hits:
             return []
