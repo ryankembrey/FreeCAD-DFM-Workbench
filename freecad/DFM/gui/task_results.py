@@ -28,6 +28,7 @@ from ..gui.results.toolbar import GroupMode, ResultsToolbar, SortMode
 from ..gui.results.visuals import severity_color
 from ..gui.results.utils import CSVExportConfig, CSVResultExporter
 from ..gui.results.tabs.export import ExportTab
+from ..gui.results.header import ResultsHeader
 from ..gui.results.tabs.history import HistoryTab
 
 
@@ -85,6 +86,8 @@ class TaskResults(QtCore.QObject):
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setReadOnly(True)
         self.form.leVerdict.setReadOnly(True)
+        self.header = ResultsHeader()
+        self._install_header()
 
         self._save_clicked = False
         self._scroll_area: QtWidgets.QScrollArea | None = None
@@ -131,29 +134,82 @@ class TaskResults(QtCore.QObject):
 
     # ── Toolbar injection ────────────────────────────────
 
-    def _inject_toolbar(self):
-        """Insert the toolbar above the tree view inside the Findings group box.
+    def _install_header(self):
+        """Replace the .ui file's four labelled rows with the compact header.
 
-        The .ui file places ``tvResults`` directly inside the group box's
-        QHBoxLayout.  We remove the tree, build a vertical container
-        (toolbar + tree), and put that container in the original layout
-        position.  No .ui modification or resource recompilation required.
+        The line edits stay (hidden) so older code that writes to them keeps
+        working; the material combo moves into the header, so the presenter
+        still finds it as ``form.cbMaterialSwitch``.
+        """
+        form_layout: QtWidgets.QVBoxLayout = self.form.layout()
+        grid = self.form.findChild(QtWidgets.QGridLayout, "gridLayout")
+        if grid is not None:
+            for i in range(grid.count()):
+                widget = grid.itemAt(i).widget()
+                if widget is not None and widget is not self.form.cbMaterialSwitch:
+                    widget.hide()
+            grid.removeWidget(self.form.cbMaterialSwitch)
+            form_layout.removeItem(grid)
+        self.header.set_material_combo(self.form.cbMaterialSwitch)
+        form_layout.insertWidget(0, self.header)
+
+    def set_summary(self, model: str, process: str, verdict: str, color: str) -> None:
+        """Show the model, process and verdict in the header."""
+        self.header.set_model(model)
+        self.header.set_process(process)
+        self.header.set_verdict(verdict, color)
+
+    def _inject_toolbar(self):
+        """Put the toolbar above the tree, straight under the tabs.
+
+        The .ui file places ``tvResults`` in a "Findings" group box. The
+        Results tab already says what's below it, so the group box (and
+        its heading) is dropped: the tree moves into a container with the
+        toolbar on top, in the group box's place on the Results tab.
+        No .ui modification or resource recompilation required.
         """
         group_box: QtWidgets.QGroupBox = self.form.groupBox_2
         old_layout: QtWidgets.QHBoxLayout = group_box.layout()
+        tab_layout = self.form.tabResults.layout()
 
         # Remove the tree from its current layout.
         old_layout.removeWidget(self.form.tvResults)
 
-        # Build a container: toolbar on top, tree below.
-        container = QtWidgets.QWidget()
+        # A card holding the toolbar and the tree, on a slightly different
+        # shade so the findings stand apart from the rest of the panel. The
+        # tint is neutral grey with transparency: darker on light themes,
+        # lighter on dark ones.
+        container = QtWidgets.QFrame()
+        container.setObjectName("dfmFindingsCard")
+        container.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+        container.setStyleSheet(
+            "QFrame#dfmFindingsCard { background: rgba(127, 127, 127, 26);"
+            " border: 1px solid rgba(127, 127, 127, 90); border-radius: 4px; }"
+            " QFrame#dfmFindingsDivider { background: rgba(127, 127, 127, 70); border: none; }"
+        )
+        self.form.tvResults.setObjectName("tvResults")
+        self.form.tvResults.setStyleSheet(
+            "QTreeView#tvResults { background: transparent; border: none; }"
+        )
+        self.form.tvResults.viewport().setAutoFillBackground(False)
+        self._toolbar.setAutoFillBackground(False)
+        self._toolbar.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._toolbar.setStyleSheet("QLabel { background: transparent; }")
+        divider = QtWidgets.QFrame()
+        divider.setObjectName("dfmFindingsDivider")
+        divider.setFixedHeight(1)
         vbox = QtWidgets.QVBoxLayout(container)
-        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setContentsMargins(2, 2, 2, 2)
         vbox.setSpacing(0)
         vbox.addWidget(self._toolbar)
+        vbox.addWidget(divider)
+        vbox.addSpacing(2)
         vbox.addWidget(self.form.tvResults, 1)
 
-        old_layout.addWidget(container)
+        index = tab_layout.indexOf(group_box)
+        tab_layout.removeWidget(group_box)
+        group_box.hide()
+        tab_layout.insertWidget(max(index, 0), container, 1)
 
     @staticmethod
     def _install_tab_page(page: QtWidgets.QWidget, content: QtWidgets.QWidget) -> None:

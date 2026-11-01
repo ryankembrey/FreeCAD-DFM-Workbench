@@ -125,7 +125,7 @@ class TaskResultsPresenter:
 
         text, color = self.model.get_verdict()
         self.view.form.leVerdict.setText(text)
-        self.view.form.leVerdict.setStyleSheet(f"color: {color}; font-weight: bold;")
+        self.view.set_summary(self.bridge.target_object.Label, self.model.process.name, text, color)
 
         self.view.render_tree(
             self.model.get_grouped_results(),
