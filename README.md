@@ -18,8 +18,8 @@ Another key point is customisability. Every rule is 100% customisable. The Proce
 <table>
 <tr>
 <th align="left">Currently supported rules</th>
-<th align="left">Support manufacturing processes (currently)</th>
-<th align="left">Support contours</th>
+<th align="left">Supported manufacturing processes (currently)</th>
+<th align="left">Supported contours</th>
 <th align="left">Other features</th>
 </tr>
 <tr valign="top">
@@ -50,7 +50,7 @@ Another key point is customisability. Every rule is 100% customisable. The Proce
 </td>
 <td>
 
-- Generate professional pdf reports
+- Generate professional PDF reports
 - Export to CSV
 
 </td>
