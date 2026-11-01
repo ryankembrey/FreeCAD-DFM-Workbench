@@ -19,6 +19,11 @@ class DraftAngleCheck(BaseCheck):
         return "Draft Checker"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking draft angles"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "DRAFT_ANALYZER"
 

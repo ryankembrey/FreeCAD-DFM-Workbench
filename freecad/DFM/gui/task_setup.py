@@ -37,6 +37,74 @@ from ..gui.utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
 from ..gui.utils.pull_preview import PullPreview
 from ..gui.utils.qt_filters import EscapeFilter
 from ..gui.utils.widgets import make_flip_button
+from ..gui.utils.arrow_flip import ArrowFlipper
+from ..gui.rule_cards import apply_svg_icon
+
+# Labels in sentence case, as the FreeCAD handbook asks.
+_REQUIREMENT_LABELS = {
+    ProcessRequirement.PULL_DIRECTION: "Pull direction",
+    ProcessRequirement.PRINT_ORIENTATION: "Print direction",
+    ProcessRequirement.NEUTRAL_PLANE: "Neutral plane",
+}
+
+# A mouse pointer: "pick in the 3D view".
+PICK_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M5 3l14 8-6.5 1.6L10 19z"/></svg>'
+)
+
+_AXES = (("X", (1.0, 0.0, 0.0)), ("Y", (0.0, 1.0, 0.0)), ("Z", (0.0, 0.0, 1.0)))
+
+_AXIS_CSS = """
+QToolButton { border: 1px solid rgba(127, 127, 127, 110); border-radius: 0px;
+              padding: 2px 5px; background: transparent; min-width: 22px; }
+QToolButton:hover { background: rgba(127, 127, 127, 40); }
+QToolButton:checked { background: rgba(127, 127, 127, 85); border-color: rgba(127, 127, 127, 170);
+                      font-weight: bold; }
+QToolButton#first { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
+QToolButton#last { border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
+QToolButton#mid, QToolButton#last { border-left: none; }
+"""
+
+# Push buttons, not tool buttons: some FreeCAD themes give tool buttons a
+# small fixed icon size, which shrank the pick icon to a dot. The icon size
+# is also set here, as a widget stylesheet outranks the theme's.
+_ICON_BUTTON_CSS = """
+QPushButton { border: 1px solid rgba(127, 127, 127, 110); border-radius: 3px; background: transparent;
+              padding: 0px; min-width: 0px; qproperty-iconSize: 16px 16px; }
+QPushButton:hover { background: rgba(127, 127, 127, 40); }
+QPushButton:checked { background: rgba(127, 127, 127, 85); border-color: rgba(127, 127, 127, 170); }
+"""
+
+_PLAY_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<path d="M7 4l13 8-13 8z" fill="COLOR"/></svg>'
+)
+
+
+
+def _muted(widget: QtWidgets.QWidget, alpha: float = 0.65) -> str:
+    """The theme's text color, faded, as a CSS color for rich text."""
+    probe = QtWidgets.QLabel(widget)
+    probe.setAttribute(QtCore.Qt.WidgetAttribute.WA_DontShowOnScreen)
+    probe.hide()
+    probe.ensurePolished()
+    c = probe.palette().color(QtGui.QPalette.ColorRole.WindowText)
+    probe.setParent(None)
+    probe.deleteLater()
+    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {alpha})"
+
+
+def _icon_button(svg: bytes, tooltip: str, checkable: bool = False) -> QtWidgets.QPushButton:
+    btn = QtWidgets.QPushButton()
+    btn.setCheckable(checkable)
+    btn.setToolTip(tooltip)
+    btn.setFixedSize(28, 26)
+    btn.setStyleSheet(_ICON_BUTTON_CSS)
+    btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+    apply_svg_icon(btn, svg, 16)
+    return btn
 
 
 class RequirementHandler(QtCore.QObject):
@@ -58,7 +126,8 @@ class RequirementHandler(QtCore.QObject):
 
     @property
     def label(self) -> str:
-        return self.requirement.name.replace("_", " ").title()
+        return _REQUIREMENT_LABELS.get(
+            self.requirement, self.requirement.name.replace("_", " ").capitalize())
 
     def pick_hint(self) -> str:
         return "Click a face"
@@ -154,22 +223,124 @@ class VectorRequirement(RequirementHandler):
         super().__init__(requirement)
         color = self._COLORS.get(requirement, (1.0, 0.15, 0.15))
         self.indicator = DirectionIndicator(color, self.label)
+        self.axis_btns: list[QtWidgets.QToolButton] = []
+        self.ref_label: Optional[QtWidgets.QLabel] = None
+        # Set by the panel: where an axis direction's arrow sits, and what
+        # to do after the direction changes.
+        self.center_provider = lambda: App.Vector(0, 0, 0)
+        self.on_changed = lambda: None
 
     def pick_hint(self) -> str:
         return "Click a face or edge"
 
-    def _build_extra(self, container: QtWidgets.QHBoxLayout) -> None:
+    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
+        """Label, then the picked face (if any), +X/+Y/+Z, pick and flip."""
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
+        lbl = QtWidgets.QLabel(self.label)
+        lbl.setMinimumHeight(28)
+        row.addWidget(lbl)
+        row.addStretch(1)
+
+        self.ref_label = QtWidgets.QLabel()
+        self.ref_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        row.addWidget(self.ref_label)
+        row.addSpacing(2)
+
+        axes = QtWidgets.QHBoxLayout()
+        axes.setSpacing(0)
+        self.axis_btns = []
+        for i, (name, vec) in enumerate(_AXES):
+            btn = QtWidgets.QToolButton()
+            btn.setText(f"+{name}")
+            btn.setCheckable(True)
+            btn.setObjectName("first" if i == 0 else ("last" if i == len(_AXES) - 1 else "mid"))
+            btn.setStyleSheet(_AXIS_CSS)
+            btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+            btn.setToolTip(f"Point along the {name} axis. Click again to reverse it.")
+            btn.clicked.connect(lambda _c=False, v=vec: self.set_axis(v))
+            axes.addWidget(btn)
+            self.axis_btns.append(btn)
+        row.addLayout(axes)
+        row.addSpacing(4)
+
+        self.pb = _icon_button(PICK_SVG, f"Pick a face or edge for the {self.label.lower()}",
+                               checkable=True)
+        self.pb.clicked.connect(lambda _checked=False: on_pick(self))
+        row.addWidget(self.pb)
         self.flip_btn = make_flip_button(
-            lambda _checked=False: self.flip(),
-            size=(26, 28),
-            enabled=self.value is not None,
-        )
-        container.addWidget(self.flip_btn, 0)
+            lambda _checked=False: self.flip(), size=(28, 26), enabled=self.value is not None)
+        row.addWidget(self.flip_btn)
+        layout.addLayout(row)
+        self.refresh_display()
+
+    def detach(self) -> None:
+        super().detach()
+        self.axis_btns = []
+        self.ref_label = None
+
+    def _axis_index(self) -> tuple[int, int]:
+        """(axis, sign) of the current direction when it lies along X, Y or Z; else (-1, 0)."""
+        if self.value is None:
+            return -1, 0
+        v = (self.value.X(), self.value.Y(), self.value.Z())
+        for i, (_n, axis) in enumerate(_AXES):
+            dot = sum(a * b for a, b in zip(v, axis))
+            if abs(abs(dot) - 1.0) < 1e-6:
+                return i, (1 if dot > 0 else -1)
+        return -1, 0
 
     def refresh_display(self) -> None:
-        super().refresh_display()
+        index, sign = self._axis_index()
+        for i, btn in enumerate(self.axis_btns):
+            name = _AXES[i][0]
+            btn.setChecked(i == index)
+            prefix = "\u2212" if (i == index and sign < 0) else "+"
+            btn.setText(prefix + name)
+        if self.ref_label is not None:
+            if self.pb is not None and self.pb.isChecked():
+                text = self.pick_hint()
+            elif self.picked_element():
+                text = f"{self.ref}{' (flipped)' if self.flipped else ''}"
+            else:
+                text = ""
+            self.ref_label.setText(
+                f'<span style="color: {_muted(self.ref_label)}">{text}</span>' if text else "")
+            self.ref_label.setToolTip(
+                f"Uses the direction of {self.ref}{', reversed' if self.flipped else ''}"
+                if self.picked_element() else "")
+            self.ref_label.setVisible(bool(text))
         if self.flip_btn is not None:
             self.flip_btn.setEnabled(self.value is not None)
+
+    def picked_element(self) -> bool:
+        """True when the direction comes from a face or edge, not an axis button."""
+        return bool(self.ref) and self.ref[0] not in "+-\u2212"
+
+    def reset_ui(self) -> None:
+        if self.pb is not None:
+            self.pb.setChecked(False)
+        self.refresh_display()
+
+    def enter_picking_ui(self) -> None:
+        if self.pb is not None:
+            self.pb.setChecked(True)
+        self.refresh_display()
+
+    def set_axis(self, vec: tuple) -> None:
+        """Point along an axis; clicking the current axis again reverses it."""
+        index, sign = self._axis_index()
+        target = [i for i, (_n, axis) in enumerate(_AXES) if axis == vec][0]
+        if index == target:
+            self.flip()
+            return
+        self.value = gp_Dir(*vec)
+        self.ref = f"+{_AXES[target][0]}"
+        self.flipped = False
+        self.pnt = self.center_provider()
+        self.indicator.show(self.pnt, App.Vector(*vec))
+        self.refresh_display()
+        self.on_changed()
 
     def apply_selection(self) -> bool:
         try:
@@ -190,12 +361,9 @@ class VectorRequirement(RequirementHandler):
             self.ref = sub_name
             self.flipped = False
 
-            if self.le is not None:
-                self.le.setText(sub_name)
-            if self.flip_btn is not None:
-                self.flip_btn.setEnabled(True)
-
             self.indicator.show(pnt, dir_vec)
+            self.refresh_display()
+            self.on_changed()
             return True
 
         except Exception as e:
@@ -207,11 +375,10 @@ class VectorRequirement(RequirementHandler):
             return
         self.value.Reverse()
         self.flipped = not self.flipped
-        suffix = " (flipped)" if self.flipped else ""
-        if self.le is not None:
-            self.le.setText(f"{self.ref}{suffix}")
         dx, dy, dz = self.value.X(), self.value.Y(), self.value.Z()
         self.indicator.show(self.pnt, App.Vector(dx, dy, dz))
+        self.refresh_display()
+        self.on_changed()
 
     def remove_indicator(self) -> None:
         self.indicator.remove()
@@ -257,8 +424,8 @@ class PlaneRequirement(RequirementHandler):
 
 _NUMERIC_DEFAULTS: dict[ProcessRequirement, tuple[float, float, float, float, str, str]] = {
     #                                          default, min, max,  step, unit, suffix
-    ProcessRequirement.NOZZLE_DIAMETER: (0.4, 0.1, 2.0, 0.05, "mm", "Nozzle Diameter"),
-    ProcessRequirement.LAYER_HEIGHT: (0.2, 0.01, 1.0, 0.05, "mm", "Layer Height"),
+    ProcessRequirement.NOZZLE_DIAMETER: (0.4, 0.1, 2.0, 0.05, "mm", "Nozzle diameter"),
+    ProcessRequirement.LAYER_HEIGHT: (0.2, 0.01, 1.0, 0.05, "mm", "Layer height"),
 }
 
 
@@ -272,7 +439,7 @@ class NumericRequirement(RequirementHandler):
             self.default_val, self.min_val, self.max_val, self.step, self.unit, self._label = defaults
         else:
             self.default_val, self.min_val, self.max_val, self.step, self.unit, self._label = (
-                1.0, 0.0, 100.0, 0.1, "", requirement.name.replace("_", " ").title(),
+                1.0, 0.0, 100.0, 0.1, "", requirement.name.replace("_", " ").capitalize(),
             )
         self.spin: Optional[QtWidgets.QDoubleSpinBox] = None
         # Set the default value immediately
@@ -282,25 +449,27 @@ class NumericRequirement(RequirementHandler):
     def label(self) -> str:
         return self._label
 
-    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
-        """Create a label + spinbox row. No pick button needed."""
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(4)
-
-        lbl = QtWidgets.QLabel(self._label)
-        lbl.setMinimumHeight(28)
-        row.addWidget(lbl, 1)
-
+    def make_spin(self) -> QtWidgets.QDoubleSpinBox:
+        """The value's spin box (also kept as ``self.spin``)."""
         self.spin = QtWidgets.QDoubleSpinBox()
-        self.spin.setMinimumHeight(28)
+        self.spin.setMinimumHeight(26)
         self.spin.setRange(self.min_val, self.max_val)
         self.spin.setSingleStep(self.step)
         self.spin.setDecimals(2)
         self.spin.setSuffix(f" {self.unit}")
-        self.spin.setValue(self.default_val)
+        self.spin.setValue(self.value if self.value is not None else self.default_val)
+        self.spin.setMinimumWidth(90)
         self.spin.valueChanged.connect(self._on_value_changed)
-        row.addWidget(self.spin, 1)
+        return self.spin
 
+    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
+        """Create a label + spinbox row. No pick button needed."""
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
+        lbl = QtWidgets.QLabel(self._label)
+        lbl.setMinimumHeight(26)
+        row.addWidget(lbl, 1)
+        row.addWidget(self.make_spin())
         layout.addLayout(row)
 
     def _on_value_changed(self, val: float):
@@ -369,6 +538,12 @@ class TaskSetup:
         self.handlers: dict[ProcessRequirement, RequirementHandler] = {
             req: cls(req) for req, cls in REQUIREMENT_HANDLER_TYPES.items()
         }
+        # Direction arrows in the 3D view flip when clicked.
+        self._flipper = ArrowFlipper()
+        for handler in self.handlers.values():
+            if isinstance(handler, VectorRequirement):
+                handler.center_provider = self._model_center
+                handler.on_changed = self._direction_changed
 
         self.is_running = False
         self.abort_requested = False
@@ -376,7 +551,6 @@ class TaskSetup:
         self._cursor = CrossCursorOverride()
         self._preview: Optional[PullPreview] = None
 
-        self.orig_model_text = self.form.pbSelectModel.text()
 
         Gui.Selection.addObserver(self)
 
@@ -393,51 +567,153 @@ class TaskSetup:
             self._apply_presets(preset_process, preset_material, auto_run)
 
     def _setup_widgets(self):
-        self.form.cbManCategory.setPlaceholderText("Select a category")
-        self.form.cbManCategory.setCurrentIndex(-1)
+        f = self.form
+        f.gbTarget.setTitle("Model")
+        f.gbParams.setTitle("Manufacturing")
+        f.gbOptions.setTitle("Settings")
+        f.gbAnalysis.setTitle("Analysis")
 
-        self.form.cbManProcess.setPlaceholderText("Select a category first")
-        self.form.cbManProcess.setEnabled(False)
+        # Model: the name, then an icon button to pick it in the 3D view.
+        target_layout = f.gbTarget.layout()
+        target_layout.removeWidget(f.pbSelectModel)
+        target_layout.removeWidget(f.leSelectModel)
+        for i in range(target_layout.count()):
+            target_layout.setStretch(i, 0)
+        target_layout.addWidget(f.leSelectModel, 1)
+        target_layout.addWidget(f.pbSelectModel, 0)
+        f.leSelectModel.setReadOnly(True)
+        f.leSelectModel.setPlaceholderText("No model selected")
+        f.pbSelectModel.setText("")
+        f.pbSelectModel.setCheckable(True)
+        f.pbSelectModel.setFixedSize(28, 26)
+        f.pbSelectModel.setToolTip("Pick the model in the 3D view")
+        f.pbSelectModel.setStyleSheet(_ICON_BUTTON_CSS)
+        apply_svg_icon(f.pbSelectModel, PICK_SVG, 16)
 
-        self.form.cbMaterial.setPlaceholderText("Select a process first")
-        self.form.cbMaterial.setEnabled(False)
+        # Manufacturing: one process list grouped by category, then material.
+        f.cbManCategory.hide()
+        f.lSelectProcess.hide()
+        grid = f.gbParams.layout()
+        grid.removeWidget(f.cbManCategory)
+        grid.removeWidget(f.lSelectProcess)
+        f.lMProcess.setText("Process")
+        f.lMaterial.setText("Material")
+        f.cbManProcess.setPlaceholderText("Choose a process")
+        f.cbMaterial.setPlaceholderText("Choose a process first")
+        f.cbMaterial.setEnabled(False)
+        row, col, _rs, _cs = grid.getItemPosition(grid.indexOf(f.cbManProcess))
+        self.library_btn = QtWidgets.QPushButton()
+        self.library_btn.setIcon(QtGui.QIcon(":/icons/process_library.svg"))
+        self.library_btn.setFixedSize(28, 26)
+        self.library_btn.setStyleSheet(_ICON_BUTTON_CSS)
+        self.library_btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.library_btn.setToolTip("Open the Process Library to edit processes, materials and rules")
+        self.library_btn.clicked.connect(self._open_process_library)
+        grid.addWidget(self.library_btn, row, col + 1)
+        # The material list reaches the right edge, under the library button.
+        m_row, m_col, _rs, _cs = grid.getItemPosition(grid.indexOf(f.cbMaterial))
+        grid.removeWidget(f.cbMaterial)
+        grid.addWidget(f.cbMaterial, m_row, m_col, 1, 2)
 
-        self.form.leSelectModel.setReadOnly(True)
-        self.form.leSelectModel.setPlaceholderText("No model selected")
+        f.gbOptions.hide()
+        f.gbAnalysis.hide()
+        # The bar shows the current step in words; no separate log.
+        f.lProgress.hide()
+        f.progressBar.setValue(0)
+        f.progressBar.setTextVisible(True)
+        f.progressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        f.progressBar.setToolTip("")
 
-        self.form.pbSelectModel.setCheckable(True)
-        self.form.pbSelectModel.setStyleSheet(PICK_BUTTON_STYLE)
+        if not f.gbOptions.layout():
+            layout = QtWidgets.QVBoxLayout(f.gbOptions)
+            f.gbOptions.setLayout(layout)
 
-        self.form.gbOptions.hide()
-        self.form.gbAnalysis.hide()
-        self.form.progressBar.setValue(0)
-
-        if not self.form.gbOptions.layout():
-            layout = QtWidgets.QVBoxLayout(self.form.gbOptions)
-            self.form.gbOptions.setLayout(layout)
+        # Run: full width, in the theme's own button style.
+        form_layout = f.layout()
+        index = form_layout.indexOf(f.pbRunAnalysis)
+        form_layout.removeWidget(f.pbRunAnalysis)
+        run_box = QtWidgets.QWidget()
+        run_layout = QtWidgets.QVBoxLayout(run_box)
+        run_layout.setContentsMargins(0, 6, 0, 0)
+        run_layout.setSpacing(4)
+        f.pbRunAnalysis.setText("Run analysis")
+        font = f.pbRunAnalysis.font()
+        font.setBold(True)
+        f.pbRunAnalysis.setFont(font)
+        f.pbRunAnalysis.setMinimumHeight(30)
+        f.pbRunAnalysis.setMinimumWidth(0)
+        f.pbRunAnalysis.setMaximumWidth(16777215)
+        f.pbRunAnalysis.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                      QtWidgets.QSizePolicy.Policy.Fixed)
+        apply_svg_icon(f.pbRunAnalysis, _PLAY_SVG, 14)
+        run_layout.addWidget(f.pbRunAnalysis)
+        form_layout.insertWidget(index, run_box)
+        self.run_box = run_box
 
     def _populate_categories(self):
-        self.form.cbManCategory.blockSignals(True)
-        self.form.cbManCategory.clear()
-        categories = self.registry.get_categories()
-        self.form.cbManCategory.addItems(categories)
-        self.form.cbManCategory.setCurrentIndex(0 if len(categories) == 1 else -1)
-        self.form.cbManCategory.blockSignals(False)
-        if len(categories) == 1:
-            self.on_category_changed()
+        """Fill the process list: every process, under a heading for its category."""
+        combo = self.form.cbManProcess
+        combo.blockSignals(True)
+        combo.clear()
+        model = combo.model()
+        processes = []
+        for category in self.registry.get_categories():
+            members = self.registry.get_processes_for_category(category)
+            if not members:
+                continue
+            if combo.count():
+                combo.insertSeparator(combo.count())
+            combo.addItem(category)
+            heading = model.item(combo.count() - 1)
+            heading.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
+            font = heading.font()
+            font.setBold(True)
+            heading.setFont(font)
+            for process in members:
+                combo.addItem(process.name, userData=process.name)
+                processes.append(process.name)
+        combo.setCurrentIndex(-1)
+        if len(processes) == 1:
+            combo.setCurrentIndex(combo.findData(processes[0]))
+        combo.setEnabled(bool(processes))
+        if not processes:
+            combo.setPlaceholderText("No processes in the Process Library")
+        combo.blockSignals(False)
+        self.on_process_changed()
 
     def _connect_signals(self):
         self.form.pbRunAnalysis.clicked.connect(self.on_run_clicked)
         self.form.pbAbort.clicked.connect(self.on_abort_clicked)
         self.form.pbSelectModel.clicked.connect(self.on_select_shape)
-        self.form.cbManCategory.currentIndexChanged.connect(self.on_category_changed)
         self.form.cbManProcess.currentIndexChanged.connect(self.on_process_changed)
         self.form.cbMaterial.currentIndexChanged.connect(self._update_run_button_state)
+
+    def _open_process_library(self, _checked: bool = False) -> None:
+        try:
+            Gui.runCommand("DFM_ProcessLibrary")
+        except Exception as e:
+            App.Console.PrintError(f"DFM: could not open the Process Library: {e}\n")
+
+    def _model_center(self):
+        if self.target_shape is not None:
+            return self.target_shape.BoundBox.Center
+        return App.Vector(0, 0, 0)
+
+    def _direction_changed(self) -> None:
+        self._register_arrows()
+        self._update_run_button_state()
+
+    def _register_arrows(self) -> None:
+        """Make every shown direction arrow flippable from the 3D view."""
+        for handler in self.handlers.values():
+            if isinstance(handler, VectorRequirement) and handler.is_satisfied():
+                self._flipper.add(handler.indicator, handler.flip)
 
     def _on_escape(self) -> bool:
         """Cancel picking mode on Escape. Returns True if handled."""
         if self.picking_mode:
             self._cleanup_preview()
+            self._flipper.set_enabled(True)
             # Restore committed indicator if the handler already had a value
             if self.picking_mode in self.handlers:
                 handler = self.handlers[self.picking_mode]
@@ -506,13 +782,15 @@ class TaskSetup:
 
     def _reset_picking_ui(self):
         """Reset the active states of the model button and all requirement buttons."""
-        self.form.pbSelectModel.setText(self.orig_model_text)
         self.form.pbSelectModel.setChecked(False)
+        self.form.leSelectModel.setText(self.target_object.Label if self.target_object else "")
+        self.form.leSelectModel.setPlaceholderText("No model selected")
 
         for handler in self.handlers.values():
             handler.reset_ui()
 
         self._cursor.pop()
+        self._flipper.set_enabled(True)
 
     def _toggle_pick_mode_model(self):
         if self.picking_mode == "model":
@@ -523,7 +801,9 @@ class TaskSetup:
         self._reset_picking_ui()
         self.picking_mode = "model"
         self.form.pbSelectModel.setChecked(True)
-        self.form.pbSelectModel.setText("Click an object")
+        self.form.leSelectModel.setText("")
+        self.form.leSelectModel.setPlaceholderText("Click a model in the 3D view")
+        self._flipper.set_enabled(False)
         self._cursor.push()
 
     def on_select_shape(self):
@@ -559,6 +839,7 @@ class TaskSetup:
         self._reset_picking_ui()
         self.picking_mode = handler.requirement
         handler.enter_picking_ui()
+        self._flipper.set_enabled(False)
         # Hide the committed indicator while picking a new direction
         if isinstance(handler, VectorRequirement):
             if handler.is_satisfied():
@@ -576,12 +857,24 @@ class TaskSetup:
         self.target_object = obj
         self.target_shape = shape
         self.form.leSelectModel.setText(obj.Label)
+        self.form.leSelectModel.setCursorPosition(0)
+        # Arrows set along an axis sit at the model's center: move them along.
+        active = self._active_requirements() if self.process else []
+        for req in active:
+            handler = self.handlers[req]
+            if isinstance(handler, VectorRequirement) and handler.is_satisfied() \
+                    and handler._axis_index()[0] >= 0:
+                handler.pnt = self._model_center()
+                v = handler.value
+                handler.indicator.show(handler.pnt, App.Vector(v.X(), v.Y(), v.Z()))
+        self._register_arrows()
         return True
 
     def _auto_select_model(self):
         auto_select_body(self._set_target)
 
     def _remove_all_indicators(self):
+        self._flipper.detach()
         for handler in self.handlers.values():
             handler.remove_indicator()
 
@@ -613,7 +906,7 @@ class TaskSetup:
         if not process_id:
             self.process = None
             self.form.cbMaterial.setEnabled(False)
-            self.form.cbMaterial.setPlaceholderText("Select a process first")
+            self.form.cbMaterial.setPlaceholderText("Choose a process first")
             self.form.cbMaterial.setCurrentIndex(-1)
             self.form.cbMaterial.blockSignals(False)
             self._update_options_visibility()
@@ -625,7 +918,7 @@ class TaskSetup:
         if materials:
             self.form.cbMaterial.addItems(materials)
             self.form.cbMaterial.setEnabled(True)
-            self.form.cbMaterial.setPlaceholderText("Select a material")
+            self.form.cbMaterial.setPlaceholderText("Choose a material")
         else:
             self.form.cbMaterial.setEnabled(False)
             self.form.cbMaterial.setPlaceholderText("No materials defined")
@@ -684,33 +977,54 @@ class TaskSetup:
             return
 
         layout = self.form.gbOptions.layout()
+        numeric = [r for r in active_reqs if isinstance(self.handlers[r], NumericRequirement)]
         for req in active_reqs:
+            if req in numeric and len(numeric) == 2:
+                continue
             self.handlers[req].build_row(layout, self._on_requirement_pick)
+        if len(numeric) == 2:
+            # Nozzle and layer height (or any two values) share one row, as
+            # two equal halves: each label sits right next to its value.
+            row = QtWidgets.QHBoxLayout()
+            row.setSpacing(6)
+            short = {ProcessRequirement.NOZZLE_DIAMETER: "Nozzle",
+                     ProcessRequirement.LAYER_HEIGHT: "Layer"}
+            for i, req in enumerate(numeric):
+                handler = self.handlers[req]
+                if i:
+                    row.addSpacing(10)
+                lbl = QtWidgets.QLabel(short.get(req, handler.label))
+                lbl.setToolTip(handler.label)
+                lbl.setMinimumHeight(26)
+                spin = handler.make_spin()
+                spin.setToolTip(handler.label)
+                spin.setMinimumWidth(70)
+                spin.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                   QtWidgets.QSizePolicy.Policy.Fixed)
+                lbl.setBuddy(spin)
+                row.addWidget(lbl)
+                row.addWidget(spin, 1)
+            layout.addLayout(row)
 
-        title = "Parameters" if len(active_reqs) > 1 else self.handlers[active_reqs[0]].label
-        self.form.gbOptions.setTitle(title)
+        self.form.gbOptions.setTitle("Settings")
         self.form.gbOptions.show()
 
-        # Auto-default pull direction to +Z (the most common pull direction)
-        if ProcessRequirement.PULL_DIRECTION in active_reqs:
-            handler = self.handlers[ProcessRequirement.PULL_DIRECTION]
-            if not handler.is_satisfied():
-                self._set_default_pull_direction(handler)
+        # Directions start along +Z, the most common pull and print direction.
+        for req in active_reqs:
+            handler = self.handlers[req]
+            if isinstance(handler, VectorRequirement) and not handler.is_satisfied():
+                self._set_default_direction(handler)
 
-    def _set_default_pull_direction(self, handler: "VectorRequirement"):
-        """Default to +Z pull direction, with the arrow at the target's bounding box center."""
+    def _set_default_direction(self, handler: "VectorRequirement"):
+        """Default to +Z, with the arrow at the model's bounding box center."""
         handler.value = gp_Dir(0, 0, 1)
-        handler.ref = "+Z (default)"
+        handler.ref = "+Z"
         handler.flipped = False
-
+        handler.pnt = self._model_center()
         if self.target_object and self.target_shape:
-            center = self.target_shape.BoundBox.Center
-            handler.pnt = center
-            handler.indicator.show(center, App.Vector(0, 0, 1))
-        else:
-            handler.pnt = App.Vector(0, 0, 0)
-
+            handler.indicator.show(handler.pnt, App.Vector(0, 0, 1))
         handler.refresh_display()
+        self._register_arrows()
         self._update_run_button_state()
 
     def get_active_requirements(self) -> set[ProcessRequirement]:
@@ -758,23 +1072,15 @@ class TaskSetup:
             btn.setToolTip("Missing: " + ", ".join(missing))
         else:
             btn.setEnabled(True)
-            btn.setToolTip("Starts the analysis for the selected model")
+            n = len(self.process.active_rules) if self.process else 0
+            btn.setToolTip(f"Checks {n} rule{'s' if n != 1 else ''} for "
+                           f"{self.form.cbMaterial.currentText()}")
 
     def _apply_presets(self, process_name: str, material_name: Optional[str], auto_run: bool):
         """Pre-fill the setup form with a known process/material and optionally auto-run."""
-        # Find the category that contains this process
-        for cat_idx in range(self.form.cbManCategory.count()):
-            cat_name = self.form.cbManCategory.itemText(cat_idx)
-            processes = self.registry.get_processes_for_category(cat_name)
-            if any(p.name == process_name for p in processes):
-                self.form.cbManCategory.setCurrentIndex(cat_idx)
-                break
-
-        # Select the process
-        for proc_idx in range(self.form.cbManProcess.count()):
-            if self.form.cbManProcess.itemData(proc_idx) == process_name:
-                self.form.cbManProcess.setCurrentIndex(proc_idx)
-                break
+        index = self.form.cbManProcess.findData(process_name)
+        if index >= 0:
+            self.form.cbManProcess.setCurrentIndex(index)
 
         # Select the material
         if material_name:
@@ -816,8 +1122,9 @@ class TaskSetup:
 
         self.is_running = True
         self.abort_requested = False
-        self.form.pbRunAnalysis.hide()
-        self.form.lProgress.setText("Starting analysis")
+        self.run_box.hide()
+        self._flipper.set_enabled(False)
+        self._show_progress("Getting started", 0, 0)
         self.form.pbAbort.setText("Abort")
         self.form.pbAbort.setEnabled(True)
         self.form.gbAnalysis.show()
@@ -826,7 +1133,7 @@ class TaskSetup:
             results, runner = self._execute_analysis(kwargs)
             if self.abort_requested:
                 App.Console.PrintMessage("DFM Analysis aborted by user.\n")
-                self.form.pbRunAnalysis.show()
+                self.run_box.show()
                 self._update_run_button_state()
             else:
                 self._finish_analysis(results, runner, kwargs)
@@ -835,19 +1142,36 @@ class TaskSetup:
             import traceback
 
             App.Console.PrintError(traceback.format_exc())
-            self.form.pbRunAnalysis.show()
+            self.run_box.show()
             self._update_run_button_state()
         finally:
             self._cleanup_after_run()
+
+    def _show_progress(self, message: str, current: Optional[int] = None,
+                       total: Optional[int] = None) -> None:
+        """Show one message in the progress bar, with the percentage after it.
+
+        Without *current* and *total* (the steps before and after the rules)
+        the bar shows just the message and keeps its position.
+        """
+        bar = self.form.progressBar
+        text = (message or "").replace("%", "%%")
+        if total is None or total <= 0:
+            # Never a busy bar: Qt shows no text on one.
+            if total is not None:
+                bar.setMaximum(1)
+                bar.setValue(0)
+            bar.setFormat(text)
+            return
+        bar.setMaximum(total)
+        bar.setValue(current or 0)
+        bar.setFormat(f"{text}  %p%" if text else "%p%")
 
     def _execute_analysis(self, kwargs) -> tuple[list[CheckResult], AnalysisRunner]:
         assert self.target_shape is not None
 
         def progress_callback(current: int, total: int, message: str = ""):
-            if message:
-                self.form.lProgress.setText(f"Running: {message}")
-            self.form.progressBar.setMaximum(total)
-            self.form.progressBar.setValue(current)
+            self._show_progress(message, current, total)
             QtWidgets.QApplication.processEvents(
                 QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
                 | QtCore.QEventLoop.ProcessEventsFlag.WaitForMoreEvents,
@@ -874,10 +1198,10 @@ class TaskSetup:
     def _finish_analysis(self, results: list[CheckResult], runner: AnalysisRunner, run_kwargs: dict):
         assert self.target_object is not None
         assert self.process is not None
-        self.form.lProgress.setText("Mapping results to 3D model")
+        self._show_progress("Marking the findings on the model")
         QtWidgets.QApplication.processEvents()
         _resolve_geometry_refs(results)
-        self.form.lProgress.setText("Preparing final report")
+        self._show_progress("Preparing the results")
         QtWidgets.QApplication.processEvents()
 
         material_name = self.form.cbMaterial.currentText()
@@ -924,9 +1248,10 @@ class TaskSetup:
     def _cleanup_after_run(self):
         self.is_running = False
         self.abort_requested = False
+        self._flipper.set_enabled(True)
         if self.form:
             try:
-                self.form.lProgress.setText("")
+                self._show_progress("", 0, 1)
                 self.form.gbAnalysis.hide()
             except RuntimeError:
                 pass

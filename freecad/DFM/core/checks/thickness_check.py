@@ -19,6 +19,11 @@ class MinThicknessCheck(BaseCheck):
         return "Min Thickness Check"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking for thin walls"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "RAY_THICKNESS_ANALYZER"
 
@@ -89,6 +94,11 @@ class MaxThicknessCheck(BaseCheck):
     @property
     def name(self) -> str:
         return "Max Thickness Check"
+
+    @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking for thick walls"
 
     @property
     def required_analyzer_id(self) -> str:

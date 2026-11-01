@@ -95,6 +95,8 @@ class AnalysisRunner:
                     timing.start(analyzer_id)
 
                 iter_count = analyzer_counts.get(analyzer_id, 0)
+                # One message per rule: the measuring done for it shows the
+                # same words as the check that follows.
                 success = self._run_analyzer(
                     analyzer_id,
                     shape_occ,
@@ -102,6 +104,7 @@ class AnalysisRunner:
                     current_step,
                     total_steps,
                     iter_count,
+                    check_instance.progress_text,
                     progress_cb,
                     check_abort,
                     **kwargs,
@@ -260,11 +263,15 @@ class AnalysisRunner:
         step_offset: int,
         total_steps: int,
         iter_count: int,
+        progress_text: str,
         progress_cb: ProgressCallback,
         check_abort: AbortCallback,
         **kwargs: Any,
     ) -> bool:
-        """Instantiate and execute an analyzer, storing its result in the cache."""
+        """Instantiate and execute an analyzer, storing its result in the cache.
+
+        *progress_text* is the message of the rule that needs this analyzer.
+        """
         analyzer_class = get_analyzer_class(analyzer_id)
         if not analyzer_class:
             return False
@@ -273,7 +280,7 @@ class AnalysisRunner:
 
         def on_progress(faces_done: int):
             if progress_cb:
-                progress_cb(step_offset + faces_done, total_steps, analyzer_instance.name)
+                progress_cb(step_offset + faces_done, total_steps, progress_text)
 
         # face_index and edge_index are passed positionally below, but they
         # also live in kwargs (injected for checks that need them).  Strip
@@ -305,7 +312,7 @@ class AnalysisRunner:
         feedback_templates = process.rule_feedback.get(rule_id) or RuleFeedback()
 
         if progress_cb:
-            progress_cb(current_step, total_steps, check_instance.name)
+            progress_cb(current_step, total_steps, check_instance.progress_text)
 
         # Inject cross-rule config for checks that depend on another rule's
         # thresholds.  MAX_SUPPORT_MATERIAL needs the overhang angle limit.

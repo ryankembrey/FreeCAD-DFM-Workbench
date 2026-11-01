@@ -44,6 +44,11 @@ class SupportMaterialCheck(BaseCheck):
         return "Support Material Checker"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking how much support is needed"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "OVERHANG_ANALYZER"
 

@@ -33,6 +33,14 @@ class ToleranceSpinBox(QtWidgets.QDoubleSpinBox):
         self.setValue(val)
 
 
+# Two arrows, one down and one up: "reverse this direction". COLOR is
+# replaced with the theme's text color.
+FLIP_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="COLOR"'
+    b' stroke-width="5" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M16 12V50M6 40l10 12 10-12"/><path d="M48 52V14M38 24l10-12 10 12"/></svg>'
+)
+
 _FLIP_BUTTON_STYLE = (
     "QToolButton { border: none; background: transparent; padding: 0px; margin: 0px; }"
     "QToolButton:hover { background: rgba(127, 127, 127, 40); border-radius: 3px; }"
@@ -50,12 +58,14 @@ def make_flip_button(
     ``on_click`` is connected to ``clicked``; wrap it in a lambda if it must not receive
     the ``checked`` argument.
     """
+    from ..rule_cards import apply_svg_icon  # here, to avoid an import cycle
+
     btn = QtWidgets.QToolButton()
-    btn.setIcon(QtGui.QIcon(":/icons/flip_direction.svg"))
     btn.setToolTip(tooltip)
     btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
     btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-    btn.setIconSize(QtCore.QSize(18, 18))
+    # Monochrome, in the theme's text color.
+    apply_svg_icon(btn, FLIP_SVG, 18)
     btn.setFixedSize(*size)
     btn.setStyleSheet(_FLIP_BUTTON_STYLE)
     btn.setEnabled(enabled)

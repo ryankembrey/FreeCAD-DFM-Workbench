@@ -58,6 +58,11 @@ class DirectionIndicator:
         self.world_per_px = 0.0
         self.viewport_height_px = 0
 
+        # A faded copy pointing the other way, shown on hover to preview a flip.
+        self.arrow_group = None
+        self.ghost_switch = None
+        self.ghost_trans = None
+
     def show(self, base_pnt, direction):
         view = get_active_view()
         if not view:
@@ -126,6 +131,24 @@ class DirectionIndicator:
             arrow_group.addChild(c_trans)
             arrow_group.addChild(cone)
             arrow_sep.addChild(arrow_group)
+            self.arrow_group = arrow_group
+
+            # The ghost shares the arrow's scale and shape nodes (Coin allows
+            # a node to have several parents), so it always matches in size.
+            self.ghost_switch = coin.SoSwitch()
+            self.ghost_switch.whichChild.setValue(_SWITCH_NONE)
+            ghost_sep = coin.SoSeparator()
+            ghost_mat = coin.SoMaterial()
+            ghost_mat.diffuseColor = self._ghost_color()
+            ghost_mat.ambientColor = self._ghost_color()
+            ghost_mat.transparency.setValue(0.35)
+            ghost_sep.addChild(ghost_mat)
+            self.ghost_trans = coin.SoTransform()
+            ghost_sep.addChild(self.ghost_trans)
+            ghost_sep.addChild(self.scale_node)
+            ghost_sep.addChild(arrow_group)
+            self.ghost_switch.addChild(ghost_sep)
+            content.addChild(self.ghost_switch)
 
             content.addChild(arrow_sep)
 
@@ -142,6 +165,12 @@ class DirectionIndicator:
                 coin.SbVec3f(0, 1, 0), coin.SbVec3f(direction.x, direction.y, direction.z)
             )
             self.view_trans.rotation.setValue(rot.getValue())
+            if self.ghost_trans is not None:
+                self.ghost_trans.translation.setValue(base_pnt.x, base_pnt.y, base_pnt.z)
+                back = coin.SbRotation(
+                    coin.SbVec3f(0, 1, 0), coin.SbVec3f(-direction.x, -direction.y, -direction.z)
+                )
+                self.ghost_trans.rotation.setValue(back.getValue())
 
         camera = view.getCameraNode()
         if camera:
@@ -308,6 +337,55 @@ class DirectionIndicator:
 
         self._update_label_position()
 
+    def _ghost_color(self):
+        """The arrow's color faded towards grey."""
+        grey = (0.78, 0.78, 0.78)
+        return tuple(c + (g - c) * 0.55 for c, g in zip(self.color, grey))
+
+    def set_ghost(self, visible: bool) -> None:
+        """Show or hide the faded reverse arrow that previews a flip."""
+        if self.ghost_switch is not None:
+            self.ghost_switch.whichChild.setValue(_SWITCH_ALL if visible else _SWITCH_NONE)
+
+    def screen_geometry(self, view):
+        """(base, tip, label_center, label_size) in viewport pixels from the top left, or None."""
+        if self.view_node is None or not self._visible or self.base_pnt is None:
+            return None
+        from .utils.view import project_to_screen
+
+        class _P:
+            def __init__(self, t):
+                self.x, self.y, self.z = t
+
+        base = project_to_screen(view, self.base_pnt)
+        tip_w = self._add(self._base_tuple(), self._mul(self.direction, ARROW_HEIGHT * self.current_scale))
+        tip = project_to_screen(view, _P(tip_w))
+        if base is None or tip is None:
+            return None
+        label = None
+        if self.label_trans is not None and self.label:
+            label = project_to_screen(view, _P(tuple(self.label_trans.translation.getValue())))
+        return base, tip, label, self.label_size
+
+    def hit_test(self, view, x: float, y: float, tolerance: float = 9.0) -> bool:
+        """True when viewport pixel (x, y), measured from the top left, is on the arrow or its label."""
+        geo = self.screen_geometry(view)
+        if geo is None:
+            return False
+        (bx, by), (tx, ty), label, (lw, lh) = geo
+        # Distance to the arrow's shaft and head.
+        dx, dy = tx - bx, ty - by
+        length_sq = dx * dx + dy * dy
+        t = 0.0 if length_sq < 1e-9 else max(0.0, min(1.0, ((x - bx) * dx + (y - by) * dy) / length_sq))
+        px, py = bx + t * dx, by + t * dy
+        if math.hypot(x - px, y - py) <= tolerance:
+            return True
+        if label is not None and lw > 0:
+            dpr = device_pixel_ratio()
+            half_w, half_h = lw * dpr / 2 + 3, lh * dpr / 2 + 3
+            return abs(x - label[0]) <= half_w and abs(y - label[1]) <= half_h
+        return False
+
     def set_visible(self, visible):
         self._visible = bool(visible)
         if self.visibility_switch is not None:
@@ -329,6 +407,9 @@ class DirectionIndicator:
             self.visibility_switch = None
             self.label_trans = None
             self.label_image = None
+            self.arrow_group = None
+            self.ghost_switch = None
+            self.ghost_trans = None
 
     def _refresh_view(self, view):
         try:

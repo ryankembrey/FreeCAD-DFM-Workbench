@@ -22,6 +22,17 @@ class BaseCheck(ABC):
         pass
 
     @property
+    def progress_text(self) -> str:
+        """Plain words for the progress bar, such as "Checking for thin walls".
+
+        This is the rule's only message: it shows while the model is measured
+        for the rule and while the results are checked. Users don't need to
+        know about analyzers and checks; say what is being checked.
+        """
+        name = self.name.replace("Checker", "").replace("Check", "").strip().lower()
+        return f"Checking {name}"
+
+    @property
     @abstractmethod
     def required_analyzer_id(self) -> str:
         """

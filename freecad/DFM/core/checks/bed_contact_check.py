@@ -18,6 +18,11 @@ class BedContactCheck(BaseCheck):
         return "Bed Contact Area Checker"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking contact with the build plate"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "BED_CONTACT_ANALYZER"
 

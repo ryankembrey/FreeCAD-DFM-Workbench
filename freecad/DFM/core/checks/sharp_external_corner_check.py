@@ -20,6 +20,11 @@ class SharpExternalCornerCheck(BaseCheck):
         return "Sharp External Corners Check"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking for sharp outside corners"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "SHARP_CORNER_ANALYZER"
 

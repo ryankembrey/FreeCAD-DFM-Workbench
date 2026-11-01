@@ -18,6 +18,11 @@ class BridgeSpanCheck(BaseCheck):
         return "Bridge Span Checker"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking bridge lengths"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "BRIDGE_SPAN_ANALYZER"
 

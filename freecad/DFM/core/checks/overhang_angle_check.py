@@ -19,6 +19,11 @@ class OverhangAngleCheck(BaseCheck):
         return "Overhang Angle Checker"
 
     @property
+    def progress_text(self) -> str:
+        """What the progress bar shows while this runs."""
+        return "Checking overhang angles"
+
+    @property
     def required_analyzer_id(self) -> str:
         return "OVERHANG_ANALYZER"
 
