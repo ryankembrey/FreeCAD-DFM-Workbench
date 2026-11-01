@@ -22,7 +22,9 @@ from ..core.models import CheckResult, Severity
 from ..core.processes.process import RuleLimit
 from ..core.rules import Criticality, Rulebook
 
+from ..gui.results.camera import VIEW_LABELS
 from ..gui.results.delegates import RULE_ROLE, DFMTreeDelegate
+from ..gui.results.row_actions import MOVES, RowCameraButtons
 from ..gui.rule_information import RuleInfoPanel
 from ..gui.results.toolbar import GroupMode, ResultsToolbar, SortMode
 from ..gui.results.visuals import severity_color
@@ -117,6 +119,21 @@ class TaskResults(QtCore.QObject):
         self.form.tvResults.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.form.tvResults.customContextMenuRequested.connect(self._show_context_menu)
         self.form.tvResults.selectionModel().currentChanged.connect(self._handle_selection_change)
+
+        # Camera buttons on the selected row (zoom to, face, both).
+        self.on_camera: Callable[[str, Any], None] | None = None
+        self._row_actions = RowCameraButtons(self.form.tvResults.viewport())
+        self._row_actions.triggered.connect(self._camera_on_current)
+        tree = self.form.tvResults
+        later = lambda *_a: QtCore.QTimer.singleShot(0, self._place_row_actions)
+        tree.selectionModel().currentChanged.connect(later)
+        tree.verticalScrollBar().valueChanged.connect(later)
+        tree.horizontalScrollBar().valueChanged.connect(later)
+        tree.expanded.connect(later)
+        tree.collapsed.connect(later)
+        for signal in (self.model.rowsInserted, self.model.rowsRemoved,
+                       self.model.modelReset, self.model.layoutChanged):
+            signal.connect(later)
 
         # Inject the toolbar above the tree view.
         self._toolbar = ResultsToolbar()
@@ -832,12 +849,8 @@ class TaskResults(QtCore.QObject):
             if not findings and not active and not ignored:
                 return
 
-            if findings:
-                zoom_action = menu.addAction("Zoom to All Findings")
-                zoom_action.triggered.connect(
-                    lambda: self.on_zoom_to_rule(findings) if self.on_zoom_to_rule else None
-                )
-                menu.addSeparator()
+            if self._camera_target(index) is not None:
+                self._add_camera_actions(menu, findings)
 
             if active:
                 ignore_all = menu.addAction(f"Ignore All ({len(active)})")
@@ -864,11 +877,8 @@ class TaskResults(QtCore.QObject):
         elif isinstance(data, CheckResult):
             finding = data
 
-            zoom_action = menu.addAction("Zoom to Face")
-            zoom_action.triggered.connect(
-                lambda: self.on_row_double_clicked(finding) if self.on_row_double_clicked else None
-            )
-            menu.addSeparator()
+            if finding.refs:
+                self._add_camera_actions(menu, finding)
 
             ignore_txt = "Restore" if finding.ignore else "Ignore"
             ignore_action = menu.addAction(ignore_txt)
@@ -986,6 +996,8 @@ class TaskResults(QtCore.QObject):
             return False
         if obj is viewport:
             etype = event.type()
+            if etype == QtCore.QEvent.Type.Resize:
+                QtCore.QTimer.singleShot(0, self._place_row_actions)
             if etype == QtCore.QEvent.Type.MouseMove:
                 self._update_info_hover(event.position().toPoint())
             elif etype in (QtCore.QEvent.Type.Leave, QtCore.QEvent.Type.Hide,
@@ -1008,6 +1020,19 @@ class TaskResults(QtCore.QObject):
                         self.on_row_selected([])
                     return False
 
+        # Camera keys while the tree has focus: Z, F, Shift+F and Home. Claim
+        # them first, so FreeCAD's own shortcuts don't take them.
+        if etype in (QtCore.QEvent.Type.ShortcutOverride, QtCore.QEvent.Type.KeyPress):
+            move = self._camera_key(event)
+            if move is not None:
+                event.accept()
+                if etype == QtCore.QEvent.Type.KeyPress:
+                    if move == "model":
+                        self._camera("model", None)
+                    else:
+                        self._camera_on_current(move)
+                return True
+
         if etype == QtCore.QEvent.Type.KeyPress:
             if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
                 index = self.form.tvResults.currentIndex()
@@ -1026,6 +1051,91 @@ class TaskResults(QtCore.QObject):
                             self.on_row_double_clicked(data)
                 return True
         return False
+
+    # ── Camera ───────────────────────────────────────────
+
+    @staticmethod
+    def _camera_key(event) -> str | None:
+        """The camera move for a key event, or None."""
+        mods = event.modifiers() & ~QtCore.Qt.KeyboardModifier.KeypadModifier
+        plain = mods == QtCore.Qt.KeyboardModifier.NoModifier
+        shift = mods == QtCore.Qt.KeyboardModifier.ShiftModifier
+        key = event.key()
+        if key == QtCore.Qt.Key.Key_Z and plain:
+            return "zoom"
+        if key == QtCore.Qt.Key.Key_F and plain:
+            return "face"
+        if key == QtCore.Qt.Key.Key_F and shift:
+            return "zoom_face"
+        if key == QtCore.Qt.Key.Key_Home and plain:
+            return "model"
+        return None
+
+    def _camera_target(self, index: QtCore.QModelIndex):
+        """The finding or findings a row stands for, if the camera can go there."""
+        item = self.model.itemFromIndex(index) if index.isValid() else None
+        if item is None:
+            return None
+        data = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        if isinstance(data, CheckResult):
+            return data if data.refs else None
+        if isinstance(data, list) and any(f.refs for f in data):
+            return data
+        return None
+
+    def _camera(self, move: str, target) -> None:
+        if self.on_camera:
+            self.on_camera(move, target)
+
+    def _camera_on_current(self, move: str) -> None:
+        target = self._camera_target(self.form.tvResults.currentIndex())
+        if target is not None:
+            self._camera(move, target)
+
+    def _place_row_actions(self) -> None:
+        """Put the camera buttons on the selected row, or hide them."""
+        if self.form is None:
+            return
+        try:
+            tree = self.form.tvResults
+            viewport = tree.viewport()
+        except RuntimeError:
+            return
+        index = tree.currentIndex()
+        selected = index.isValid() and tree.selectionModel().isSelected(index)
+        rect = tree.visualRect(index) if selected else QtCore.QRect()
+        show = (selected and self._camera_target(index) is not None
+                and rect.isValid() and viewport.rect().intersects(rect))
+        old = self._delegate.actions_index
+        if show:
+            self._row_actions.set_icon_color(tree.palette().color(QtGui.QPalette.ColorRole.HighlightedText))
+            self._row_actions.place_on(rect, viewport.width())
+            self._delegate.actions_index = QtCore.QPersistentModelIndex(index)
+            self._delegate.actions_width = self._row_actions.width() + 8
+        else:
+            self._row_actions.hide()
+            self._delegate.actions_index = QtCore.QPersistentModelIndex()
+            self._delegate.actions_width = 0
+        if old != self._delegate.actions_index:
+            viewport.update()
+
+    def _add_camera_actions(self, menu: QtWidgets.QMenu, target) -> None:
+        """The camera moves and views, at the top of a row's right-click menu."""
+        for move, label, shortcut, _svg in MOVES:
+            action = menu.addAction(label)
+            action.setShortcut(QtGui.QKeySequence(shortcut))
+            action.setShortcutVisibleInContextMenu(True)
+            action.triggered.connect(lambda _c=False, m=move: self._camera(m, target))
+        menu.addSeparator()
+        whole = menu.addAction("Whole model")
+        whole.setShortcut(QtGui.QKeySequence("Home"))
+        whole.setShortcutVisibleInContextMenu(True)
+        whole.triggered.connect(lambda _c=False: self._camera("model", None))
+        views = menu.addMenu("Standard view")
+        for name, label in VIEW_LABELS.items():
+            act = views.addAction(label)
+            act.triggered.connect(lambda _c=False, n=name: self._camera(f"view:{n}", None))
+        menu.addSeparator()
 
     def getStandardButtons(self):
         return (

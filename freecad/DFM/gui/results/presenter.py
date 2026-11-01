@@ -23,6 +23,7 @@ from ...core.rules import Rulebook
 from ...core.registries.process_registry import ProcessRegistry
 from ...app.prefs import dfm_params
 from ...gui.results.bridge import DFMViewProvider
+from ...gui.results.camera import refs_of
 from ...gui.results.models import DFMReportModel
 from ...gui.results.utils import CSVResultExporter, CSVExportConfig
 from ...gui.results.viewport_markers import ViewportMarkerController
@@ -62,6 +63,7 @@ class TaskResultsPresenter:
         self.view.on_filters_changed = self._handle_filters_changed
         self.view.on_markers_toggled = self._handle_markers_toggled
         self.view.on_annotations_toggled = self.bridge.set_annotations_enabled
+        self.view.on_camera = self.handle_camera
         self.bridge.set_annotations_enabled(self.view.show_annotations)
         self._wire_report()
 
@@ -237,6 +239,27 @@ class TaskResultsPresenter:
         ]
         self.bridge.highlight_faces_and_edges_by_index(face_pairs, edge_pairs)
         self.bridge.zoom_to_selection()
+
+    def handle_camera(self, move: str, target) -> None:
+        """Move the 3D view's camera: onto a finding or a rule's findings, or a view.
+
+        *move* is "zoom", "face", "zoom_face", "model" or "view:<name>".
+        """
+        camera = self.bridge.camera
+        if move == "model":
+            camera.whole_model()
+            return
+        if move.startswith("view:"):
+            camera.standard_view(move.split(":", 1)[1])
+            return
+        if isinstance(target, CheckResult):
+            findings = [target]
+        else:
+            findings = [f for f in (target or []) if not f.ignore] or list(target or [])
+        refs = refs_of(findings)
+        if not refs:
+            return
+        {"zoom": camera.zoom_to, "face": camera.face, "zoom_face": camera.zoom_and_face}[move](refs)
 
     def handle_zoom(self, result: CheckResult):
         self.handle_selection(result)

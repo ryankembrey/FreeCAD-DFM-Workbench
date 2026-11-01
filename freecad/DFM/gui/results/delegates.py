@@ -28,6 +28,10 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
         super().__init__(parent)
         self._info_icons: dict[tuple, QtGui.QIcon] = {}
         self.hovered_info: QtCore.QPersistentModelIndex = QtCore.QPersistentModelIndex()
+        # The row showing the camera buttons, and the room they need at its
+        # right end; set by the view.
+        self.actions_index: QtCore.QPersistentModelIndex = QtCore.QPersistentModelIndex()
+        self.actions_width: int = 0
 
     @staticmethod
     def _label_font(option_font: QtGui.QFont) -> QtGui.QFont:
@@ -77,6 +81,8 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
 
         text_left = icon_rect.right() + 6
         rect = option.rect
+        if self.actions_width and QtCore.QPersistentModelIndex(index) == self.actions_index:
+            rect = rect.adjusted(0, 0, -self.actions_width, 0)  # room for the camera buttons
         accent = QtGui.QColor(color_hex)
 
         base_text = (
@@ -188,7 +194,9 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             overview_rect = QtCore.QRect(
                 dot_x + 14, rect.top(), rect.right() - dot_x - 14, rect.height()
             )
-            painter.drawText(overview_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, secondary)
+            shown = fm.elidedText(secondary, QtCore.Qt.TextElideMode.ElideRight,
+                                  max(overview_rect.width(), 0))
+            painter.drawText(overview_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, shown)
 
         painter.restore()
 
