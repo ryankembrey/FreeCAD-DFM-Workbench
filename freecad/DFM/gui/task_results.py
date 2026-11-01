@@ -27,6 +27,8 @@ from ..gui.rule_information import RuleInfoPanel
 from ..gui.results.toolbar import GroupMode, ResultsToolbar, SortMode
 from ..gui.results.visuals import severity_color
 from ..gui.results.utils import CSVExportConfig, CSVResultExporter
+from ..gui.results.tabs.export import ExportTab
+from ..gui.results.tabs.history import HistoryTab
 
 
 class _PanelResizeFilter(QtCore.QObject):
@@ -83,7 +85,6 @@ class TaskResults(QtCore.QObject):
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setReadOnly(True)
         self.form.leVerdict.setReadOnly(True)
-        self.form.pbExportDiff.setIcon(QtGui.QIcon(":/icons/export_diff.svg"))
 
         self._save_clicked = False
         self._scroll_area: QtWidgets.QScrollArea | None = None
@@ -107,9 +108,7 @@ class TaskResults(QtCore.QObject):
         self.on_filters_changed: Callable[[], None] | None = None
         self.on_markers_toggled: Callable[[bool], None] | None = None
         self.form.tvResults.doubleClicked.connect(self._handle_double_click)
-        self.form.pbExportCSV.clicked.connect(self._handle_export_btn)
 
-        self.form.cbDelimiter.addItems(["Comma  ,", "Semicolon  ;", "Tab"])
 
         self.form.tvResults.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.form.tvResults.customContextMenuRequested.connect(self._show_context_menu)
@@ -118,6 +117,13 @@ class TaskResults(QtCore.QObject):
         # Inject the toolbar above the tree view.
         self._toolbar = ResultsToolbar()
         self._inject_toolbar()
+
+        # History and Export tabs (replace the .ui placeholders).
+        self.history_tab = HistoryTab()
+        self.export_tab = ExportTab()
+        self._install_tab_page(self.form.tabHistory, self.history_tab)
+        self._install_tab_page(self.form.tab, self.export_tab)
+        self.export_tab.export_requested.connect(self._handle_export_btn)
         self._toolbar.settings_changed.connect(self._on_toolbar_changed)
         self._toolbar.markers_toggled.connect(self._on_markers_toggled)
         self._toolbar.expand_all_requested.connect(self._expand_all)
@@ -149,6 +155,27 @@ class TaskResults(QtCore.QObject):
 
         old_layout.addWidget(container)
 
+    @staticmethod
+    def _install_tab_page(page: QtWidgets.QWidget, content: QtWidgets.QWidget) -> None:
+        """Replace *page*'s contents with *content*, kept at its natural height.
+
+        The tab widget is as tall as its tallest page, and the Results tree
+        is stretched to fill the task panel. Ending the page with a stretch
+        keeps the content at the top instead of spreading it out.
+        """
+        old = page.layout()
+        if old is not None:
+            QtWidgets.QWidget().setLayout(old)  # detach and discard the old layout
+        for child in page.findChildren(
+            QtWidgets.QWidget, options=QtCore.Qt.FindChildOption.FindDirectChildrenOnly
+        ):
+            child.hide()
+            child.deleteLater()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(9, 9, 9, 9)
+        layout.addWidget(content)
+        layout.addStretch(1)
+
     # ── Tree building (public entry) ─────────────────────
 
     def render_tree(
@@ -169,6 +196,7 @@ class TaskResults(QtCore.QObject):
         self._grouped_data = grouped_data
         self._all_process_rules = all_process_rules
         self._get_criticality = get_criticality
+        self._update_export_counts()
         if get_rule_limit is not None:
             self._get_rule_limit = get_rule_limit
         if get_values_title is not None:
@@ -182,6 +210,20 @@ class TaskResults(QtCore.QObject):
         # scroll area to let the form (and therefore the tree) fill all
         # available vertical space.
         QtCore.QTimer.singleShot(0, self._setup_fill_height)
+
+    def _update_export_counts(self) -> None:
+        """Give the Export tab the counts it shows on its chips."""
+        findings = [f for fs in self._grouped_data.values() for f in fs]
+        active = [f for f in findings if not f.ignore]
+        ignored = [f for f in findings if f.ignore]
+        passed = [r for r in self._all_process_rules if r not in self._grouped_data]
+        self.export_tab.set_counts(
+            errors=sum(1 for f in active if f.severity == Severity.ERROR),
+            warnings=sum(1 for f in active if f.severity == Severity.WARNING),
+            passed=len(passed),
+            ignored_errors=sum(1 for f in ignored if f.severity == Severity.ERROR),
+            ignored_warnings=sum(1 for f in ignored if f.severity == Severity.WARNING),
+        )
 
     # ── Internal tree build ──────────────────────────────
 
@@ -670,19 +712,7 @@ class TaskResults(QtCore.QObject):
             tree.setMinimumHeight(available)
 
     def get_export_config(self) -> CSVExportConfig:
-        return CSVExportConfig(
-            include_criticality=self.form.cbColCriticality.isChecked(),
-            include_feedback=self.form.cbColFeedback.isChecked(),
-            include_metadata=self.form.cbColMetadata.isChecked(),
-            include_unit=self.form.cbColUnit.isChecked(),
-            include_errors=self.form.cbRowErrors.isChecked(),
-            include_warnings=self.form.cbRowWarnings.isChecked(),
-            include_passed=self.form.cbRowPassed.isChecked(),
-            include_ignored=self.form.cbRowIgnored.isChecked(),
-            delimiter=CSVResultExporter.DELIMITER_MAP.get(
-                self.form.cbDelimiter.currentIndex(), ","
-            ),
-        )
+        return self.export_tab.config()
 
     def _get_icon(self, severity: Severity) -> QtGui.QIcon:
         """Returns a severity circle icon for the given severity level."""

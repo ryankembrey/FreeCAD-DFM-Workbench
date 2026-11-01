@@ -271,6 +271,20 @@ DIAGRAM_SVG = (
     b'</svg>'
 )
 
+SWAP_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>'
+    b'</svg>'
+)
+
+DOWNLOAD_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'
+    b'</svg>'
+)
+
 FILTER_SVG = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
     b'<polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5"'

@@ -23,12 +23,10 @@ from ...core.rules import Rulebook
 from ...core.registries.process_registry import ProcessRegistry
 from ...app.prefs import dfm_params
 from ...gui.results.bridge import DFMViewProvider
-from ...gui.results.delegates import HistoryRowDelegate
 from ...gui.results.models import DFMReportModel
 from ...gui.results.utils import CSVResultExporter, CSVExportConfig
 from ...gui.results.viewport_markers import ViewportMarkerController
 from ...gui.results.visuals import severity_color
-from ...gui.results.widgets import DFMSparkline
 from ...gui.task_results import TaskResults
 
 
@@ -478,161 +476,61 @@ class TaskResultsPresenter:
         """Clear the overlay when the mouse leaves all markers."""
         self.bridge.remove_finding_overlay()
 
+    @staticmethod
+    def _run_label(run) -> str:
+        """Short picker label, such as "Run 32 · 31 Oct, 14:38"."""
+        from datetime import datetime
+
+        try:
+            when = datetime.fromisoformat(run.timestamp)
+            return f"Run {run.run} \u00b7 {when.day} {when:%b, %H:%M}"
+        except (TypeError, ValueError):
+            return run.label
+
     def build_history_tab(self):
+        tab = self.view.history_tab
         runs = self.history_manager.load_runs(self.doc_name, self.shape_name)
-        if not runs:
-            if hasattr(self.view.form, "gbHistoryTrend"):
-                self.view.form.gbHistoryTrend.setVisible(False)
-            return
 
-        self.sparkline = DFMSparkline()
-        recent_runs = runs[-10:]  # Last 10 runs
-        e_hist, w_hist, s_hist, n_hist = [], [], [], []
+        tab.set_runs([(run.run, self._run_label(run)) for run in runs])
 
-        for run in recent_runs:
-            e_hist.append(
-                sum(1 for f in run.findings if not f.ignore and f.severity == Severity.ERROR)
-            )
-            w_hist.append(
-                sum(1 for f in run.findings if not f.ignore and f.severity == Severity.WARNING)
-            )
-            s_hist.append(
-                sum(1 for f in run.findings if not f.ignore and f.severity == Severity.SUCCESS)
-            )
-            n_hist.append(run.run)
+        recent = runs[-10:]
+        tab.set_trend(
+            [run.run for run in recent],
+            [sum(1 for f in run.findings if not f.ignore and f.severity == Severity.ERROR)
+             for run in recent],
+            [sum(1 for f in run.findings if not f.ignore and f.severity == Severity.WARNING)
+             for run in recent],
+        )
 
-        self.sparkline.set_data(e_hist, w_hist, s_hist, n_hist)
+        if not getattr(self, "_history_wired", False):
+            tab.compare_changed.connect(self.render_diff)
+            tab.export_requested.connect(self._export_diff)
+            self._history_wired = True
 
-        container = self.view.form.gbHistoryTrend
-        layout = container.layout()
-
-        if layout is None:
-            layout = QtWidgets.QVBoxLayout(container)
-            layout.setContentsMargins(4, 8, 4, 4)
-
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-        layout.addWidget(self.sparkline)
-
-        if len(runs) < 2:
-            self.view.form.cbRun1.setEnabled(False)
-            self.view.form.cbRun2.setEnabled(False)
-            self.view.form.pbExportDiff.setEnabled(False)
-            return
-
-        for run in runs:
-            self.view.form.cbRun1.addItem(run.label, userData=run.run)
-            self.view.form.cbRun2.addItem(run.label, userData=run.run)
-
-        self.view.form.cbRun1.setCurrentIndex(len(runs) - 2)
-        self.view.form.cbRun2.setCurrentIndex(len(runs) - 1)
-
-        self.view.form.lwDiffs.setItemDelegate(HistoryRowDelegate())
-
-        self.view.form.pbExportDiff.clicked.connect(self._export_diff)
-        self.view.form.cbRun1.currentIndexChanged.connect(self.render_diff)
-        self.view.form.cbRun2.currentIndexChanged.connect(self.render_diff)
-
-        self.render_diff()
+        if len(runs) >= 2:
+            self.render_diff()
 
     def render_diff(self):
         from ...app.history import diff_runs
 
-        a_idx = self.view.form.cbRun1.currentData()
-        b_idx = self.view.form.cbRun2.currentData()
-
-        self.view.form.lwDiffs.clear()
-
-        if a_idx is None or b_idx is None or a_idx == b_idx:
-            self.view.form.lResolved.setText("—")
-            self.view.form.lRegressed.setText("—")
-            self.view.form.lUnchanged.setText("—")
+        tab = self.view.history_tab
+        a_idx, b_idx = tab.selected_runs()
+        if a_idx is None or b_idx is None:
+            return
+        if a_idx == b_idx:
+            tab.clear_diff("Choose two different runs to compare.")
             return
 
         run_a = self.history_manager.load_run(self.doc_name, self.shape_name, a_idx)
         run_b = self.history_manager.load_run(self.doc_name, self.shape_name, b_idx)
-
         if not run_a or not run_b:
+            tab.clear_diff("One of these runs could not be loaded.")
             return
 
-        diffs = diff_runs(run_a, run_b)
-
-        resolved = sum(1 for d in diffs if d.status in ("resolved", "improved"))
-        regressed = sum(1 for d in diffs if d.status in ("regressed", "new"))
-        unchanged = sum(1 for d in diffs if d.status == "unchanged")
-
-        C_ERR = "#E24B4A"
-        C_WARN = "#D4900A"
-        C_OK = "#639922"
-        C_INFO = "#378ADD"
-
-        self.view.form.lResolved.setText(f"+{resolved}" if resolved else "0")
-        res_color = C_OK if resolved else "#666666"
-        self.view.form.lResolved.setStyleSheet(f"color: {res_color}; font-weight: bold;")
-
-        self.view.form.lRegressed.setText(f"+{regressed}" if regressed else "0")
-        reg_color = C_ERR if regressed else "#666666"
-        self.view.form.lRegressed.setStyleSheet(f"color: {reg_color}; font-weight: bold;")
-
-        self.view.form.lUnchanged.setText(str(unchanged))
-        unch_color = C_INFO if unchanged else "#666666"
-        self.view.form.lUnchanged.setStyleSheet(f"color: {unch_color}; font-weight: bold;")
-
-        def _pill(errors, warnings, successes):
-            if errors == 0 and warnings == 0:
-                return "Pass", C_OK
-            if errors > 0:
-                return f"{errors} E", C_ERR
-            if warnings > 0:
-                return f"{warnings} W", C_WARN
-            return "S", C_OK
-
-        # Sorting order for the list
-        ORDER = {"regressed": 0, "new": 0, "improved": 1, "resolved": 1, "unchanged": 2}
-
-        for d in sorted(diffs, key=lambda x: (ORDER.get(x.status, 3), x.rule_label)):
-            if d.status in ("regressed", "new"):
-                icon_path = ":/icons/dfm_error.svg"
-            elif d.status in ("improved", "resolved"):
-                icon_path = ":/icons/dfm_success.svg"
-            else:
-                if d.current_errors > 0:
-                    icon_path = ":/icons/dfm_error.svg"
-                elif d.current_warnings > 0:
-                    icon_path = ":/icons/dfm_error.svg"
-                else:
-                    icon_path = ":/icons/dfm_success.svg"
-
-            from_text, from_color = _pill(
-                d.previous_errors, d.previous_warnings, d.previous_success
-            )
-            to_text, to_color = _pill(d.current_errors, d.current_warnings, d.current_success)
-
-            item = QtWidgets.QListWidgetItem()
-            item.setIcon(QtGui.QIcon(icon_path))
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 1, "diff")
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 2, d.rule_label)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 3, from_text)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 4, from_color)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 5, to_text)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole + 6, to_color)
-            self.view.form.lwDiffs.addItem(item)
-
-        # Dynamic Height
-        item_count = self.view.form.lwDiffs.count()
-        row_height = 28
-        total_height = min(300, (item_count * row_height) + 4)
-        self.view.form.lwDiffs.setFixedHeight(total_height)
-
-        self.view.form.lwDiffs.viewport().update()
-        QtWidgets.QApplication.processEvents()
+        tab.set_diff(diff_runs(run_a, run_b))
 
     def _export_diff(self):
-        a_idx = self.view.form.cbRun1.currentData()
-        b_idx = self.view.form.cbRun2.currentData()
+        a_idx, b_idx = self.view.history_tab.selected_runs()
 
         if a_idx is None or b_idx is None or a_idx == b_idx:
             return
@@ -643,7 +541,7 @@ class TaskResultsPresenter:
             return
 
         path, _ = QFileDialog.getSaveFileName(
-            self.view.form, "Export Diff Report", "", "CSV Files (*.csv)"
+            self.view.form, "Export Comparison", "", "CSV Files (*.csv)"
         )
         if not path:
             return
@@ -665,6 +563,6 @@ class TaskResultsPresenter:
                 writer.writerow(["Rule", "Run A", "Run B", "Status"])
                 for d in diffs:
                     writer.writerow([d.rule_label, d.previous_count, d.current_count, d.status])
-            QMessageBox.information(self.view.form, "Done", "Diff report exported.")
+            QMessageBox.information(self.view.form, "Done", "Comparison exported.")
         except Exception as e:
             App.Console.PrintError(f"Diff export failed: {e}\n")
