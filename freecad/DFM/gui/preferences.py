@@ -825,24 +825,42 @@ class ResultsSettingsPanel(AnalyzerPanel):
             ],
         ),
         FieldGroup(
-            "Highlight Overlay",
+            "Highlighting",
             [
+                BoolField(
+                    "ResultsXRay",
+                    "Show findings behind the model",
+                    default=True,
+                    tooltip="Findings hidden behind other parts of the model show through "
+                    "it: faces as a faint tint, edges as dashed lines.",
+                ),
                 IntField(
-                    "ResultsOverlayTransparency",
-                    "Overlay transparency",
-                    default=30,
-                    min=0,
+                    "ResultsXRayOpacity",
+                    "Hidden findings strength",
+                    default=35,
+                    min=5,
                     max=100,
-                    tooltip="Transparency of the shape overlay shown during "
-                    "highlighting (0 = opaque, 100 = invisible).",
+                    suffix=" %",
+                    tooltip="How strongly hidden findings show through the model.",
+                ),
+                IntField(
+                    "ResultsRestTransparency",
+                    "Rest of the model transparency",
+                    default=0,
+                    min=0,
+                    max=90,
+                    suffix=" %",
+                    tooltip="Makes the faces without findings see-through. Findings stay "
+                    "opaque. Above 0, hidden findings show through this instead.",
                 ),
                 IntField(
                     "ResultsOverlayEdgeWidth",
                     "Edge highlight width",
                     default=3,
-                    min=0,
+                    min=1,
                     max=20,
-                    tooltip="Line width of highlighted edges in the overlay.",
+                    suffix=" px",
+                    tooltip="Line width of highlighted edges.",
                 ),
             ],
         ),

@@ -13,6 +13,14 @@ from ..rule_cards import (
     COLLAPSE_ALL_SVG, EXPAND_ALL_SVG, GROUP_SVG, MARKERS_SVG, SORT_SVG, apply_svg_icon,
 )
 
+# A callout card with a leader line: the info cards in the 3D view.
+ANNOTATIONS_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<rect x="9" y="3" width="12" height="9" rx="1.5"/><path d="M12 6.5h6M12 9h4"/>'
+    b'<path d="M9 10.5L4.5 17"/><circle cx="4" cy="18.5" r="1.6"/></svg>'
+)
+
 # Icon buttons follow the theme: neutral hover and checked backgrounds, and
 # monochrome icons drawn in the theme's text color (see apply_svg_icon).
 _ICON_BUTTON_CSS = (
@@ -51,6 +59,7 @@ class ResultsToolbar(QtWidgets.QWidget):
 
     settings_changed = QtCore.Signal()
     markers_toggled = QtCore.Signal(bool)
+    annotations_toggled = QtCore.Signal(bool)
     expand_all_requested = QtCore.Signal()
     collapse_all_requested = QtCore.Signal()
 
@@ -106,6 +115,12 @@ class ResultsToolbar(QtWidgets.QWidget):
         self.btn_markers.setCheckable(True)
         self.btn_markers.setChecked(_default_markers)
 
+        # ── Annotation toggle: the info cards pointing at the geometry ──
+        self.btn_annotations = self._make_icon_button(
+            ANNOTATIONS_SVG, "Show / hide the info card pointing at the selected finding")
+        self.btn_annotations.setCheckable(True)
+        self.btn_annotations.setChecked(dfm_params().GetBool("ResultsShowAnnotations", True))
+
         # ── Count label ──
         self.lbl_count = QtWidgets.QLabel()
         self.lbl_count.setStyleSheet("color: #888888;")
@@ -126,6 +141,7 @@ class ResultsToolbar(QtWidgets.QWidget):
         row.addWidget(self.btn_ignored)
         row.addWidget(self._make_separator())
         row.addWidget(self.btn_markers)
+        row.addWidget(self.btn_annotations)
         row.addWidget(self._make_separator())
         row.addWidget(self.lbl_count)
         row.addStretch(1)
@@ -143,6 +159,7 @@ class ResultsToolbar(QtWidgets.QWidget):
         self.btn_warnings.toggled.connect(self.settings_changed)
         self.btn_ignored.toggled.connect(self.settings_changed)
         self.btn_markers.toggled.connect(self.markers_toggled)
+        self.btn_annotations.toggled.connect(self._on_annotations_toggled)
         self.btn_expand.clicked.connect(self.expand_all_requested)
         self.btn_collapse.clicked.connect(self.collapse_all_requested)
 
@@ -265,6 +282,14 @@ class ResultsToolbar(QtWidgets.QWidget):
     @property
     def show_ignored(self) -> bool:
         return self.btn_ignored.isChecked()
+
+    def _on_annotations_toggled(self, on: bool) -> None:
+        dfm_params().SetBool("ResultsShowAnnotations", on)  # remembered next time
+        self.annotations_toggled.emit(on)
+
+    @property
+    def show_annotations(self) -> bool:
+        return self.btn_annotations.isChecked()
 
     @property
     def show_markers(self) -> bool:

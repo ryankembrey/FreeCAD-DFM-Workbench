@@ -110,6 +110,7 @@ class TaskResults(QtCore.QObject):
         self.on_material_changed: Callable[[str], None] | None = None
         self.on_filters_changed: Callable[[], None] | None = None
         self.on_markers_toggled: Callable[[bool], None] | None = None
+        self.on_annotations_toggled: Callable[[bool], None] | None = None
         self.form.tvResults.doubleClicked.connect(self._handle_double_click)
 
 
@@ -129,6 +130,8 @@ class TaskResults(QtCore.QObject):
         self.export_tab.export_requested.connect(self._handle_export_btn)
         self._toolbar.settings_changed.connect(self._on_toolbar_changed)
         self._toolbar.markers_toggled.connect(self._on_markers_toggled)
+        self._toolbar.annotations_toggled.connect(
+            lambda on: self.on_annotations_toggled and self.on_annotations_toggled(on))
         self._toolbar.expand_all_requested.connect(self._expand_all)
         self._toolbar.collapse_all_requested.connect(self._collapse_all)
 
@@ -682,6 +685,10 @@ class TaskResults(QtCore.QObject):
     def _on_markers_toggled(self, on: bool):
         if self.on_markers_toggled:
             self.on_markers_toggled(on)
+
+    @property
+    def show_annotations(self) -> bool:
+        return self._toolbar.show_annotations
 
     @property
     def show_markers(self) -> bool:

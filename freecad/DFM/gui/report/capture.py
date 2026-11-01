@@ -46,9 +46,8 @@ EYES: dict[str, Vec] = {
     "right": (1.0, 0.0, 0.0),
 }
 
-# Colors for captured images: opaque, so nothing shows through the part.
+# The rest of the part in report images, when "fade the rest" is on.
 _REST_FADED = (0.83, 0.84, 0.86, 0.0)
-_EDGE = (0.32, 0.33, 0.36, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +243,7 @@ class ViewportCapture:
     def end(self) -> None:
         try:
             faces, edges = self._highlight
+            self.bridge.set_display_style()  # back to the panel's own look
             self.bridge.highlight_faces_and_edges_by_index(faces, edges)
             self._restore_camera()
         finally:
@@ -289,6 +289,11 @@ class ViewportCapture:
     # -- Highlight -------------------------------------------------------
 
     def _highlight_job(self, findings: list[CheckResult], see_through: int = 0) -> None:
+        """Highlight *findings*: in full color, with the rest of the part plain or faded.
+
+        *see_through* is the transparency of the rest of the part in percent;
+        0 is opaque. Findings themselves always stay opaque.
+        """
         faces, edges = [], []
         for f in findings:
             color = severity_color(f.severity)
@@ -297,51 +302,17 @@ class ViewportCapture:
                     faces.append((ref.index, color))
                 elif ref.type == "Edge":
                     edges.append((ref.index, color))
-        self.bridge.highlight_faces_and_edges_by_index(faces, edges)
-        self.bridge.remove_finding_overlay()
-        if faces or edges:
-            # A newly created overlay only gets its faces once the GUI has
-            # caught up, and face colors set before that are dropped. So let
-            # it catch up, then color it.
-            Gui.updateGui()
-            self._style_overlay(dict(faces), dict(edges), see_through)
-
-    def _style_overlay(self, faces: dict[int, str], edges: dict[int, str], see_through: int = 0) -> None:
-        """Color the overlay: highlights in full color, the rest plain or faded.
-
-        *see_through* is the part's transparency in percent; 0 is opaque.
-        """
-        overlay = self.bridge.overlay_object()
-        target = self.bridge.target_object
-        vo = getattr(overlay, "ViewObject", None)
-        if vo is None:
-            return
-
-        def rgba(hex_color: str):
-            h = hex_color.lstrip("#")
-            return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (0.0,)
-
         if self.settings.fade_rest:
-            rest = _REST_FADED
+            rest = _REST_FADED[:3]
         else:
             try:
-                rest = tuple(target.ViewObject.ShapeColor[:3]) + (0.0,)
+                rest = tuple(self.bridge.target_object.ViewObject.ShapeColor[:3])
             except Exception:
-                rest = (0.8, 0.8, 0.8, 0.0)
-        try:
-            shape = target.Shape
-            vo.DiffuseColor = [rgba(faces[i]) if i in faces else rest for i in range(len(shape.Faces))]
-            vo.LineColorArray = [rgba(edges[i]) if i in edges else _EDGE for i in range(len(shape.Edges))]
-            vo.LineWidth = max(float(getattr(vo, "LineWidth", 1.0) or 0.0), 1.0)
-            # The fourth color component is transparency in older FreeCAD and
-            # alpha in newer versions, so set it through Transparency, which
-            # writes it into every face color correctly. Changing the value
-            # first guarantees FreeCAD applies it.
-            value = min(max(int(see_through), 0), 90)
-            vo.Transparency = value + 1
-            vo.Transparency = value
-        except Exception as exc:
-            App.Console.PrintWarning(f"DFM: could not style the report highlight: {exc}\n")
+                rest = None
+        self.bridge.set_display_style(
+            rest_color=rest, rest_transparency=min(max(int(see_through), 0), 90) / 100.0)
+        self.bridge.highlight_faces_and_edges_by_index(faces, edges)
+        self.bridge.remove_finding_overlay()
 
     # -- Camera ----------------------------------------------------------
 

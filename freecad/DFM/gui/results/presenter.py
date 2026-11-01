@@ -61,6 +61,8 @@ class TaskResultsPresenter:
         self.view.on_material_changed = self.handle_material_changed
         self.view.on_filters_changed = self._handle_filters_changed
         self.view.on_markers_toggled = self._handle_markers_toggled
+        self.view.on_annotations_toggled = self.bridge.set_annotations_enabled
+        self.bridge.set_annotations_enabled(self.view.show_annotations)
         self._wire_report()
 
         self.history_manager = history_manager

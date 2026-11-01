@@ -14,118 +14,84 @@ import FreeCADGui as Gui  # type: ignore
 
 from ...app.prefs import dfm_params
 from ...core.models import CheckResult
+from ...gui.results.highlight_scene import HighlightScene, merge_colors
 from ...gui.results.overlay import FindingOverlay
 from ...gui.utils.view import get_active_view
 
 
 class DFMViewProvider:
-    """Manages 3D visual feedback, including face/edge highlighting and overlay cards."""
+    """3D feedback for the results panel: highlighted findings, the finding card and zooming.
 
-    OVERLAY_HIGHLIGHT_COLORS = {
-        "#E24B4A": (0.886, 0.294, 0.290, 0.0),
-        "#D4900A": (0.831, 0.565, 0.039, 0.0),
-        "#378ADD": (0.216, 0.541, 0.867, 0.0),
-        "#639922": (0.388, 0.600, 0.133, 0.0),
-    }
-    OVERLAY_INACTIVE_COLOR = (0.5, 0.5, 0.5, 0.7)
-    OVERLAY_NAME = "DFM_Highlight_Overlay"
+    The model is drawn by a :class:`HighlightScene` Coin node while findings
+    are highlighted; the model itself is hidden meanwhile and shown again
+    when nothing is highlighted or the panel closes.
+    """
 
-    @property
-    def OVERLAY_TRANSPARENCY(self) -> int:
-        return dfm_params().GetInt("ResultsOverlayTransparency", 30)
-
-    @property
-    def OVERLAY_EDGE_WIDTH(self) -> int:
-        return dfm_params().GetInt("ResultsOverlayEdgeWidth", 3)
+    # The document object older versions used for highlighting. Removed if
+    # a crash left one behind.
+    LEGACY_OVERLAY_NAME = "DFM_Highlight_Overlay"
 
     def __init__(self, target_object):
         self.target_object = target_object
         self._overlay = FindingOverlay()
         self._cam_animator = CameraAnimator()
+        self._scene = HighlightScene(target_object)
         self._highlighted_faces: list[str] = []
         self._highlighted_edges: list[str] = []
         self._highlight_pairs: tuple[list, list] = ([], [])
-        self._original_transparency: int = target_object.ViewObject.Transparency
+        self._annotations = True
+        try:
+            self._target_visible = bool(target_object.ViewObject.Visibility)
+        except Exception:
+            self._target_visible = True
+        self._remove_legacy_overlay()
+
+    # -- Highlighting ------------------------------------------------------
 
     def highlight_faces_by_index(self, index_color_pairs: list[tuple[int, str]]):
         """Highlights faces by their 0-based index. Clears any previous highlights."""
-        self._overlay.remove()
-        Gui.Selection.clearSelection()
-        self._highlighted_edges = []
-
-        index_color_map: dict[int, str] = {}
-        for idx, hex_col in index_color_pairs:
-            existing = index_color_map.get(idx)
-            if existing is None or hex_col == "#E24B4A":
-                index_color_map[idx] = hex_col
-
-        self._highlighted_faces = [f"Face{i + 1}" for i in index_color_map]
-
-        if not index_color_map:
-            self._remove_overlay()
-            self.target_object.ViewObject.Visibility = True
-            self.target_object.ViewObject.Transparency = self._original_transparency
-            return
-
-        self.target_object.ViewObject.Visibility = True
-        self._update_overlay(face_color_map=index_color_map, edge_color_map={})
+        self.highlight_faces_and_edges_by_index(index_color_pairs, [])
 
     def highlight_edges_by_index(self, index_color_pairs: list[tuple[int, str]]):
         """Highlights edges by their 0-based index. Clears any previous highlights."""
-        self._overlay.remove()
-        Gui.Selection.clearSelection()
-        self._highlighted_faces = []
-
-        index_color_map: dict[int, str] = {}
-        for idx, hex_col in index_color_pairs:
-            existing = index_color_map.get(idx)
-            if existing is None or hex_col == "#E24B4A":
-                index_color_map[idx] = hex_col
-
-        self._highlighted_edges = [f"Edge{i + 1}" for i in index_color_map]
-
-        if not index_color_map:
-            self._remove_overlay()
-            self.target_object.ViewObject.Visibility = True
-            self.target_object.ViewObject.Transparency = self._original_transparency
-            return
-
-        self.target_object.ViewObject.Visibility = True
-        self._update_overlay(face_color_map={}, edge_color_map=index_color_map)
+        self.highlight_faces_and_edges_by_index([], index_color_pairs)
 
     def highlight_faces_and_edges_by_index(
         self,
         face_color_pairs: list[tuple[int, str]],
         edge_color_pairs: list[tuple[int, str]],
     ):
-        """Highlights both faces and edges simultaneously."""
+        """Highlights faces and edges together; the most severe color wins per element."""
         self._highlight_pairs = (list(face_color_pairs), list(edge_color_pairs))
         self._overlay.remove()
         Gui.Selection.clearSelection()
 
-        face_color_map: dict[int, str] = {}
-        for idx, hex_col in face_color_pairs:
-            existing = face_color_map.get(idx)
-            if existing is None or hex_col == "#E24B4A":
-                face_color_map[idx] = hex_col
-
-        edge_color_map: dict[int, str] = {}
-        for idx, hex_col in edge_color_pairs:
-            existing = edge_color_map.get(idx)
-            if existing is None or hex_col == "#E24B4A":
-                edge_color_map[idx] = hex_col
-
+        face_color_map = merge_colors(face_color_pairs)
+        edge_color_map = merge_colors(edge_color_pairs)
         self._highlighted_faces = [f"Face{i + 1}" for i in face_color_map]
         self._highlighted_edges = [f"Edge{i + 1}" for i in edge_color_map]
 
         if not face_color_map and not edge_color_map:
-            self._remove_overlay()
-            self.target_object.ViewObject.Visibility = True
-            self.target_object.ViewObject.Transparency = self._original_transparency
+            # Nothing to show: the model as the designer made it.
+            self._scene.hide()
+            self._set_target_visible(self._target_visible)
             return
 
-        self.target_object.ViewObject.Visibility = True
-        self._update_overlay(face_color_map=face_color_map, edge_color_map=edge_color_map)
+        self._scene.set_highlight(face_color_map, edge_color_map)
+        self._scene.show()
+        if self._scene.visible:
+            self._set_target_visible(False)
+
+    def set_display_style(self, rest_color=None, rest_transparency=None, xray=None) -> None:
+        """Override how the rest of the model looks (for report images); None restores the default."""
+        self._scene.set_style(rest_color, rest_transparency, xray)
+
+    def current_highlight(self) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+        """The face and edge pairs last passed to ``highlight_faces_and_edges_by_index``."""
+        faces, edges = self._highlight_pairs
+        return (list(faces), list(edges))
+
+    # -- Finding card ------------------------------------------------------
 
     def show_finding_overlay(
         self,
@@ -133,6 +99,8 @@ class DFMViewProvider:
         color_hex: str = "#E24B4A",
     ):
         """Shows the viewport overlay card for a finding, anchored to its geometry."""
+        if not self._annotations:
+            return
         face_refs = [ref for ref in finding.refs if ref.type == "Face"]
         edge_refs = [ref for ref in finding.refs if ref.type == "Edge"]
 
@@ -159,68 +127,15 @@ class DFMViewProvider:
 
         self._overlay.show(anchor, finding, color_hex)
 
-    def current_highlight(self) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
-        """The face and edge pairs last passed to ``highlight_faces_and_edges_by_index``."""
-        if self._get_overlay() is None:
-            return ([], [])
-        faces, edges = self._highlight_pairs
-        return (list(faces), list(edges))
-
-    def overlay_object(self):
-        """The highlight overlay document object, or None when nothing is highlighted."""
-        return self._get_overlay()
+    def set_annotations_enabled(self, on: bool) -> None:
+        """Turn the info cards in the 3D view on or off (the toolbar toggle)."""
+        self._annotations = bool(on)
+        if not on:
+            self._overlay.remove()
 
     def remove_finding_overlay(self):
         """Hide the viewport overlay card, if shown."""
         self._overlay.remove()
-
-    def _update_overlay(
-        self,
-        face_color_map: dict[int, str],
-        edge_color_map: dict[int, str],
-    ):
-        """Creates or updates the overlay with per-face and per-edge colors."""
-        doc = App.ActiveDocument
-        overlay = self._get_overlay()
-
-        if overlay is None:
-            overlay = doc.addObject("Part::Feature", self.OVERLAY_NAME)  # type: ignore
-
-        overlay.Shape = self.target_object.Shape.copy()
-        self.target_object.ViewObject.Visibility = False
-
-        vo = overlay.ViewObject
-        if vo is None:
-            return
-
-        if hasattr(vo, "ShowInTree"):
-            vo.ShowInTree = False
-
-        vo.PointSize = 0
-
-        def hex_to_rgba(hex_color: str) -> tuple:
-            h = hex_color.lstrip("#")
-            r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
-            return (r, g, b, 0.0)
-
-        num_faces = len(self.target_object.Shape.Faces)
-        face_colors = [
-            hex_to_rgba(face_color_map[i]) if i in face_color_map else self.OVERLAY_INACTIVE_COLOR
-            for i in range(num_faces)
-        ]
-
-        num_edges = len(self.target_object.Shape.Edges)
-        edge_colors = [
-            hex_to_rgba(edge_color_map[i]) if i in edge_color_map else self.OVERLAY_INACTIVE_COLOR
-            for i in range(num_edges)
-        ]
-
-        doc.recompute()  # type: ignore
-
-        vo.DiffuseColor = face_colors
-        vo.LineColorArray = edge_colors
-        vo.LineWidth = self.OVERLAY_EDGE_WIDTH if edge_color_map else 0
-        vo.Transparency = self.OVERLAY_TRANSPARENCY
 
     def _find_on_surface_point(self, face) -> App.Vector:
         """Returns a point guaranteed to lie on the face surface."""
@@ -244,42 +159,40 @@ class DFMViewProvider:
 
         return face.CenterOfMass
 
+    # -- Camera and cleanup ----------------------------------------------------
+
     def zoom_to_selection(self):
         """Focuses the 3D camera on all currently highlighted faces and edges."""
-        overlay = self._get_overlay()
-        if not overlay or not Gui.activeView():
+        if not Gui.activeView():
             return
-
         targets = self._highlighted_faces + self._highlighted_edges
         if targets:
-            self._cam_animator.zoom_to_subelements(overlay, targets)
+            self._cam_animator.zoom_to_subelements(self.target_object, targets)
 
     def restore(self):
-        """Removes the overlay card and highlight, returning the viewport to its original state."""
+        """Removes the card and the highlight, returning the viewport to its original state."""
         self._overlay.remove()
-        self._remove_overlay()
-        self.target_object.ViewObject.Visibility = True
-
-    def _remove_overlay(self):
-        """Removes the overlay object from the document if it exists."""
-        doc = App.ActiveDocument
-        if self.OVERLAY_NAME:
-            try:
-                obj = doc.getObject(self.OVERLAY_NAME)  # type: ignore
-                if obj:
-                    doc.removeObject(self.OVERLAY_NAME)  # type: ignore
-            except Exception as e:
-                App.Console.PrintWarning(f"Failed to remove DFM overlay: {e}\n")
+        self._scene.remove()
         self._highlighted_faces = []
         self._highlighted_edges = []
         self._highlight_pairs = ([], [])
+        self._set_target_visible(self._target_visible)
 
-    def _get_overlay(self):
-        """Returns the live overlay document object, or None if it doesn't exist."""
-        if self.OVERLAY_NAME:
-            return App.ActiveDocument.getObject(self.OVERLAY_NAME)  # type: ignore
-        return None
+    def _set_target_visible(self, visible: bool) -> None:
+        try:
+            vo = self.target_object.ViewObject
+            if bool(vo.Visibility) != bool(visible):
+                vo.Visibility = bool(visible)
+        except Exception:
+            pass
 
+    def _remove_legacy_overlay(self) -> None:
+        doc = App.ActiveDocument
+        try:
+            if doc is not None and doc.getObject(self.LEGACY_OVERLAY_NAME):
+                doc.removeObject(self.LEGACY_OVERLAY_NAME)
+        except Exception as e:
+            App.Console.PrintWarning(f"Failed to remove an old DFM overlay: {e}\n")
 
 
 class CameraAnimator:
