@@ -2,7 +2,6 @@
 
 # DFM Workbench
 
-![Status](https://img.shields.io/badge/status-alpha-orange)
 ![License](https://img.shields.io/badge/license-LGPL--2.1-blue)
 
 A FreeCAD workbench that analyses 3D models for Design for Manufacturing (DFM)
