@@ -131,6 +131,7 @@ class HighlightScene:
     def __init__(self, target_object):
         self.target_object = target_object
         self._view = None
+        self._parent = None
         self._switch = None
         self._built = False
         self._attached = False
@@ -181,13 +182,14 @@ class HighlightScene:
 
     def remove(self) -> None:
         """Take the node out of the 3D view and drop the geometry."""
-        if self._attached and self._view is not None:
+        if self._attached and self._parent is not None:
             try:
-                self._view.getSceneGraph().removeChild(self._switch)
+                self._parent.removeChild(self._switch)
             except Exception:
                 pass
         self._attached = False
         self._view = None
+        self._parent = None
         self._built = False
         self._switch = None
         self._face_nodes = []
@@ -212,9 +214,45 @@ class HighlightScene:
         view = get_active_view()
         if view is None:
             return
-        view.getSceneGraph().addChild(self._switch)
+        parent = self._model_parent(view)
+        parent.addChild(self._switch)
         self._view = view
+        self._parent = parent
         self._attached = True
+
+    def _model_parent(self, view):
+        """The scene node that holds the model's own node, to add ours beside it.
+
+        Two reasons. FreeCAD's saveImage() renders only the document's part
+        of the scene, not the whole viewer, so a node added to the viewer's
+        root is on screen but missing from report images. And inside a
+        container (an App::Part, say) this node carries the container's
+        placement, which the model's shape doesn't include.
+        """
+        root = view.getSceneGraph()
+        try:
+            target = self.target_object.ViewObject.RootNode
+        except Exception:
+            target = None
+        if target is not None:
+            group_type = coin.SoGroup.getClassTypeId()
+            queue = [(root, 0)]
+            while queue:
+                node, depth = queue.pop(0)
+                try:
+                    if not node.isOfType(group_type):
+                        continue
+                    group = coin.cast(node, "SoGroup")
+                    if group.findChild(target) >= 0:
+                        return group
+                    if depth < 8:
+                        queue.extend((group.getChild(i), depth + 1)
+                                     for i in range(group.getNumChildren()))
+                except Exception:
+                    continue
+        App.Console.PrintWarning(
+            "DFM: could not find the model in the scene; report images may not show highlights.\n")
+        return root
 
     def _build(self) -> None:
         shape = self.target_object.Shape
