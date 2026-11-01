@@ -19,9 +19,11 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 import FreeCADGui as Gui  # type: ignore
 
 from ..core.models import CheckResult, Severity
+from ..core.processes.process import RuleLimit
 from ..core.rules import Criticality, Rulebook
 
-from ..gui.results.delegates import DFMTreeDelegate
+from ..gui.results.delegates import RULE_ROLE, DFMTreeDelegate
+from ..gui.rule_information import RuleInfoPanel
 from ..gui.results.toolbar import GroupMode, ResultsToolbar, SortMode
 from ..gui.results.visuals import severity_color
 from ..gui.results.utils import CSVExportConfig, CSVResultExporter
@@ -45,6 +47,10 @@ class _PanelResizeFilter(QtCore.QObject):
         return False
 
 
+# Delay before the rule info popup opens when hovering a rule's info icon.
+_INFO_HOVER_DELAY_MS = 250
+
+
 class TaskResults(QtCore.QObject):
     """Passive View: Only handles Widgets and Signals."""
 
@@ -59,6 +65,21 @@ class TaskResults(QtCore.QObject):
         self.form.tvResults.setHeaderHidden(True)
         self.form.tvResults.installEventFilter(self)
 
+        # One delegate for the life of the panel; it also locates the info
+        # icons on rule rows, which open the rule popup on hover.
+        self._delegate = DFMTreeDelegate(self.form.tvResults)
+        self.form.tvResults.setItemDelegate(self._delegate)
+        self.form.tvResults.setMouseTracking(True)
+        self.form.tvResults.viewport().installEventFilter(self)
+        self.form.tvResults.verticalScrollBar().valueChanged.connect(self._hide_rule_info)
+        self._info_panel: RuleInfoPanel | None = None
+        self._info_rule: Rulebook | None = None
+        self._info_pending: tuple | None = None
+        self._info_timer = QtCore.QTimer(self)
+        self._info_timer.setSingleShot(True)
+        self._info_timer.setInterval(_INFO_HOVER_DELAY_MS)
+        self._info_timer.timeout.connect(self._show_pending_rule_info)
+
         self.form.leTarget.setReadOnly(True)
         self.form.leProcess.setReadOnly(True)
         self.form.leVerdict.setReadOnly(True)
@@ -72,6 +93,8 @@ class TaskResults(QtCore.QObject):
         self._grouped_data: dict = {}
         self._all_process_rules: list = []
         self._get_criticality: Callable | None = None
+        self._get_rule_limit: Callable[[Rulebook], RuleLimit | None] | None = None
+        self._get_values_title: Callable[[Rulebook], str] | None = None
 
         self.on_closed: Callable[[], None] | None = None
         self.on_row_selected: Callable[[CheckResult | list[CheckResult]], None] | None = None
@@ -128,7 +151,14 @@ class TaskResults(QtCore.QObject):
 
     # ── Tree building (public entry) ─────────────────────
 
-    def render_tree(self, grouped_data: dict, all_process_rules: list, get_criticality=None):
+    def render_tree(
+        self,
+        grouped_data: dict,
+        all_process_rules: list,
+        get_criticality=None,
+        get_rule_limit: Callable[[Rulebook], RuleLimit | None] | None = None,
+        get_values_title: Callable[[Rulebook], str] | None = None,
+    ):
         """Store fresh analysis data and rebuild the tree.
 
         Called by the presenter whenever the underlying data changes
@@ -139,6 +169,10 @@ class TaskResults(QtCore.QObject):
         self._grouped_data = grouped_data
         self._all_process_rules = all_process_rules
         self._get_criticality = get_criticality
+        if get_rule_limit is not None:
+            self._get_rule_limit = get_rule_limit
+        if get_values_title is not None:
+            self._get_values_title = get_values_title
         self._build_tree()
 
         # Defer fill-height setup to the next event-loop tick.  At this
@@ -155,8 +189,8 @@ class TaskResults(QtCore.QObject):
         """Rebuild the tree from stored data using toolbar settings."""
         expanded = self._collect_expanded_labels()
 
+        self._hide_rule_info()
         self.model.clear()
-        self.form.tvResults.setItemDelegate(DFMTreeDelegate())
         root = self.model.invisibleRootItem()
 
         # Apply filters to every rule's findings list.
@@ -305,6 +339,7 @@ class TaskResults(QtCore.QObject):
             for rule_id, findings in self._sort_rule_groups(rules):
                 sorted_findings = sorted(findings, key=sort_key)
                 rule_item = self._make_group_item(rule_id.label, sorted_findings, "rule")
+                rule_item.setData(rule_id, RULE_ROLE)
                 self._populate_finding_children(rule_item, sorted_findings)
                 crit_item.appendRow(rule_item)
                 if rule_id.label in expanded:
@@ -326,6 +361,7 @@ class TaskResults(QtCore.QObject):
         for rule_id, findings in self._sort_rule_groups(rule_items):
             sorted_findings = sorted(findings, key=sort_key)
             rule_item = self._make_group_item(rule_id.label, sorted_findings, "rule")
+            rule_item.setData(rule_id, RULE_ROLE)
             self._populate_finding_children(rule_item, sorted_findings)
             all_item.appendRow(rule_item)
             if rule_id.label in expanded:
@@ -499,6 +535,7 @@ class TaskResults(QtCore.QObject):
             pass_item.setData([], QtCore.Qt.ItemDataRole.UserRole)
             pass_item.setData("rule", QtCore.Qt.ItemDataRole.UserRole + 1)
             pass_item.setData(rule.label, QtCore.Qt.ItemDataRole.UserRole + 2)
+            pass_item.setData(rule, RULE_ROLE)
             pass_item.setData("0", QtCore.Qt.ItemDataRole.UserRole + 3)
             pass_item.setData("#639922", QtCore.Qt.ItemDataRole.UserRole + 4)
             pass_item.setData(0, QtCore.Qt.ItemDataRole.UserRole + 6)
@@ -791,8 +828,76 @@ class TaskResults(QtCore.QObject):
             elif data:
                 self.on_row_selected(data)
 
+    # ── Rule info popup ──────────────────────────────────
+
+    def _update_info_hover(self, pos: QtCore.QPoint) -> None:
+        """Open the rule popup after a short delay while over an info icon."""
+        tree = self.form.tvResults
+        index = tree.indexAt(pos)
+        rect = self._delegate.info_rect(tree, index)
+        if rect.isValid() and rect.adjusted(-3, -3, 3, 3).contains(pos):
+            rule = index.data(RULE_ROLE)
+            self._set_hovered_info(index)
+            if rule is self._info_rule and self._info_panel is not None:
+                return
+            if self._info_pending is None or self._info_pending[0] is not rule:
+                self._hide_rule_info(keep_hover=True)
+                top_left = tree.viewport().mapToGlobal(rect.topLeft())
+                self._info_pending = (rule, QtCore.QRect(top_left, rect.size()))
+                self._info_timer.start()
+        else:
+            self._hide_rule_info()
+
+    def _set_hovered_info(self, index: QtCore.QModelIndex) -> None:
+        persistent = QtCore.QPersistentModelIndex(index)
+        if persistent != self._delegate.hovered_info:
+            self._delegate.hovered_info = persistent
+            self.form.tvResults.viewport().update()
+
+    def _show_pending_rule_info(self) -> None:
+        if self._info_pending is None or self.form is None:
+            return
+        rule, rect = self._info_pending
+        self._info_pending = None
+        limit = self._get_rule_limit(rule) if self._get_rule_limit else None
+        criticality = self._get_criticality(rule) if self._get_criticality else None
+        title = self._get_values_title(rule) if self._get_values_title else ""
+        panel = RuleInfoPanel(
+            rule, limit, criticality, parent=self.form.tvResults, values_title=title
+        )
+        panel.destroyed.connect(self._on_info_panel_destroyed)
+        self._info_panel = panel
+        self._info_rule = rule
+        panel.show_at(rect)
+
+    def _hide_rule_info(self, *_args, keep_hover: bool = False) -> None:
+        self._info_timer.stop()
+        self._info_pending = None
+        if self._info_panel is not None:
+            panel, self._info_panel = self._info_panel, None
+            panel.close()
+        self._info_rule = None
+        if not keep_hover and self.form is not None:
+            self._set_hovered_info(QtCore.QModelIndex())
+
+    def _on_info_panel_destroyed(self, *_args) -> None:
+        self._info_panel = None
+        self._info_rule = None
+
     def eventFilter(self, obj, event):
         if self.form is None:
+            return False
+        try:
+            viewport = self.form.tvResults.viewport()
+        except RuntimeError:  # the tree is being destroyed
+            return False
+        if obj is viewport:
+            etype = event.type()
+            if etype == QtCore.QEvent.Type.MouseMove:
+                self._update_info_hover(event.position().toPoint())
+            elif etype in (QtCore.QEvent.Type.Leave, QtCore.QEvent.Type.Hide,
+                           QtCore.QEvent.Type.MouseButtonPress, QtCore.QEvent.Type.Wheel):
+                self._hide_rule_info()
             return False
         if obj is not self.form.tvResults:
             return False
@@ -909,6 +1014,8 @@ class TaskResults(QtCore.QObject):
 
     def reject(self):
         if self.form:
+            self._hide_rule_info()
+            self.form.tvResults.viewport().removeEventFilter(self)
             self.form.tvResults.removeEventFilter(self)
         self._cleanup_fill_height()
         if self.on_closed:
@@ -921,6 +1028,8 @@ class TaskResults(QtCore.QObject):
             self._save_clicked = False
             return
         if self.form:
+            self._hide_rule_info()
+            self.form.tvResults.viewport().removeEventFilter(self)
             self.form.tvResults.removeEventFilter(self)
         self._cleanup_fill_height()
         if self.on_closed:

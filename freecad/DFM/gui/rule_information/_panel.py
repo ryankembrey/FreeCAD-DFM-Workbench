@@ -23,7 +23,7 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...core.processes.process import RuleLimit
-from ...core.rules import Rulebook
+from ...core.rules import Criticality, Rulebook
 from ._renderer import DEFAULT_WIDTH
 from ._view import RuleDiagramView
 
@@ -40,6 +40,10 @@ class RuleInfoPanel(QtWidgets.QDialog):
         The Rulebook member to illustrate.
     limit:
         Target / limit values shown in the legend (may be ``None``).
+    criticality:
+        Shown as a small chip after the title when given.
+    values_title:
+        Heading above the values, such as "Values for PLA".
     parent:
         Parent widget, used for stylesheet and palette inheritance.
     """
@@ -48,7 +52,9 @@ class RuleInfoPanel(QtWidgets.QDialog):
         self,
         rule: Rulebook,
         limit: Optional[RuleLimit] = None,
+        criticality: Optional[Criticality] = None,
         parent: Optional[QtWidgets.QWidget] = None,
+        values_title: str = "",
     ):
         super().__init__(parent)
         # A tool tip window neither grabs input nor takes focus, so it can be
@@ -69,9 +75,15 @@ class RuleInfoPanel(QtWidgets.QDialog):
         title_font.setPointSizeF(title_font.pointSizeF() * 1.15)
         title_font.setBold(True)
         title.setFont(title_font)
-        root.addWidget(title)
+        title_row = QtWidgets.QHBoxLayout()
+        title_row.setSpacing(8)
+        title_row.addWidget(title)
+        if criticality is not None:
+            title_row.addWidget(_criticality_chip(criticality, self))
+        title_row.addStretch(1)
+        root.addLayout(title_row)
 
-        self.view = RuleDiagramView(rule, limit, parent=self)
+        self.view = RuleDiagramView(rule, limit, values_title=values_title, parent=self)
         root.addWidget(self.view)
 
         # Fixed width: diagram plus margins, so the brief wraps to match.
@@ -87,27 +99,36 @@ class RuleInfoPanel(QtWidgets.QDialog):
         The panel is placed to the right of the anchor when screen space
         allows; otherwise it falls back to the left or below.
         """
+        top_left = anchor.mapToGlobal(QtCore.QPoint(0, 0))
+        self.show_at(QtCore.QRect(top_left, anchor.size()), anchor.screen())
+
+    def show_at(self, rect: QtCore.QRect, screen: Optional[QtGui.QScreen] = None) -> None:
+        """Show the panel beside *rect* (global coordinates), like ``show_near``.
+
+        Useful when the anchor is part of a widget rather than a widget of
+        its own, such as an icon drawn inside a tree row.
+        """
         self.ensurePolished()
         self.adjustSize()
-        screen = anchor.screen() or QtGui.QGuiApplication.primaryScreen()
+        screen = screen or QtGui.QGuiApplication.screenAt(rect.center()) \
+            or QtGui.QGuiApplication.primaryScreen()
         avail = screen.availableGeometry() if screen else QtCore.QRect(0, 0, 1920, 1080)
 
-        anchor_global = anchor.mapToGlobal(QtCore.QPoint(0, 0))
         panel_w = self.sizeHint().width()
         panel_h = self.sizeHint().height()
 
-        # Try right of anchor
-        x = anchor_global.x() + anchor.width() + 6
-        y = anchor_global.y()
+        # Try right of the rect
+        x = rect.right() + 6
+        y = rect.top()
 
         # Fall back to left
         if x + panel_w > avail.right():
-            x = anchor_global.x() - panel_w - 6
+            x = rect.left() - panel_w - 6
 
         # Fall back to below
         if x < avail.left():
-            x = anchor_global.x()
-            y = anchor_global.y() + anchor.height() + 6
+            x = rect.left()
+            y = rect.bottom() + 6
 
         # Clamp vertical
         if y + panel_h > avail.bottom():
@@ -131,3 +152,18 @@ class RuleInfoPanel(QtWidgets.QDialog):
         painter.setBrush(pal.color(QtGui.QPalette.ColorRole.Window))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 8, 8)
         painter.end()
+
+
+def _criticality_chip(criticality: Criticality, parent: QtWidgets.QWidget) -> QtWidgets.QLabel:
+    """Small Low / Medium / High / Critical tag, matching the rule cards."""
+    chip = QtWidgets.QLabel(criticality.label, parent)
+    chip.setToolTip(f"Criticality: {criticality.label}")
+    critical = criticality is Criticality.CRITICAL
+    color = "color: #d9534f;" if critical else ""
+    border = "#d9534f" if critical else "rgba(127, 127, 127, 140)"
+    chip.setStyleSheet(
+        f"QLabel {{ {color} border: 1px solid {border}; border-radius: 3px;"
+        " padding: 0px 4px; font-size: 10px; background: transparent; }"
+    )
+    chip.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+    return chip

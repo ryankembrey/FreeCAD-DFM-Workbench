@@ -15,6 +15,8 @@ import FreeCADGui as Gui  # type: ignore
 
 from ...app.prefs import dfm_params
 from ...core.models import CheckResult, Severity
+from ..rule_cards import DIAGRAM_SVG, render_svg_icon
+from ..rule_information import RuleDiagramView
 from ..utils.theme import qcolor_luminance
 from ..utils.view import get_active_view, get_view_widget
 
@@ -32,6 +34,11 @@ def _overlay_offset_y() -> int:
 def _overlay_card_min_width() -> int:
     """Minimum pixel width for the finding overlay card."""
     return dfm_params().GetInt("OverlayCardMinWidth", 260)
+
+
+# Whether the rule diagram is shown in the finding card. Off by default; the
+# user's choice from the card's diagram button is remembered.
+_PREF_SHOW_DIAGRAM = "OverlayShowDiagram"
 
 
 _SEVERITY_BG = {
@@ -68,6 +75,9 @@ class FindingCard(QtWidgets.QFrame):
         border-bottom-left-radius: 5px;
         border-bottom-right-radius: 5px;
     }}
+    FindingCard #diagramBody {{
+        background: {feedback_bg};
+    }}
     """
 
     # Signal emitted when the user finishes dragging (new position as QPoint)
@@ -86,6 +96,11 @@ class FindingCard(QtWidgets.QFrame):
         self.setMinimumWidth(_overlay_card_min_width())
 
         self._finding: Optional[CheckResult] = None
+
+        self._diagram_visible = dfm_params().GetBool(_PREF_SHOW_DIAGRAM, False)
+        self._diagram_view: Optional[RuleDiagramView] = None
+        self._fg_hex = "#1a1a1a"
+        self._diagram_bg_hex = "#ffffff"
 
         self._build_ui()
         self._feedback_visible = False
@@ -133,6 +148,19 @@ class FindingCard(QtWidgets.QFrame):
         )
         h_lay.addWidget(self._rule_label)
 
+        # Shows or hides the rule's bad / good diagram below the header.
+        self._diagram_btn = QtWidgets.QToolButton()
+        self._diagram_btn.setFixedSize(20, 18)
+        self._diagram_btn.setIconSize(QtCore.QSize(14, 14))
+        self._diagram_btn.setCheckable(True)
+        self._diagram_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; border-radius: 3px; }"
+            "QToolButton:checked { background: rgba(127, 127, 127, 70); }"
+        )
+        self._diagram_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._diagram_btn.clicked.connect(self._toggle_diagram)
+        h_lay.addWidget(self._diagram_btn)
+
         self._toggle_btn = QtWidgets.QToolButton()
         self._toggle_btn.setFixedSize(18, 18)
         self._toggle_btn.setArrowType(QtCore.Qt.ArrowType.DownArrow)
@@ -142,6 +170,15 @@ class FindingCard(QtWidgets.QFrame):
         h_lay.addWidget(self._toggle_btn)
 
         root.addWidget(header)
+
+        # rule diagram (hidden unless turned on)
+        self._diagram_frame = QtWidgets.QWidget()
+        self._diagram_frame.setObjectName("diagramBody")
+        self._diagram_layout = QtWidgets.QVBoxLayout(self._diagram_frame)
+        self._diagram_layout.setContentsMargins(8, 6, 8, 6)
+        self._diagram_layout.setSpacing(0)
+        self._diagram_frame.setVisible(False)
+        root.addWidget(self._diagram_frame)
 
         # separator (hidden until feedback is expanded)
         self._separator = QtWidgets.QFrame()
@@ -206,6 +243,19 @@ class FindingCard(QtWidgets.QFrame):
         self._feedback_visible = False
         self._feedback_frame.setVisible(False)
         self._toggle_btn.setArrowType(QtCore.Qt.ArrowType.DownArrow)
+
+        # Rebuild the diagram for this finding's rule.
+        if self._diagram_view is not None:
+            self._diagram_view.deleteLater()
+            self._diagram_view = None
+        self._diagram_view = RuleDiagramView(
+            finding.rule_id, show_brief=False, show_legend=False, fit_width=True,
+            parent=self._diagram_frame,
+        )
+        self._diagram_layout.addWidget(self._diagram_view)
+        self._diagram_btn.setChecked(self._diagram_visible)
+        self._diagram_frame.setVisible(self._diagram_visible)
+        self._update_diagram_tooltip()
         self._update_header_radius()
 
         self._apply_theme()
@@ -258,6 +308,13 @@ class FindingCard(QtWidgets.QFrame):
             f"QToolButton {{ border: none; background: transparent; color: {fg_hex}; }}"
         )
 
+        self._fg_hex = fg_hex
+        self._diagram_bg_hex = feedback_bg
+        ratio = self.devicePixelRatioF()
+        self._diagram_btn.setIcon(render_svg_icon(DIAGRAM_SVG, QtGui.QColor(fg_hex), 14, ratio))
+        if self._diagram_view is not None:
+            self._diagram_view.set_colors(QtGui.QColor(feedback_bg), QtGui.QColor(fg_hex))
+
         self._applying_theme = False
 
     def changeEvent(self, event):
@@ -306,14 +363,27 @@ class FindingCard(QtWidgets.QFrame):
         self._update_header_radius()
         self.adjustSize()
 
+    def _toggle_diagram(self):
+        self._diagram_visible = self._diagram_btn.isChecked()
+        dfm_params().SetBool(_PREF_SHOW_DIAGRAM, self._diagram_visible)
+        self._diagram_frame.setVisible(self._diagram_visible)
+        self._update_diagram_tooltip()
+        self._update_header_radius()
+        self.adjustSize()
+
+    def _update_diagram_tooltip(self):
+        self._diagram_btn.setToolTip("Hide diagram" if self._diagram_visible else "Show diagram")
+
     def _update_header_radius(self):
-        """Give the header bottom corners rounding when feedback is collapsed."""
-        if self._feedback_visible:
+        """Round the bottom corners of whichever section is last."""
+        rounded = "border-bottom-left-radius: 5px; border-bottom-right-radius: 5px;"
+        if self._feedback_visible or self._diagram_visible:
             self._header.setStyleSheet("")
         else:
-            self._header.setStyleSheet(
-                "#cardHeader { border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; }"
-            )
+            self._header.setStyleSheet(f"#cardHeader {{ {rounded} }}")
+        self._diagram_frame.setStyleSheet(
+            "" if self._feedback_visible else f"#diagramBody {{ {rounded} }}"
+        )
 
     def contextMenuEvent(self, event):
         """Right-click context menu with 'Ignore' option."""

@@ -9,7 +9,6 @@ rule: the rule editing dialog embeds it directly, and ``RuleInfoPanel`` wraps
 it in a popup.
 """
 
-import html
 from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -19,7 +18,15 @@ from ...core.rules import Rulebook, SHAPE_FIELD_ATTRS
 from ._diagrams import DIAGRAMS
 from ._renderer import DEFAULT_WIDTH, render_diagram
 
-_LEGEND_ACCENT = "#5b9bd5"
+# Read-only value tiles, styled like the rule dialog's inputs. Colors are
+# neutral so the theme's text color shows through.
+_TILE_CSS = (
+    "QFrame#RuleValueTile { border: 1px solid rgba(127, 127, 127, 110); border-radius: 4px;"
+    " background: transparent; }"
+    "QFrame#RuleValueBox { border: 1px solid rgba(127, 127, 127, 150); border-radius: 3px;"
+    " background: transparent; }"
+    "QFrame#RuleValueTile QLabel { background: transparent; border: none; }"
+)
 
 # Width range for diagrams that follow the widget's width (grid tiles).
 _FIT_MIN_WIDTH = 220
@@ -45,8 +52,10 @@ class RuleDiagramView(QtWidgets.QWidget):
     show_brief:
         Whether to show the one-line description above the diagram.
     show_legend:
-        Whether to show the target / limit legend below the diagram. Turn it
+        Whether to show the target / limit values below the diagram. Turn it
         off when the values are shown elsewhere, for example as inputs.
+    values_title:
+        Heading above the values, such as "Values for PLA". Omitted if empty.
     fit_width:
         Scale the diagram to the widget's width (up to a maximum) instead of
         drawing it at the fixed default width. Used by grid tiles.
@@ -65,17 +74,20 @@ class RuleDiagramView(QtWidgets.QWidget):
         show_brief: bool = True,
         show_legend: bool = True,
         fit_width: bool = False,
+        values_title: str = "",
         parent: Optional[QtWidgets.QWidget] = None,
     ):
         super().__init__(parent)
         self._rule = rule
         self._fit = fit_width
         self._palette: Optional[QtGui.QPalette] = None
+        self._forced_colors: Optional[tuple[QtGui.QColor, QtGui.QColor]] = None
         self._rendered_width = 0
         self._limit = limit
         self._brief: Optional[QtWidgets.QLabel] = None
         self._image: Optional[QtWidgets.QLabel] = None
         self._value_labels: dict[str, QtWidgets.QLabel] = {}
+        self._values_title = values_title
         self._rendering = False
 
         root = QtWidgets.QVBoxLayout(self)
@@ -109,6 +121,16 @@ class RuleDiagramView(QtWidgets.QWidget):
     # Public API
     # ------------------------------------------------------------------
 
+    def set_colors(self, background: QtGui.QColor, text: QtGui.QColor) -> None:
+        """Draw with these colors instead of reading them from the theme.
+
+        For hosts that paint their own background and text colors, such as
+        the finding annotation in the 3D view.
+        """
+        self._forced_colors = (QtGui.QColor(background), QtGui.QColor(text))
+        if self.isVisible():
+            self._apply_theme()
+
     def set_limit(self, limit: Optional[RuleLimit]) -> None:
         """Show the values from *limit* in the legend."""
         self._limit = limit
@@ -120,45 +142,53 @@ class RuleDiagramView(QtWidgets.QWidget):
     # ------------------------------------------------------------------
 
     def _build_legend(self, parent_layout: QtWidgets.QVBoxLayout) -> None:
+        """Read-only value tiles, matching the inputs in the rule dialog."""
         attrs = SHAPE_FIELD_ATTRS.get(self._rule.shape, ())
         labels = self._rule.field_labels
         if not attrs or not labels:
             return
 
-        sep = QtWidgets.QFrame(self)
-        sep.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        sep.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        parent_layout.addWidget(sep)
+        if self._values_title:
+            parent_layout.addWidget(QtWidgets.QLabel(self._values_title, self))
 
-        grid = QtWidgets.QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(4)
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(8)
+        unit = self._rule.unit or ""
+        for attr, label_text in zip(attrs, labels):
+            tile = QtWidgets.QFrame(self)
+            tile.setObjectName("RuleValueTile")
+            tile.setStyleSheet(_TILE_CSS)
+            tile_layout = QtWidgets.QVBoxLayout(tile)
+            tile_layout.setContentsMargins(8, 6, 8, 8)
+            tile_layout.setSpacing(4)
+            tile_layout.addWidget(QtWidgets.QLabel(label_text, tile))
 
-        for row, (attr, label_text) in enumerate(zip(attrs, labels)):
-            lbl = QtWidgets.QLabel(label_text, self)
-            font = lbl.font()
-            font.setBold(True)
-            lbl.setFont(font)
-            grid.addWidget(lbl, row, 0)
+            box = QtWidgets.QFrame(tile)
+            box.setObjectName("RuleValueBox")
+            box_layout = QtWidgets.QHBoxLayout(box)
+            box_layout.setContentsMargins(6, 3, 6, 3)
+            box_layout.setSpacing(6)
+            value = QtWidgets.QLabel(self._value_text(attr), box)
+            value.setAlignment(
+                QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+            )
+            font = value.font()
+            font.setPointSizeF(font.pointSizeF() * 1.2)
+            value.setFont(font)
+            box_layout.addWidget(value, stretch=1)
+            if unit:
+                unit_lbl = QtWidgets.QLabel(unit, box)
+                unit_lbl.setStyleSheet("font-size: 10px; font-style: italic;")
+                box_layout.addWidget(unit_lbl)
+            tile_layout.addWidget(box)
 
-            # Rich text color, because a theme stylesheet's ``color`` would
-            # override a palette color on the label.
-            val = QtWidgets.QLabel(self)
-            val.setTextFormat(QtCore.Qt.TextFormat.RichText)
-            val.setText(self._value_text(attr))
-            grid.addWidget(val, row, 1)
-            self._value_labels[attr] = val
-
-        # Keep both columns at their natural width so values sit beside
-        # their labels; the empty third column takes the spare width.
-        grid.setColumnStretch(2, 1)
-        parent_layout.addLayout(grid)
+            row.addWidget(tile, stretch=1)
+            self._value_labels[attr] = value
+        parent_layout.addLayout(row)
 
     def _value_text(self, attr: str) -> str:
         value = str(getattr(self._limit, attr, "") or "") if self._limit else ""
-        text = f"{value} {self._rule.unit or ''}".strip() if value else "—"
-        return f'<span style="color:{_LEGEND_ACCENT}">{html.escape(text)}</span>'
+        return value or "\u2014"
 
     # ------------------------------------------------------------------
     # Theming
@@ -225,6 +255,11 @@ class RuleDiagramView(QtWidgets.QWidget):
         text color on labels rather than on plain widgets.
         """
         role = QtGui.QPalette.ColorRole
+        if self._forced_colors is not None:
+            pal = QtGui.QPalette(self.palette())
+            pal.setColor(role.Window, self._forced_colors[0])
+            pal.setColor(role.WindowText, self._forced_colors[1])
+            return pal
         self.ensurePolished()
 
         # The background is drawn by the top-level window (dialog or popup).

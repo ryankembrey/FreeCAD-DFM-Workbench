@@ -217,6 +217,60 @@ GRID_VIEW_SVG = (
     b'</svg>'
 )
 
+INFO_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<circle cx="12" cy="12" r="9.5"/>'
+    b'<line x1="12" y1="16.5" x2="12" y2="11"/>'
+    b'<circle cx="12" cy="7.5" r="0.6" fill="COLOR"/>'
+    b'</svg>'
+)
+
+GROUP_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<rect x="3" y="3" width="8" height="5" rx="1"/>'
+    b'<path d="M7 8v11h5M7 13.5h5"/>'
+    b'<rect x="12" y="11" width="9" height="5" rx="1"/>'
+    b'<rect x="12" y="16.5" width="9" height="5" rx="1"/>'
+    b'</svg>'
+)
+
+SORT_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<line x1="4" y1="6" x2="20" y2="6"/>'
+    b'<line x1="4" y1="12" x2="15" y2="12"/>'
+    b'<line x1="4" y1="18" x2="10" y2="18"/>'
+    b'</svg>'
+)
+
+EXPAND_ALL_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<polyline points="7 5 12 10 17 5"/>'
+    b'<polyline points="7 13 12 18 17 13"/>'
+    b'</svg>'
+)
+
+COLLAPSE_ALL_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<polyline points="7 11 12 6 17 11"/>'
+    b'<polyline points="7 19 12 14 17 19"/>'
+    b'</svg>'
+)
+
+MARKERS_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M12 21.5s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/>'
+    b'<circle cx="12" cy="10.5" r="2.2"/>'
+    b'</svg>'
+)
+
+DIAGRAM_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<rect x="2.5" y="5" width="19" height="14" rx="1.5"/>'
+    b'<line x1="12" y1="5" x2="12" y2="19"/>'
+    b'<path d="M5 16l2.5-6 2.5 6M14 16h5v-5"/>'
+    b'</svg>'
+)
+
 FILTER_SVG = (
     b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
     b'<polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5"'

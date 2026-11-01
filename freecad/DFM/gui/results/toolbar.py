@@ -9,6 +9,18 @@ from enum import Enum
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...app.prefs import dfm_params
+from ..rule_cards import (
+    COLLAPSE_ALL_SVG, EXPAND_ALL_SVG, GROUP_SVG, MARKERS_SVG, SORT_SVG, apply_svg_icon,
+)
+
+# Icon buttons follow the theme: neutral hover and checked backgrounds, and
+# monochrome icons drawn in the theme's text color (see apply_svg_icon).
+_ICON_BUTTON_CSS = (
+    "QToolButton { border: none; border-radius: 3px; padding: 2px; background: transparent; }"
+    "QToolButton:hover { background: rgba(127, 127, 127, 45); }"
+    "QToolButton:pressed, QToolButton:checked { background: rgba(127, 127, 127, 80); }"
+    "QToolButton::menu-indicator { image: none; width: 0px; }"
+)
 
 
 class GroupMode(Enum):
@@ -44,13 +56,6 @@ class ResultsToolbar(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Docked toolbar look: subtle background with bottom border.
-        self.setStyleSheet(
-            "ResultsToolbar {"
-            "  background: #2b2b2b;"
-            "  border-bottom: 1px solid #555555;"
-            "}"
-        )
         self._build_ui()
 
     # ── UI construction ──────────────────────────────────
@@ -62,7 +67,7 @@ class ResultsToolbar(QtWidgets.QWidget):
 
         # ── Group dropdown button ──
         self.btn_group, self._group_ag = self._make_menu_button(
-            icon=self._paint_group_icon(),
+            svg=GROUP_SVG,
             tooltip="Grouping mode",
             items=[
                 ("Criticality → Rule", GroupMode.CRITICALITY_RULE),
@@ -74,7 +79,7 @@ class ResultsToolbar(QtWidgets.QWidget):
 
         # ── Sort dropdown button ──
         self.btn_sort, self._sort_ag = self._make_menu_button(
-            icon=self._paint_sort_icon(),
+            svg=SORT_SVG,
             tooltip="Sort order",
             items=[
                 ("Severity", SortMode.SEVERITY),
@@ -97,12 +102,9 @@ class ResultsToolbar(QtWidgets.QWidget):
 
         # ── Marker toggle ──
         _default_markers = dfm_params().GetBool("ResultsShowMarkersDefault", False)
-        self.btn_markers = self._make_toggle(
-            "●",  # ● filled circle
-            "#378ADD",
-            "Show / hide viewport markers",
-            checked=_default_markers,
-        )
+        self.btn_markers = self._make_icon_button(MARKERS_SVG, "Show / hide viewport markers")
+        self.btn_markers.setCheckable(True)
+        self.btn_markers.setChecked(_default_markers)
 
         # ── Count label ──
         self.lbl_count = QtWidgets.QLabel()
@@ -112,12 +114,8 @@ class ResultsToolbar(QtWidgets.QWidget):
         self.lbl_count.setFont(font)
 
         # ── Expand / Collapse buttons ──
-        self.btn_expand = self._make_action_button(
-            expand=True, tooltip="Expand all"
-        )
-        self.btn_collapse = self._make_action_button(
-            expand=False, tooltip="Collapse all"
-        )
+        self.btn_expand = self._make_icon_button(EXPAND_ALL_SVG, "Expand all")
+        self.btn_collapse = self._make_icon_button(COLLAPSE_ALL_SVG, "Collapse all")
 
         # ── Assemble ──
         row.addWidget(self.btn_group)
@@ -153,32 +151,33 @@ class ResultsToolbar(QtWidgets.QWidget):
     @staticmethod
     def _make_separator() -> QtWidgets.QWidget:
         """Thin vertical divider between toolbar sections."""
-        sep = QtWidgets.QWidget()
+        sep = QtWidgets.QFrame()
         sep.setFixedSize(1, 20)
-        sep.setStyleSheet("background: #555555;")
+        sep.setStyleSheet("QFrame { background: rgba(127, 127, 127, 110); border: none; }")
         return sep
+
+    @staticmethod
+    def _make_icon_button(svg: bytes, tooltip: str) -> QtWidgets.QToolButton:
+        """Monochrome icon button that follows the theme's text color."""
+        btn = QtWidgets.QToolButton()
+        btn.setFixedSize(26, 24)
+        btn.setToolTip(tooltip)
+        btn.setAccessibleName(tooltip)
+        btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(_ICON_BUTTON_CSS)
+        apply_svg_icon(btn, svg, 18)
+        return btn
 
     def _make_menu_button(
         self,
-        icon: QtGui.QIcon,
+        svg: bytes,
         tooltip: str,
         items: list[tuple[str, Enum]],
     ) -> tuple[QtWidgets.QToolButton, QtGui.QActionGroup]:
         """Icon button with a dropdown menu of mutually-exclusive options."""
-        btn = QtWidgets.QToolButton()
-        btn.setIcon(icon)
-        btn.setIconSize(QtCore.QSize(18, 18))
-        btn.setToolTip(f"{tooltip}: {items[0][0]}")
+        btn = self._make_icon_button(svg, f"{tooltip}: {items[0][0]}")
         btn.setPopupMode(
             QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup
-        )
-        btn.setFixedHeight(24)
-        btn.setStyleSheet(
-            "QToolButton { border:1px solid #555; border-radius:3px;"
-            " padding:1px 2px; }"
-            "QToolButton::menu-indicator {"
-            "  image: none; width:8px; subcontrol-position:right center; }"
-            "QToolButton:pressed { background:rgba(128,128,128,0.25); }"
         )
 
         menu = QtWidgets.QMenu(self)
@@ -228,86 +227,6 @@ class ResultsToolbar(QtWidgets.QWidget):
                 " border:1px solid #555; border-radius:3px; font-size:11px;"
                 " padding:0px; margin:0px; }"
             )
-
-    @staticmethod
-    def _make_action_button(
-        *, expand: bool, tooltip: str
-    ) -> QtWidgets.QToolButton:
-        btn = QtWidgets.QToolButton()
-        btn.setToolButtonStyle(
-            QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly
-        )
-        btn.setText("+" if expand else "−")  # + or −
-        btn.setToolTip(tooltip)
-        btn.setFixedSize(24, 24)
-        btn.setStyleSheet(
-            "QToolButton { border:1px solid #555; border-radius:3px;"
-            " color:#cccccc; font-size:16px; font-weight:bold;"
-            " padding:0px; margin:0px; }"
-            "QToolButton:pressed { background:rgba(128,128,128,0.25); }"
-        )
-        return btn
-
-    # ── Icon painters ────────────────────────────────────
-
-    @staticmethod
-    def _paint_group_icon() -> QtGui.QIcon:
-        """Tree hierarchy icon for the grouping dropdown."""
-        pm = QtGui.QPixmap(16, 16)
-        pm.fill(QtCore.Qt.GlobalColor.transparent)
-
-        p = QtGui.QPainter(pm)
-        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        color = QtGui.QColor("#cccccc")
-
-        # Parent node (small rounded rect, top-left).
-        p.setPen(QtCore.Qt.PenStyle.NoPen)
-        p.setBrush(color)
-        p.drawRoundedRect(QtCore.QRectF(0.5, 0.5, 5, 3.5), 1, 1)
-
-        # Vertical trunk line.
-        pen = QtGui.QPen(color, 1.6)
-        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-        p.drawLine(QtCore.QPointF(3, 4), QtCore.QPointF(3, 13))
-
-        # Horizontal branches.
-        p.drawLine(QtCore.QPointF(3, 6.5), QtCore.QPointF(6.5, 6.5))
-        p.drawLine(QtCore.QPointF(3, 11.5), QtCore.QPointF(6.5, 11.5))
-
-        # Child nodes (two rounded rects on the right).
-        p.setPen(QtCore.Qt.PenStyle.NoPen)
-        p.drawRoundedRect(QtCore.QRectF(6.5, 4.5, 9, 4), 1.5, 1.5)
-        p.drawRoundedRect(QtCore.QRectF(6.5, 9.5, 9, 4), 1.5, 1.5)
-
-        p.end()
-        return QtGui.QIcon(pm)
-
-    @staticmethod
-    def _paint_sort_icon() -> QtGui.QIcon:
-        """Sliders / equaliser icon for the sorting dropdown."""
-        pm = QtGui.QPixmap(16, 16)
-        pm.fill(QtCore.Qt.GlobalColor.transparent)
-
-        p = QtGui.QPainter(pm)
-        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        color = QtGui.QColor("#cccccc")
-        pen = QtGui.QPen(color, 1.6)
-        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-
-        # Two horizontal rails.
-        p.drawLine(QtCore.QPointF(1.5, 5.5), QtCore.QPointF(14.5, 5.5))
-        p.drawLine(QtCore.QPointF(1.5, 10.5), QtCore.QPointF(14.5, 10.5))
-
-        # Filled knobs at different positions.
-        p.setPen(QtCore.Qt.PenStyle.NoPen)
-        p.setBrush(color)
-        p.drawEllipse(QtCore.QPointF(10, 5.5), 2.6, 2.6)
-        p.drawEllipse(QtCore.QPointF(6, 10.5), 2.6, 2.6)
-
-        p.end()
-        return QtGui.QIcon(pm)
 
     # ── Callbacks ────────────────────────────────────────
 

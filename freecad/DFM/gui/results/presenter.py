@@ -17,6 +17,9 @@ from ...app.document_object import (
 )
 
 from ...core.models import CheckResult, Severity
+from ...core.processes.process import RuleLimit
+from ...core.processes.threshold_resolvers import ThresholdResolver
+from ...core.rules import Rulebook
 from ...core.registries.process_registry import ProcessRegistry
 from ...app.prefs import dfm_params
 from ...gui.results.bridge import DFMViewProvider
@@ -129,6 +132,8 @@ class TaskResultsPresenter:
             self.model.get_grouped_results(),
             self.model.process.active_rules,
             self.model.process.get_criticality,
+            self._rule_limit,
+            self._values_title,
         )
 
         # Activate viewport markers only when the toggle is on.
@@ -141,6 +146,33 @@ class TaskResultsPresenter:
             )
         else:
             self._marker_controller.deactivate()
+
+    def _rule_limit(self, rule: Rulebook) -> RuleLimit | None:
+        """Target and limit for *rule* on the analysed material, for the rule popup.
+
+        Rules whose thresholds come from the analysis setup (such as wall
+        thickness derived from the nozzle diameter) cannot be recomputed
+        here, so their limit is taken from the findings, when there are any.
+        """
+        process = self.model.process
+        if rule in process.archetype.derived_rules:
+            findings = self.model.get_grouped_results().get(rule) or []
+            if findings:
+                return RuleLimit(limit=f"{findings[0].limit:g}")
+            return None
+        material = process.materials.get(self.model.material)
+        resolved = ThresholdResolver().resolve(rule, process, material)
+        for attr in ("target", "limit"):
+            if getattr(resolved, attr) in ("N/A", None):
+                setattr(resolved, attr, "")
+        return resolved
+
+    def _values_title(self, rule: Rulebook) -> str:
+        """Heading for the rule popup's values; only material rules name the material."""
+        process = self.model.process
+        if rule.per_material and rule not in process.archetype.derived_rules:
+            return f"Values for {self.model.material}"
+        return ""
 
     def handle_selection(self, data: CheckResult | list[CheckResult]):
         if self._syncing:

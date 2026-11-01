@@ -4,12 +4,56 @@
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ..rule_cards import INFO_SVG, render_svg_icon
+
+# Rule rows carry their Rulebook member in this role; it enables the info icon.
+RULE_ROLE = QtCore.Qt.ItemDataRole.UserRole + 9
+
+_INFO_SIZE = 14
+_INFO_GAP = 6
+
 
 class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
-    """Custom delegate that renders rule rows and finding rows with distinct visual styles."""
+    """Custom delegate that renders rule rows and finding rows with distinct visual styles.
+
+    Rule rows that carry a rule (``RULE_ROLE``) get a small info icon after
+    the name; hovering it shows the rule's diagram. ``info_rect`` returns
+    where that icon is drawn, so the view can detect the hover.
+    """
 
     _LABEL_COLOR = QtGui.QColor("#aaaaaa")
     _IGNORE_COLOR = QtGui.QColor("#666666")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._info_icons: dict[tuple, QtGui.QIcon] = {}
+        self.hovered_info: QtCore.QPersistentModelIndex = QtCore.QPersistentModelIndex()
+
+    @staticmethod
+    def _label_font(option_font: QtGui.QFont) -> QtGui.QFont:
+        font = QtGui.QFont(option_font)
+        font.setWeight(QtGui.QFont.Weight.Medium)
+        return font
+
+    def info_rect(self, view: QtWidgets.QAbstractItemView, index: QtCore.QModelIndex) -> QtCore.QRect:
+        """Viewport rectangle of the info icon on *index*, or an empty rect."""
+        if not index.isValid() or index.data(RULE_ROLE) is None:
+            return QtCore.QRect()
+        return self._info_rect_for(view.visualRect(index), index, view.font())
+
+    def _info_rect_for(self, rect: QtCore.QRect, index, font: QtGui.QFont) -> QtCore.QRect:
+        text_left = rect.left() + 4 + 16 + 6
+        label = index.data(QtCore.Qt.ItemDataRole.UserRole + 2) or ""
+        width = QtGui.QFontMetrics(self._label_font(font)).horizontalAdvance(label)
+        x = text_left + width + _INFO_GAP
+        y = rect.top() + (rect.height() - _INFO_SIZE) // 2
+        return QtCore.QRect(x, y, _INFO_SIZE, _INFO_SIZE)
+
+    def _info_icon(self, color: QtGui.QColor, ratio: float) -> QtGui.QIcon:
+        key = (color.rgba(), ratio)
+        if key not in self._info_icons:
+            self._info_icons[key] = render_svg_icon(INFO_SVG, color, _INFO_SIZE, ratio)
+        return self._info_icons[key]
 
     def paint(self, painter, option, index):
         painter.save()
@@ -80,6 +124,20 @@ class DFMTreeDelegate(QtWidgets.QStyledItemDelegate):
             painter.setFont(label_font)
             painter.setPen(base_text)
             painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignVCenter, primary)
+
+            # Info icon after the rule name: faded at rest, full on hover.
+            if index.data(RULE_ROLE) is not None:
+                info = self._info_rect_for(rect, index, option.font)
+                if info.right() < rect.right() - total_badge_w - 8:
+                    color = QtGui.QColor(base_text)
+                    hovered = QtCore.QPersistentModelIndex(index) == self.hovered_info
+                    mode = QtGui.QIcon.Mode.Active if hovered else QtGui.QIcon.Mode.Normal
+                    painter.setOpacity(1.0 if hovered else 0.6)
+                    ratio = painter.device().devicePixelRatioF() if painter.device() else 1.0
+                    self._info_icon(color, ratio).paint(
+                        painter, info, QtCore.Qt.AlignmentFlag.AlignCenter, mode
+                    )
+                    painter.setOpacity(1.0)
 
             def draw_badge(text, color, x):
                 badge_rect = QtCore.QRect(x, rect.top() + 5, BADGE_W, rect.height() - 10)
