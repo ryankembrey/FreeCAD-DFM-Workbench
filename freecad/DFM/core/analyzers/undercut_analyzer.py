@@ -13,6 +13,7 @@ from ...core.base import BaseAnalyzer
 from ...core.models import ProcessRequirement
 from ...core.utils import yield_face_uv_grid, get_face_uv_normal, get_point_from_uv
 from ...core.registries import register_analyzer
+from ...core.utils.mold import point_released_by_side_action
 
 
 @register_analyzer("UNDERCUT_ANALYZER")
@@ -23,7 +24,7 @@ class UndercutAnalyzer(BaseAnalyzer):
 
     @property
     def requirements(self) -> set[ProcessRequirement]:
-        return {ProcessRequirement.PULL_DIRECTION}
+        return {ProcessRequirement.PULL_DIRECTION, ProcessRequirement.SIDE_ACTIONS}
 
     @property
     def name(self) -> str:
@@ -46,6 +47,9 @@ class UndercutAnalyzer(BaseAnalyzer):
     ) -> dict[tuple[str, int], list[float]]:
         self.resolve_prefs(kwargs.get("prefs", {}))
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
+        # A point trapped along the pull is fine if a slide, lifter or other
+        # side action can pull straight away from it.
+        self.side_actions = [d for d in (kwargs.get(ProcessRequirement.SIDE_ACTIONS.name) or []) if d]
 
         self.intersector = IntCurvesFace_ShapeIntersector()
         self.intersector.Load(shape, self.intersector_tol)
@@ -100,7 +104,13 @@ class UndercutAnalyzer(BaseAnalyzer):
         self.intersector.Perform(ray_down, 0, float("inf"))
 
         blocked_bottom = self._has_blocking_hit(point)
-        return blocked_top and blocked_bottom
+        if not (blocked_top and blocked_bottom):
+            return False
+        if self.side_actions and point_released_by_side_action(
+            self.intersector, point, normal, self.side_actions, self.self_hit_threshold
+        ):
+            return False
+        return True
 
     def _has_blocking_hit(self, start_point: gp_Pnt) -> bool:
         """

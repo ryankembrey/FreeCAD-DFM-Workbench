@@ -117,15 +117,75 @@ def is_element_ref(ref: str) -> bool:
     return bool(ref) and ref[0] not in "+-−"
 
 
-class DirectionRow(QtWidgets.QWidget):
-    """Label, picked face or edge, +X/+Y/+Z, pick and flip, on one line."""
+# The six axis directions, in the order the direction combo lists them.
+SIGNED_AXES = (
+    ("+X", (1.0, 0.0, 0.0)), ("\u2212X", (-1.0, 0.0, 0.0)),
+    ("+Y", (0.0, 1.0, 0.0)), ("\u2212Y", (0.0, -1.0, 0.0)),
+    ("+Z", (0.0, 0.0, 1.0)), ("\u2212Z", (0.0, 0.0, -1.0)),
+)
 
-    axis_clicked = QtCore.Signal(tuple)
+# A cross, drawn flat: remove this row.
+REMOVE_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>'
+)
+
+FLAT_BUTTON_CSS = """
+QPushButton { border: none; border-radius: 3px; background: transparent; padding: 0px;
+              min-width: 0px; qproperty-iconSize: 16px 16px; }
+QPushButton:hover { background: rgba(127, 127, 127, 40); }
+"""
+
+
+def axis_name(direction: Optional[Sequence[float]]) -> str:
+    """"+X", "\u2212Z" and so on for a direction along an axis, or ""."""
+    index, sign = axis_of(direction)
+    if index < 0:
+        return ""
+    return ("+" if sign > 0 else "\u2212") + AXES[index][0]
+
+
+class _DirectionCombo(QtWidgets.QComboBox):
+    """A combo box that says when its list opens and closes."""
+
+    popup_shown = QtCore.Signal(bool)
+
+    def showPopup(self) -> None:  # noqa: N802 (Qt naming)
+        self.popup_shown.emit(True)
+        super().showPopup()
+
+    def hidePopup(self) -> None:  # noqa: N802 (Qt naming)
+        super().hidePopup()
+        self.popup_shown.emit(False)
+
+
+_ROW_HIGHLIGHT_CSS = (
+    "QWidget#dfmDirectionRow { background: rgba(127, 127, 127, 45); border-radius: 3px; }"
+    " QWidget#dfmDirectionRow QLabel { background: transparent; }"
+)
+
+
+class DirectionRow(QtWidgets.QWidget):
+    """One direction on one line: label, direction combo, pick and flip.
+
+    The combo lists the six axis directions, the face or edge the direction
+    was picked from (when it was), and "Pick a face or edge...". The row
+    only shows the direction; the panel that owns it keeps the value and
+    reacts to the signals.
+    """
+
+    axis_clicked = QtCore.Signal(tuple)  # a signed axis, such as (0, 0, -1)
     pick_clicked = QtCore.Signal()
     flip_clicked = QtCore.Signal()
+    remove_clicked = QtCore.Signal()
+    hovered = QtCore.Signal(bool)  # the mouse entered or left the row
+    editing = QtCore.Signal(bool)  # the direction list opened or closed
 
-    def __init__(self, label: str, parent: Optional[QtWidgets.QWidget] = None):
+    def __init__(self, label: str, removable: bool = False,
+                 parent: Optional[QtWidgets.QWidget] = None, description: str = ""):
         super().__init__(parent)
+        self.setObjectName("dfmDirectionRow")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         row = QtWidgets.QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(4)
@@ -135,41 +195,63 @@ class DirectionRow(QtWidgets.QWidget):
         row.addWidget(self.label)
         row.addStretch(1)
 
-        self.ref_label = QtWidgets.QLabel()
-        self.ref_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
-        row.addWidget(self.ref_label)
-        row.addSpacing(2)
+        name = description or label
+        self.combo = _DirectionCombo()
+        self.combo.popup_shown.connect(self.editing.emit)
+        self.combo.setMinimumWidth(150)
+        self.combo.setMaximumWidth(190)
+        self.combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                 QtWidgets.QSizePolicy.Policy.Fixed)
+        self._tooltip = f"The {name.lower()}: an axis, or a picked face or edge"
+        self.combo.setToolTip(self._tooltip)
+        self.combo.activated.connect(self._on_choice)
+        row.addWidget(self.combo)
 
-        axes = QtWidgets.QHBoxLayout()
-        axes.setSpacing(0)
-        self.axis_btns: list[QtWidgets.QToolButton] = []
-        for i, (name, vec) in enumerate(AXES):
-            btn = QtWidgets.QToolButton()
-            btn.setText(f"+{name}")
-            btn.setCheckable(True)
-            btn.setObjectName("first" if i == 0 else ("last" if i == len(AXES) - 1 else "mid"))
-            btn.setStyleSheet(AXIS_CSS)
-            btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-            btn.setToolTip(f"Point along the {name} axis. Click again to reverse it.")
-            # Keep the check state in step with the value, not with clicks.
-            btn.clicked.connect(lambda _c=False, v=vec: self._on_axis(v))
-            axes.addWidget(btn)
-            self.axis_btns.append(btn)
-        row.addLayout(axes)
-        row.addSpacing(4)
-
-        self.pick_btn = icon_button(PICK_SVG, f"Pick a face or edge for the {label.lower()}",
+        self.pick_btn = icon_button(PICK_SVG, f"Pick a face or edge for the {name.lower()}",
                                     checkable=True)
         self.pick_btn.clicked.connect(lambda _c=False: self.pick_clicked.emit())
         row.addWidget(self.pick_btn)
         self.flip_btn = make_flip_button(lambda _c=False: self.flip_clicked.emit(), size=(28, 26))
         row.addWidget(self.flip_btn)
 
+        self.remove_btn: Optional[QtWidgets.QPushButton] = None
+        if removable:
+            from ..rule_cards import apply_svg_icon
+
+            self.remove_btn = QtWidgets.QPushButton()
+            self.remove_btn.setFixedSize(24, 26)
+            self.remove_btn.setStyleSheet(FLAT_BUTTON_CSS)
+            self.remove_btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+            self.remove_btn.setToolTip(f"Remove {name.lower()}")
+            apply_svg_icon(self.remove_btn, REMOVE_SVG, 16)
+            self.remove_btn.clicked.connect(lambda _c=False: self.remove_clicked.emit())
+            row.addWidget(self.remove_btn)
+
+        # Kept for older callers; the combo replaces them.
+        self.axis_btns: list = []
+        self.ref_label = None
         self._state = (None, "", False, False, "")
 
-    def _on_axis(self, vec: tuple) -> None:
-        self.axis_clicked.emit(vec)
-        self.set_state(*self._state)  # a click toggles the check; put it back
+    def enterEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().enterEvent(event)
+        self.hovered.emit(True)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().leaveEvent(event)
+        self.hovered.emit(False)
+
+    def set_highlighted(self, on: bool) -> None:
+        """Tint the row, as when its arrow is hovered in the 3D view."""
+        self.setStyleSheet(_ROW_HIGHLIGHT_CSS if on else "")
+
+    def _on_choice(self, index: int) -> None:
+        kind = self.combo.itemData(index)
+        if isinstance(kind, tuple) and kind and kind[0] == "axis":
+            if axis_of(self._state[0]) != axis_of(kind[1]) or is_element_ref(self._state[1]):
+                self.axis_clicked.emit(tuple(kind[1]))
+        elif kind == ("pick",):
+            self.pick_clicked.emit()
+        self.set_state(*self._state)  # show the value the panel keeps
 
     def set_state(
         self,
@@ -181,25 +263,34 @@ class DirectionRow(QtWidgets.QWidget):
     ) -> None:
         """Show *direction*, which came from *ref* (an axis like "+Z" or "Face12")."""
         self._state = (direction, ref, flipped, picking, hint)
-        index, sign = axis_of(direction)
-        for i, btn in enumerate(self.axis_btns):
-            btn.setChecked(i == index)
-            prefix = "−" if (i == index and sign < 0) else "+"
-            btn.setText(prefix + AXES[i][0])
-        self.pick_btn.setChecked(picking)
         element = is_element_ref(ref)
+        combo = self.combo
+        combo.blockSignals(True)
+        combo.clear()
+        current = -1
         if picking:
-            text = hint
-        elif element:
-            text = f"{ref}{' (flipped)' if flipped else ''}"
-        else:
-            text = ""
-        self.ref_label.setText(
-            f'<span style="color: {muted_color(self.ref_label)}">{text}</span>' if text else "")
-        self.ref_label.setToolTip(
-            f"Uses the direction of {ref}{', reversed' if flipped else ''}"
-            if element and not picking else "")
-        self.ref_label.setVisible(bool(text))
+            combo.addItem(hint, ("hint",))
+            combo.insertSeparator(combo.count())
+            current = 0
+        for name, vec in SIGNED_AXES:
+            combo.addItem(name, ("axis", vec))
+        if element:
+            combo.insertSeparator(combo.count())
+            combo.addItem(f"{ref}, flipped" if flipped else ref, ("ref",))
+            if not picking:
+                current = combo.count() - 1
+        elif not picking:
+            name = axis_name(direction)
+            for i in range(combo.count()):
+                if combo.itemText(i) == name:
+                    current = i
+        combo.insertSeparator(combo.count())
+        combo.addItem("Pick a face or edge\u2026", ("pick",))
+        combo.setCurrentIndex(current)
+        combo.blockSignals(False)
+        tip = f"Uses the direction of {ref}{', reversed' if flipped else ''}" if element else ""
+        combo.setToolTip(tip or self._tooltip)
+        self.pick_btn.setChecked(picking)
         self.flip_btn.setEnabled(direction is not None)
 
 
