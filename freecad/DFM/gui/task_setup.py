@@ -37,7 +37,7 @@ from ..gui.utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
 from ..gui.utils.pull_preview import PullPreview
 from ..gui.utils.qt_filters import EscapeFilter
 from ..gui.utils.direction_row import (
-    AXES, ICON_BUTTON_CSS, PICK_SVG, DirectionRow, axis_of, icon_button, is_element_ref, muted_color,
+    FLAT_BUTTON_CSS, ICON_BUTTON_CSS, PICK_SVG, DirectionRow, axis_name, axis_of, icon_button, is_element_ref, muted_color,
     style_primary_button,
 )
 from ..gui.utils.arrow_flip import ArrowFlipper
@@ -46,6 +46,7 @@ from ..gui.rule_cards import apply_svg_icon
 # Labels in sentence case, as the FreeCAD handbook asks.
 _REQUIREMENT_LABELS = {
     ProcessRequirement.PULL_DIRECTION: "Pull direction",
+    ProcessRequirement.SIDE_ACTIONS: "Side actions",
     ProcessRequirement.PRINT_ORIENTATION: "Print direction",
     ProcessRequirement.NEUTRAL_PLANE: "Neutral plane",
 }
@@ -165,6 +166,7 @@ class VectorRequirement(RequirementHandler):
     _COLORS = {
         ProcessRequirement.PULL_DIRECTION: PULL_DIRECTION_COLOR,
         ProcessRequirement.PRINT_ORIENTATION: (0.15, 0.45, 1.0),  # blue
+        ProcessRequirement.SIDE_ACTIONS: (0.62, 0.32, 0.9),  # purple
     }
 
     def __init__(self, requirement):
@@ -175,9 +177,12 @@ class VectorRequirement(RequirementHandler):
         self.axis_btns: list[QtWidgets.QToolButton] = []
         self.ref_label: Optional[QtWidgets.QLabel] = None
         # Set by the panel: where an axis direction's arrow sits, and what
-        # to do after the direction changes.
+        # to do after the direction changes, its row is hovered, or its
+        # direction list opens.
         self.center_provider = lambda: App.Vector(0, 0, 0)
         self.on_changed = lambda: None
+        self.on_hover = lambda _handler, _on: None
+        self.on_editing = lambda _handler, _on: None
 
     def pick_hint(self) -> str:
         return "Click a face or edge"
@@ -185,6 +190,7 @@ class VectorRequirement(RequirementHandler):
     def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
         """Label, then the picked face (if any), +X/+Y/+Z, pick and flip."""
         self.row = DirectionRow(self.label)
+        self._connect_row_signals()
         self.row.axis_clicked.connect(self.set_axis)
         self.row.pick_clicked.connect(lambda: on_pick(self))
         self.row.flip_clicked.connect(self.flip)
@@ -194,6 +200,10 @@ class VectorRequirement(RequirementHandler):
         self.ref_label = self.row.ref_label
         layout.addWidget(self.row)
         self.refresh_display()
+
+    def _connect_row_signals(self) -> None:
+        self.row.hovered.connect(lambda on: self.on_hover(self, on))
+        self.row.editing.connect(lambda on: self.on_editing(self, on))
 
     def detach(self) -> None:
         super().detach()
@@ -229,14 +239,9 @@ class VectorRequirement(RequirementHandler):
         self.refresh_display()
 
     def set_axis(self, vec: tuple) -> None:
-        """Point along an axis; clicking the current axis again reverses it."""
-        index, sign = self._axis_index()
-        target = [i for i, (_n, axis) in enumerate(AXES) if axis == vec][0]
-        if index == target:
-            self.flip()
-            return
+        """Point along an axis, such as (0, 0, -1)."""
         self.value = gp_Dir(*vec)
-        self.ref = f"+{AXES[target][0]}"
+        self.ref = axis_name(vec).replace("\u2212", "-")
         self.flipped = False
         self.pnt = self.center_provider()
         self.indicator.show(self.pnt, App.Vector(*vec))
@@ -283,6 +288,260 @@ class VectorRequirement(RequirementHandler):
 
     def remove_indicator(self) -> None:
         self.indicator.remove()
+
+
+# =============================================================================
+
+# A plus: add a side action.
+_ADD_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+)
+
+_SIDE_ACTION_HELP = (
+    "Directions the mold also opens in, besides the main pull: a slide, lifter, "
+    "pickout or hand-loaded core. A face the main pull can't release but a side "
+    "action can is drafted along that side action's direction, and isn't an undercut."
+)
+
+
+class SideActionDirection(VectorRequirement):
+    """One side action: a direction, like the pull direction, numbered in the list."""
+
+    def __init__(self, number: int):
+        self._number = number
+        super().__init__(ProcessRequirement.SIDE_ACTIONS)
+
+    @property
+    def label(self) -> str:
+        return f"Side action {self._number}"
+
+    def build_row(self, layout: QtWidgets.QLayout, on_pick, on_remove=None) -> None:
+        """A numbered row with a remove button, inside the side actions block."""
+        self.row = DirectionRow(self.label, removable=True)
+        self._connect_row_signals()
+        self.row.axis_clicked.connect(self.set_axis)
+        self.row.pick_clicked.connect(lambda: on_pick(self))
+        self.row.flip_clicked.connect(self.flip)
+        if on_remove is not None:
+            self.row.remove_clicked.connect(lambda: on_remove(self))
+        self.pb = self.row.pick_btn
+        self.flip_btn = self.row.flip_btn
+        layout.addWidget(self.row)
+        self.refresh_display()
+
+    def renumber(self, number: int) -> None:
+        """Change the number, and the arrow's label with it."""
+        if number == self._number:
+            return
+        self._number = number
+        shown = self.indicator.base_pnt is not None if hasattr(self.indicator, "base_pnt") else False
+        self.indicator.remove()
+        self.indicator = DirectionIndicator(self._COLORS[self.requirement], self.label)
+        if shown and self.value is not None and self.pnt is not None:
+            self.indicator.show(self.pnt, App.Vector(self.value.X(), self.value.Y(), self.value.Z()))
+
+
+class SideActionsRequirement(RequirementHandler):
+    """The list of side actions: zero or more extra directions the mold opens in.
+
+    Each one is a SideActionDirection with its own row and arrow. Its value
+    is the list of their directions, which may be empty.
+    """
+
+    MAX = 6
+
+    def __init__(self, requirement: ProcessRequirement):
+        self.items: list[SideActionDirection] = []
+        super().__init__(requirement)
+        self.active: Optional[SideActionDirection] = None
+        # Set by the panel.
+        self.bounds_provider = lambda: None
+        self.pull_provider = lambda: None
+        self.on_changed = lambda: None
+        self.on_structure_changed = lambda: None
+        self.on_hover = lambda _handler, _on: None
+        self.on_editing = lambda _handler, _on: None
+        self._add_btn: Optional[QtWidgets.QPushButton] = None
+        self.enabled = False  # the "Side actions" box
+
+    @property
+    def value(self):
+        if not self.enabled:
+            return []
+        return [item.value for item in self.items if item.value is not None]
+
+    @value.setter
+    def value(self, _ignored) -> None:
+        pass  # the list follows its items
+
+    def is_satisfied(self) -> bool:
+        return True  # none is fine
+
+    def clear(self) -> None:
+        for item in list(self.items):
+            item.remove_indicator()
+        self.items = []
+        self.active = None
+
+    # -- Rows --------------------------------------------------------------
+
+    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
+        """A checkbox, then (when ticked) the side actions in an indented block."""
+        box = QtWidgets.QCheckBox(self.label)
+        box.setChecked(self.enabled)
+        box.setToolTip(_SIDE_ACTION_HELP)
+        box.setMinimumHeight(28)
+        box.toggled.connect(self.set_enabled)
+        layout.addWidget(box)
+        if not self.enabled:
+            return
+
+        # Indented, with a line down the left: these belong together.
+        holder = QtWidgets.QWidget()
+        outer = QtWidgets.QHBoxLayout(holder)
+        outer.setContentsMargins(4, 0, 0, 0)
+        outer.setSpacing(0)
+        block = QtWidgets.QFrame()
+        block.setObjectName("dfmSideActions")
+        block.setStyleSheet(
+            "QFrame#dfmSideActions { border: none; border-left: 2px solid rgba(127, 127, 127, 110); }")
+        rows = QtWidgets.QVBoxLayout(block)
+        rows.setContentsMargins(8, 0, 0, 0)
+        rows.setSpacing(2)
+        outer.addWidget(block)
+
+        for item in self.items:
+            item.build_row(rows, lambda _h, it=item: self._pick(it, on_pick), self.remove)
+            if item.value is not None and item.pnt is not None:
+                v = item.value
+                item.indicator.show(item.pnt, App.Vector(v.X(), v.Y(), v.Z()))
+
+        add_row = QtWidgets.QHBoxLayout()
+        add_row.setContentsMargins(0, 2, 0, 0)
+        self._add_btn = QtWidgets.QPushButton("Add side action")
+        self._add_btn.setStyleSheet(FLAT_BUTTON_CSS.replace("padding: 0px", "padding: 3px 6px"))
+        self._add_btn.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._add_btn.setToolTip("Add a slide, lifter or pickout direction")
+        apply_svg_icon(self._add_btn, _ADD_SVG, 14)
+        self._add_btn.setEnabled(len(self.items) < self.MAX)
+        self._add_btn.clicked.connect(lambda _c=False: self.add())
+        add_row.addWidget(self._add_btn)
+        add_row.addStretch(1)
+        rows.addLayout(add_row)
+        layout.addWidget(holder)
+
+    def set_enabled(self, on: bool) -> None:
+        """Tick or untick the box. Side actions are kept, just not used, while unticked."""
+        if on == self.enabled:
+            return
+        self.enabled = on
+        if on and not self.items:
+            self.add()  # one to start with; add() rebuilds the rows
+            return
+        if not on:
+            self.remove_indicator()
+        self.on_structure_changed()
+        self.on_changed()
+
+    def _pick(self, item: SideActionDirection, on_pick) -> None:
+        self.active = item
+        on_pick(self)
+
+    def detach(self) -> None:
+        super().detach()
+        self._add_btn = None
+        for item in self.items:
+            item.detach()
+
+    def refresh_display(self) -> None:
+        for item in self.items:
+            item.refresh_display()
+
+    def reset_ui(self) -> None:
+        for item in self.items:
+            item.reset_ui()
+
+    def enter_picking_ui(self) -> None:
+        if self.active is not None:
+            self.active.enter_picking_ui()
+
+    def apply_selection(self) -> bool:
+        return self.active.apply_selection() if self.active is not None else False
+
+    def remove_indicator(self) -> None:
+        for item in self.items:
+            item.remove_indicator()
+
+    # -- Adding and removing -------------------------------------------------
+
+    def anchor_for(self, item: SideActionDirection):
+        """Where a side action's arrow sits: on the side of the part it comes from."""
+        bb = self.bounds_provider()
+        if bb is None:
+            return App.Vector(0, 0, 0)
+        center = bb.Center
+        if item.value is None:
+            return center
+        d = item.value
+        reach = (abs(d.X()) * bb.XLength + abs(d.Y()) * bb.YLength + abs(d.Z()) * bb.ZLength) / 2
+        return App.Vector(center.x + d.X() * reach, center.y + d.Y() * reach, center.z + d.Z() * reach)
+
+    def _free_axis(self) -> tuple:
+        """The axis direction across the pull that no side action uses yet."""
+        pull = self.pull_provider()
+        used = {(round(i.value.X()), round(i.value.Y()), round(i.value.Z()))
+                for i in self.items if i.value is not None}
+        axes = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+        if pull is not None:
+            axes.sort(key=lambda a: abs(a[0] * pull.X() + a[1] * pull.Y() + a[2] * pull.Z()))
+        for axis in axes:
+            if axis not in used:
+                return axis
+        return axes[0]
+
+    def add(self) -> None:
+        if len(self.items) >= self.MAX:
+            return
+        item = SideActionDirection(len(self.items) + 1)
+        item.on_changed = self.on_changed
+        item.on_hover = lambda h, on: self.on_hover(h, on)
+        item.on_editing = lambda h, on: self.on_editing(h, on)
+        item.center_provider = lambda it=item: self.anchor_for(it)
+        axis = self._free_axis()
+        item.value = gp_Dir(*axis)
+        name = {(1, 0, 0): "X", (0, 1, 0): "Y", (0, 0, 1): "Z"}
+        sign = "+" if sum(axis) > 0 else "-"
+        item.ref = sign + name[tuple(abs(c) for c in axis)]
+        item.pnt = self.anchor_for(item)
+        if self.bounds_provider() is not None:
+            item.indicator.show(item.pnt, App.Vector(*axis))
+        self.items.append(item)
+        self.on_structure_changed()
+        self.on_changed()
+
+    def remove(self, item: SideActionDirection) -> None:
+        if item not in self.items:
+            return
+        item.remove_indicator()
+        self.items.remove(item)
+        if self.active is item:
+            self.active = None
+        for number, other in enumerate(self.items, start=1):
+            other.renumber(number)
+        self.on_structure_changed()
+        self.on_changed()
+
+    def move_arrows(self) -> None:
+        """Put the arrows back on the sides of the part (after the model changes)."""
+        if not self.enabled:
+            return
+        for item in self.items:
+            if item.value is None or item.picked_element():
+                continue
+            item.pnt = self.anchor_for(item)
+            v = item.value
+            item.indicator.show(item.pnt, App.Vector(v.X(), v.Y(), v.Z()))
 
 
 # =============================================================================
@@ -405,6 +664,7 @@ class NumericRequirement(RequirementHandler):
 
 REQUIREMENT_HANDLER_TYPES: dict[ProcessRequirement, type[RequirementHandler]] = {
     ProcessRequirement.PULL_DIRECTION: VectorRequirement,
+    ProcessRequirement.SIDE_ACTIONS: SideActionsRequirement,
     ProcessRequirement.PRINT_ORIENTATION: VectorRequirement,
     ProcessRequirement.NEUTRAL_PLANE: PlaneRequirement,
     ProcessRequirement.NOZZLE_DIAMETER: NumericRequirement,
@@ -445,6 +705,20 @@ class TaskSetup:
             if isinstance(handler, VectorRequirement):
                 handler.center_provider = self._model_center
                 handler.on_changed = self._direction_changed
+        sides = self.handlers[ProcessRequirement.SIDE_ACTIONS]
+        sides.bounds_provider = lambda: self.target_shape.BoundBox if self.target_shape else None
+        sides.pull_provider = lambda: self.handlers[ProcessRequirement.PULL_DIRECTION].value
+        sides.on_changed = self._direction_changed
+        sides.on_structure_changed = self._side_actions_changed
+        # Which direction's row or arrow is hovered, and which is being edited.
+        self._hovered_dir = None
+        self._arrow_hovered_dir = None
+        self._editing_dir = None
+        for handler in self.handlers.values():
+            if isinstance(handler, (VectorRequirement, SideActionsRequirement)):
+                handler.on_hover = self._row_hovered
+                handler.on_editing = self._row_editing
+        self._flipper.on_hover = self._arrow_hovered
 
         self.is_running = False
         self.abort_requested = False
@@ -604,6 +878,76 @@ class TaskSetup:
         for handler in self.handlers.values():
             if isinstance(handler, VectorRequirement) and handler.is_satisfied():
                 self._flipper.add(handler.indicator, handler.flip)
+            elif isinstance(handler, SideActionsRequirement) and handler.enabled:
+                for item in handler.items:
+                    if item.is_satisfied():
+                        self._flipper.add(item.indicator, item.flip)
+
+    # -- Matching rows and arrows -----------------------------------------
+
+    def _directions(self) -> list:
+        """Every direction shown in the panel: its rows and arrows."""
+        out = []
+        for req in (self._active_requirements() if self.process else []):
+            handler = self.handlers[req]
+            if isinstance(handler, VectorRequirement):
+                out.append(handler)
+            elif isinstance(handler, SideActionsRequirement) and handler.enabled:
+                out.extend(handler.items)
+        return out
+
+    def _row_hovered(self, handler, on: bool) -> None:
+        if on:
+            self._hovered_dir = handler
+        elif self._hovered_dir is handler:
+            self._hovered_dir = None
+        self._update_emphasis()
+
+    def _row_editing(self, handler, on: bool) -> None:
+        if on:
+            self._editing_dir = handler
+        elif self._editing_dir is handler:
+            self._editing_dir = None
+        self._update_emphasis()
+
+    def _arrow_hovered(self, indicator) -> None:
+        """An arrow in the 3D view was hovered (or left): tint its row."""
+        self._arrow_hovered_dir = None
+        for handler in self._directions():
+            match = indicator is not None and handler.indicator is indicator
+            if match:
+                self._arrow_hovered_dir = handler
+            if handler.row is not None:
+                handler.row.set_highlighted(match)
+        self._update_emphasis()
+
+    def _update_emphasis(self) -> None:
+        """Highlight the arrow being edited (dimming the rest), else the one hovered."""
+        editing = self._editing_dir
+        if editing is None and self.picking_mode in self.handlers:
+            editing = self._direction_of(self.handlers[self.picking_mode])
+        hovered = self._hovered_dir or self._arrow_hovered_dir
+        for handler in self._directions():
+            if editing is not None:
+                state = "highlight" if handler is editing else "dim"
+            else:
+                state = "highlight" if handler is hovered else "normal"
+            handler.indicator.set_emphasis(state)
+
+    def _side_actions_changed(self) -> None:
+        """A side action was added or removed: rebuild the rows and the clickable arrows."""
+        self._flipper.detach()
+        self._update_options_visibility()
+        self._register_arrows()
+
+    @staticmethod
+    def _direction_of(handler) -> Optional["VectorRequirement"]:
+        """The direction being picked for *handler*: itself, or the side action picked."""
+        if isinstance(handler, VectorRequirement):
+            return handler
+        if isinstance(handler, SideActionsRequirement):
+            return handler.active
+        return None
 
     def _on_escape(self) -> bool:
         """Cancel picking mode on Escape. Returns True if handled."""
@@ -612,8 +956,8 @@ class TaskSetup:
             self._flipper.set_enabled(True)
             # Restore committed indicator if the handler already had a value
             if self.picking_mode in self.handlers:
-                handler = self.handlers[self.picking_mode]
-                if isinstance(handler, VectorRequirement) and handler.is_satisfied():
+                handler = self._direction_of(self.handlers[self.picking_mode])
+                if handler is not None and handler.is_satisfied():
                     handler.indicator.set_visible(True)
             self.picking_mode = None
             self._reset_picking_ui()
@@ -629,8 +973,8 @@ class TaskSetup:
         """Create the preview arrow once for the current picking session."""
         if self._preview is not None:
             return
-        handler = self.handlers.get(self.picking_mode)
-        if isinstance(handler, VectorRequirement):
+        handler = self._direction_of(self.handlers.get(self.picking_mode))
+        if handler is not None:
             color = VectorRequirement._COLORS.get(handler.requirement, PULL_DIRECTION_COLOR)
             self._preview = PullPreview(color)
             self._preview.begin()
@@ -639,7 +983,7 @@ class TaskSetup:
         """Show a live direction preview arrow when hovering over geometry during pick mode."""
         if not self.picking_mode or self.picking_mode == "model":
             return
-        if not isinstance(self.handlers.get(self.picking_mode), VectorRequirement):
+        if self._direction_of(self.handlers.get(self.picking_mode)) is None:
             return
         if self._preview is not None:
             self._preview.show_for(doc_name, obj_name, sub_name)
@@ -669,8 +1013,9 @@ class TaskSetup:
         if success:
             self._cleanup_preview()
             # Restore committed indicator visibility (was hidden while picking)
-            if picked_handler and isinstance(picked_handler, VectorRequirement):
-                picked_handler.indicator.set_visible(True)
+            picked = self._direction_of(picked_handler)
+            if picked is not None:
+                picked.indicator.set_visible(True)
             self.picking_mode = None
             self._reset_picking_ui()
             Gui.Selection.clearSelection()
@@ -687,6 +1032,9 @@ class TaskSetup:
 
         self._cursor.pop()
         self._flipper.set_enabled(True)
+        self._editing_dir = None
+        if self.picking_mode not in self.handlers:
+            self._update_emphasis()
 
     def _toggle_pick_mode_model(self):
         if self.picking_mode == "model":
@@ -720,8 +1068,9 @@ class TaskSetup:
         if self.picking_mode == handler.requirement:
             self._cleanup_preview()
             # Restore the committed indicator if the handler already had a value
-            if isinstance(handler, VectorRequirement) and handler.is_satisfied():
-                handler.indicator.set_visible(True)
+            direction = self._direction_of(handler)
+            if direction is not None and direction.is_satisfied():
+                direction.indicator.set_visible(True)
             self.picking_mode = None
             self._reset_picking_ui()
             return
@@ -735,11 +1084,13 @@ class TaskSetup:
         self._reset_picking_ui()
         self.picking_mode = handler.requirement
         handler.enter_picking_ui()
+        self._update_emphasis()
         self._flipper.set_enabled(False)
         # Hide the committed indicator while picking a new direction
-        if isinstance(handler, VectorRequirement):
-            if handler.is_satisfied():
-                handler.indicator.set_visible(False)
+        direction = self._direction_of(handler)
+        if direction is not None:
+            if direction.is_satisfied():
+                direction.indicator.set_visible(False)
             self._ensure_preview_indicator()
         self._cursor.push()
 
@@ -763,6 +1114,7 @@ class TaskSetup:
                 handler.pnt = self._model_center()
                 v = handler.value
                 handler.indicator.show(handler.pnt, App.Vector(v.X(), v.Y(), v.Z()))
+        self.handlers[ProcessRequirement.SIDE_ACTIONS].move_arrows()
         self._register_arrows()
         return True
 
@@ -834,6 +1186,7 @@ class TaskSetup:
                     item = layout_node.takeAt(0)
                     widget = item.widget()
                     if widget is not None:
+                        widget.hide()  # gone now, not only when the event loop next runs
                         widget.deleteLater()
                     else:
                         delete_items(item.layout())
@@ -842,6 +1195,8 @@ class TaskSetup:
 
         for handler in self.handlers.values():
             handler.detach()
+        # The rows are gone, so nothing is hovered or edited any more.
+        self._hovered_dir = self._arrow_hovered_dir = self._editing_dir = None
 
     def _active_requirements(self) -> list[ProcessRequirement]:
         """Active requirements that have a handler, in a fixed, stable order."""
@@ -1109,6 +1464,7 @@ class TaskSetup:
         run_settings = dict(run_kwargs)
         # Remove non-serialisable OCP objects before storing
         run_settings.pop(ProcessRequirement.PULL_DIRECTION.name, None)
+        run_settings.pop(ProcessRequirement.SIDE_ACTIONS.name, None)
         run_settings.pop(ProcessRequirement.PRINT_ORIENTATION.name, None)
         run_settings.pop(ProcessRequirement.NEUTRAL_PLANE.name, None)
         run_settings.pop("prefs", None)

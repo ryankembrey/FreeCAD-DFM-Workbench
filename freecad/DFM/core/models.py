@@ -61,6 +61,8 @@ class CheckResult:
 class ProcessRequirement(Enum):
     NONE = "NONE"
     PULL_DIRECTION = "PULL_DIRECTION"
+    # Extra directions a mold opens in: slides, lifters, pickouts (a list).
+    SIDE_ACTIONS = "SIDE_ACTIONS"
     NEUTRAL_PLANE = "NEUTRAL_PLANE"
     PRINT_ORIENTATION = "PRINT_ORIENTATION"
     NOZZLE_DIAMETER = "NOZZLE_DIAMETER"

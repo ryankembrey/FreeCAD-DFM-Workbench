@@ -58,6 +58,12 @@ class DirectionIndicator:
         self.world_per_px = 0.0
         self.viewport_height_px = 0
 
+        # "normal", "highlight" (the row is hovered or being edited) or "dim"
+        # (another direction is being edited).
+        self._emphasis = "normal"
+        self.arrow_mat = None
+        self.emphasis_scale = None
+
         # A faded copy pointing the other way, shown on hover to preview a flip.
         self.arrow_group = None
         self.ghost_switch = None
@@ -100,12 +106,16 @@ class DirectionIndicator:
             mat.specularColor = (0.0, 0.0, 0.0)
             mat.shininess = 0.0
             arrow_sep.addChild(mat)
+            self.arrow_mat = mat
 
             self.view_trans = coin.SoTransform()
             arrow_sep.addChild(self.view_trans)
 
             self.scale_node = coin.SoScale()
             arrow_sep.addChild(self.scale_node)
+            # Only the arrow itself grows when highlighted, not the flip ghost.
+            self.emphasis_scale = coin.SoScale()
+            arrow_sep.addChild(self.emphasis_scale)
 
             arrow_group = coin.SoSeparator()
             cyl_height, cyl_radius = 20.0, 1.0
@@ -157,6 +167,7 @@ class DirectionIndicator:
 
             if hasattr(view, "getSceneGraph"):
                 view.getSceneGraph().addChild(self.view_node)  # type: ignore
+            self._apply_emphasis()
 
         if self.view_trans is not None:
             self.view_trans.translation.setValue(base_pnt.x, base_pnt.y, base_pnt.z)
@@ -342,6 +353,27 @@ class DirectionIndicator:
         grey = (0.78, 0.78, 0.78)
         return tuple(c + (g - c) * 0.55 for c, g in zip(self.color, grey))
 
+    def set_emphasis(self, state: str) -> None:
+        """"highlight" brightens and enlarges the arrow, "dim" fades it, "normal" restores it."""
+        if state == self._emphasis:
+            return
+        self._emphasis = state
+        self._apply_emphasis()
+
+    def _apply_emphasis(self) -> None:
+        if self.arrow_mat is None or self.emphasis_scale is None:
+            return
+        color, transparency, size = self.color, 0.0, 1.0
+        if self._emphasis == "highlight":
+            color = tuple(c + (1.0 - c) * 0.3 for c in self.color)
+            size = 1.2
+        elif self._emphasis == "dim":
+            transparency = 0.7
+        self.arrow_mat.diffuseColor = color
+        self.arrow_mat.ambientColor = color
+        self.arrow_mat.transparency.setValue(transparency)
+        self.emphasis_scale.scaleFactor.setValue(size, size, size)
+
     def set_ghost(self, visible: bool) -> None:
         """Show or hide the faded reverse arrow that previews a flip."""
         if self.ghost_switch is not None:
@@ -410,6 +442,8 @@ class DirectionIndicator:
             self.arrow_group = None
             self.ghost_switch = None
             self.ghost_trans = None
+            self.arrow_mat = None
+            self.emphasis_scale = None
 
     def _refresh_view(self, view):
         try:

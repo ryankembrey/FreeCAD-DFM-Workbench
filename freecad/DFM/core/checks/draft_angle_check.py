@@ -10,6 +10,7 @@ from ...core.base.base_check import BaseCheck
 from ...core.processes.process import RuleLimit, RuleFeedback
 from ...core.rules import Rulebook
 from ...core.registries import register_check
+from ...core.utils.mold import side_action_of
 
 
 @register_check(Rulebook.MIN_DRAFT_ANGLE)
@@ -71,10 +72,19 @@ class DraftAngleCheck(BaseCheck):
 
             threshold = effective_limit if severity == Severity.ERROR else effective_target
 
+            # Faces a slide or lifter forms are drafted along its travel.
+            side = side_action_of(measured)
+            where = f" (side action {side})" if side else ""
+            if side:
+                formatted_msg = (
+                    f"{formatted_msg} This face is formed by side action {side}, so its draft "
+                    f"is measured along that side action's direction, not the main pull."
+                ).strip()
+
             results.append(
                 CheckResult(
                     rule_id=rule,
-                    overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}",
+                    overview=f"{measured:.2f}{unit} < {threshold:.2f}{unit}{where}",
                     message=formatted_msg,
                     severity=severity,
                     failing_geometry=[face],

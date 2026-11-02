@@ -59,6 +59,8 @@ class ArrowFlipper(QtCore.QObject):
         self._enabled = True
         self._cursor_pushed = False
         self._pressed = None
+        # Called with the hovered indicator (or None) when that changes.
+        self.on_hover: Callable[[Optional[object]], None] = lambda _indicator: None
 
     # ------------------------------------------------------------------
 
@@ -168,6 +170,10 @@ class ArrowFlipper(QtCore.QObject):
             except Exception:
                 pass
         self._hover = indicator
+        try:
+            self.on_hover(indicator)
+        except Exception:
+            pass
         if indicator is not None:
             indicator.set_ghost(True)
             if not self._cursor_pushed:

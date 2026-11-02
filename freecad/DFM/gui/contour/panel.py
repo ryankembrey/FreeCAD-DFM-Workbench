@@ -19,10 +19,10 @@ from ..utils.body_select import auto_select_body
 from ..utils.colormap_combo import populate_colormap_combo
 from ..utils.arrow_flip import ArrowFlipper
 from ..utils.direction_row import (
-    AXES,
     PICK_SVG,
     DirectionRow,
     ViewSwitch,
+    axis_name,
     icon_button,
     muted_color,
     style_primary_button,
@@ -177,7 +177,7 @@ class ContourTaskPanel:
             og2 = self._grid(opt_box)
             orow = 0
             if self.measure.needs_pull_direction:
-                self.direction_row = DirectionRow("Pull direction")
+                self.direction_row = DirectionRow("Pull direction", color=PULL_DIRECTION_COLOR)
                 self.direction_row.pick_btn.setToolTip(
                     "Pick a face or edge. Planar faces give their normal; cylindrical, conical "
                     "and toroidal faces and circular edges give their axis; other edges give "
@@ -563,17 +563,12 @@ class ContourTaskPanel:
         self._mark_dirty()
 
     def _on_pull_axis(self, vec):
-        """Point along an axis; clicking the current axis again reverses it."""
+        """Point along an axis, such as (0, 0, -1)."""
         if self.picking_mode == "pull":
             self.picking_mode = None
             self._reset_pick_ui()
-        target = App.Vector(*vec)
-        if abs(abs(App.Vector(self.pull_dir).normalize().dot(target)) - 1.0) < 1e-6:
-            self._on_flip_pull()
-            return
-        name = [n for n, axis in AXES if axis == tuple(vec)][0]
-        self.pull_dir = target
-        self.pull_ref = f"+{name}"
+        self.pull_dir = App.Vector(*vec)
+        self.pull_ref = axis_name(vec).replace("\u2212", "-")
         self.pull_flipped = False
         self.pull_anchor = None  # the arrow sits at the model's center
         self._refresh_direction_row()
