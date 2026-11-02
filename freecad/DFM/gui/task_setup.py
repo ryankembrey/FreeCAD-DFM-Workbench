@@ -821,26 +821,22 @@ class TaskSetup:
         self.run_box = run_box
 
     def _populate_categories(self):
-        """Fill the process list: every process, under a heading for its category."""
+        """Fill the process list: every process, grouped by category with a divider between."""
         combo = self.form.cbManProcess
         combo.blockSignals(True)
         combo.clear()
-        model = combo.model()
         processes = []
         for category in self.registry.get_categories():
             members = self.registry.get_processes_for_category(category)
             if not members:
                 continue
+            # A divider between categories; the category itself shows in
+            # each process's tooltip (headings can come back with more processes).
             if combo.count():
                 combo.insertSeparator(combo.count())
-            combo.addItem(category)
-            heading = model.item(combo.count() - 1)
-            heading.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
-            font = heading.font()
-            font.setBold(True)
-            heading.setFont(font)
             for process in members:
                 combo.addItem(process.name, userData=process.name)
+                combo.setItemData(combo.count() - 1, category, QtCore.Qt.ItemDataRole.ToolTipRole)
                 processes.append(process.name)
         combo.setCurrentIndex(-1)
         if len(processes) == 1:
