@@ -33,6 +33,8 @@
     <!-- Dependencies -->
     <depend type="python">cadquery-ocp</depend>
     <depend type="python">gmsh</depend>
+    <depend type="python">scipy</depend>
+    <depend type="python">numpy</depend>
 
     <!-- Urls -->
     <url type="repository" branch="main">https://github.com/ryankembrey/FreeCAD-DFM-Workbench</url>

@@ -317,7 +317,7 @@ def generate_uniform_mesh(shape, element_size: float, with_curvature: bool = Fal
         )
 
     App.Console.PrintMessage(
-        f"DFM contour: meshed at {element_size:.3f} mm -> "
+        f"DFM: meshed at {element_size:.3f} mm -> "
         f"{len(vertices)} nodes, {len(triangles)} triangles.\n"
     )
     return UniformMesh(

@@ -13,6 +13,7 @@ from .gui.preferences import (
     DFMPreferencesAnalyzers,
     DFMPreferencesResults,
     DFMPreferencesContour,
+    DFMPreferencesMoldFlow,
 )
 from .gui.report.preferences_page import DFMPreferencesReports
 from .gui import tools as _dfm_contour_tools
@@ -36,6 +37,8 @@ class DFMWorkbench(Gui.Workbench):
             "DFM_ThicknessAnalysis",
             "DFM_UndercutAnalysis",
             "DFM_CurvatureAnalysis",
+            "Separator",
+            "DFM_MoldFlowAnalysis",
         ]
         self.appendToolbar("DFM Analysis", self.list)
         self.appendMenu("DFM", self.list)
@@ -68,6 +71,7 @@ Gui.addPreferencePage(DFMPreferencesResults, "DFM")
 Gui.addPreferencePage(DFMPreferencesReports, "DFM")
 Gui.addPreferencePage(DFMPreferencesAnalyzers, "DFM")
 Gui.addPreferencePage(DFMPreferencesContour, "DFM")
+Gui.addPreferencePage(DFMPreferencesMoldFlow, "DFM")
 
 # Install the shape-change observer at module load so it fires for
 # documents opened before the DFM workbench is first activated.
