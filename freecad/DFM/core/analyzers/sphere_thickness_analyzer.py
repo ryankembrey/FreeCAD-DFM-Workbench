@@ -32,6 +32,9 @@ from ...core.utils.geometry import (
 
 @register_analyzer("SPHERE_THICKNESS_ANALYZER")
 class SphereThicknessAnalyzer(BaseAnalyzer):
+    parallel = True
+    relative_cost = 250  # ~ms per face (see BaseAnalyzer.relative_cost)
+
     @property
     def analysis_type(self) -> str:
         return "SPHERE_THICKNESS_ANALYZER"
@@ -49,27 +52,25 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         self.intersector_tol = prefs.get("SphereIntersectorTol", 1e-3)
         self.deflection = prefs.get("SphereDeflection", 1e-3)
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], list[float]]:
-        self.resolve_prefs(kwargs.get("prefs", {}))
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self._setup_kernel_tools(shape)
         self.face_index = face_index
-        self._check_abort = check_abort
+        self._check_abort = getattr(self, "_check_abort", None)
 
-        results = {}
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            thicknesses = self._analyze_face(face)
-            if thicknesses:
-                results[("Face", face_index.index_of(face))] = thicknesses
+    def analyze(self, face: TopoDS_Face) -> Optional[list[float]]:
+        """The sphere thicknesses measured on one face.
 
-        return results
+        A sphere that ends up touching another face measures that face too: the
+        value is contributed to it (see BaseAnalyzer.merge()).
+        """
+        return self._analyze_face(face) or None
 
     def _setup_kernel_tools(self, shape: TopoDS_Shape):
         """Initializes heavy OpenCascade tools once per shape."""
@@ -91,7 +92,6 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
         self.dist_tool.LoadS2(face_compound)
 
         self.shared_vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Vertex()
-        self.face_seeds = collections.defaultdict(list)
 
     def _analyze_face(self, face: TopoDS_Face) -> list[float]:
         """Orchestrates sampling strategy and broad-phase caching for a face."""
@@ -112,14 +112,6 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
             t = self._calculate_sphere_thickness(face, test_u, test_v, min_to_beat)
             visited_uvs[key] = t
             return t
-
-        # Inject seeds from neighbors
-        face_idx = self.face_index.index_of(face)
-        for s_u, s_v, s_thick in self.face_seeds.get(face_idx, []):
-            visited_uvs[(round(s_u, 5), round(s_v, 5))] = s_thick
-            thicknesses.append(s_thick)
-            if s_thick > max_t:
-                max_t, best_uv = s_thick, (s_u, s_v)
 
         # Check center
         u_mid, v_mid = get_face_uv_center(face)
@@ -277,8 +269,7 @@ class SphereThicknessAnalyzer(BaseAnalyzer):
                     if self.dist_tool.SupportTypeShape2(i) == BRepExtrema_IsInFace:
                         other_face = TopoDS.Face_s(self.dist_tool.SupportOnShape2(i))
                         if not other_face.IsSame(origin_face):
-                            u_other, v_other = self.dist_tool.ParOnFaceS2(i)
                             other_idx = self.face_index.index_of(other_face)
-                            self.face_seeds[other_idx].append((u_other, v_other, thickness))
+                            self.contribute(("Face", other_idx), thickness)
 
         return thickness

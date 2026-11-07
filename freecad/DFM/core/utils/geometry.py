@@ -114,7 +114,8 @@ def get_adaptive_sample_count(face: TopoDS_Face, min_samples: int, max_samples: 
     """
     props = GProp_GProps()
     BRepGProp.SurfaceProperties_s(face, props)
-    return int(max(min_samples, min(max_samples, 2 + (props.Mass() ** 0.5) / 10)))
+    # abs(): OCCT gives some faces a negative area, whose square root is complex.
+    return int(max(min_samples, min(max_samples, 2 + (abs(props.Mass()) ** 0.5) / 10)))
 
 
 def yield_face_uv_grid(

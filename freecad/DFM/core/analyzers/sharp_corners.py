@@ -25,6 +25,9 @@ from ...core.utils.geometry import EdgeIndex, FaceIndex, get_face_uv_normal
 
 @register_analyzer("SHARP_CORNER_ANALYZER")
 class SharpCornersAnalyzer(BaseAnalyzer):
+    relative_cost = 0.2  # ~ms per edge (see BaseAnalyzer.relative_cost)
+    item_kind = "Edge"
+
     @property
     def name(self) -> str:
         return "Sharp Corner Analyzer"
@@ -46,15 +49,14 @@ class SharpCornersAnalyzer(BaseAnalyzer):
         TopExp.MapShapes_s(shape, TopAbs_EDGE, edge_map)
         return edge_map.Extent()
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], tuple[float, bool]]:
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.edge_face_map = TopTools_IndexedDataMapOfShapeListOfShape()
         TopExp.MapShapesAndAncestors_s(
             shape,
@@ -63,14 +65,8 @@ class SharpCornersAnalyzer(BaseAnalyzer):
             self.edge_face_map,
         )
 
-        results: dict[tuple[str, int], tuple[float, bool]] = {}
-
-        for edge in self.iter_edges(shape, progress_cb, check_abort):
-            result = self._analyze_edge(edge)
-            if result is not None:
-                results[("Edge", edge_index.index_of(edge))] = result
-
-        return results
+    def analyze(self, edge: TopoDS_Edge) -> Optional[tuple[float, bool]]:
+        return self._analyze_edge(edge)
 
     def _analyze_edge(
         self,

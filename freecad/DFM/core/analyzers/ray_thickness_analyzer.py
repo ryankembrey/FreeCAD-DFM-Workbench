@@ -35,6 +35,9 @@ EDGE_CROSSING_GAP = 0.02
 
 @register_analyzer("RAY_THICKNESS_ANALYZER")
 class RayThicknessAnalyzer(BaseAnalyzer):
+    parallel = True
+    relative_cost = 12  # ~ms per face (see BaseAnalyzer.relative_cost)
+
     @property
     def analysis_type(self) -> str:
         return "RAY_THICKNESS_ANALYZER"
@@ -50,36 +53,29 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         self.intersector_tol = prefs.get("RayIntersectorTol", 1e-3)
         cone_deg = prefs.get("RayNormalCone", 5.0)
         self.normal_cone_cos = math.cos(math.radians(180.0 - cone_deg))
-        self.seed_threshold: float = prefs.get("RaySeedCoverageThreshold", 50) / 100
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], list[float]]:
-        """
-        Calculates the minimum thickness for all faces of a given TopoDS_Shape.
-        """
-        self.resolve_prefs(kwargs.get("prefs", {}))
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.face_index = face_index
 
         self.intersector = IntCurvesFace_ShapeIntersector()
         self.intersector.Load(shape, self.intersector_tol)
-
-        self.face_seeds: dict[int, list[tuple[float, float, float]]] = collections.defaultdict(list)
-        self.measured_faces: set[int] = set()
         self._shared_edges = self._build_shared_edges(shape, face_index)
 
-        results = {}
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            thicknesses = self._ray_cast_for_face(face)
-            if thicknesses:
-                results[("Face", face_index.index_of(face))] = thicknesses
-        return results
+    def analyze(self, face: TopoDS_Face) -> Optional[list[float]]:
+        """The wall thicknesses measured by rays from one face.
+
+        A ray that crosses a wall also measures the faces it enters and exits
+        through: those values are contributed to them (see BaseAnalyzer.merge()),
+        so every face gets its own rays' values and every other ray's through it.
+        """
+        return self._ray_cast_for_face(face) or None
 
     @staticmethod
     def _build_shared_edges(shape: TopoDS_Shape, face_index: FaceIndex) -> dict[tuple[int, int], list]:
@@ -119,21 +115,10 @@ class RayThicknessAnalyzer(BaseAnalyzer):
         Ray cast the given face and return a list of thickness values.
         """
         adaptive_samples = get_adaptive_sample_count(face, self.min_samples, self.max_samples)
-        coverage_threshold = max(1, int((adaptive_samples**2) * self.seed_threshold))
-
-        face_idx = self.face_index.index_of(face)
-        seeds = self.face_seeds.get(face_idx, [])
-
-        if len(seeds) >= coverage_threshold:
-            self.measured_faces.add(face_idx)
-            return [s[2] for s in seeds]
-
-        thicknesses = [s[2] for s in seeds]
+        thicknesses: list[float] = []
 
         _R = 3  # round value
-        visited_uvs: dict[tuple[float, float], float] = {
-            (round(s_u, _R), round(s_v, _R)): s_thick for s_u, s_v, s_thick in seeds
-        }
+        visited_uvs: dict[tuple[float, float], float] = {}
 
         # Always sample the face centre
         u_mid, v_mid = get_face_uv_center(face)
@@ -153,7 +138,6 @@ class RayThicknessAnalyzer(BaseAnalyzer):
                     thicknesses.append(t)
             visited_uvs[key] = 0.0
 
-        self.measured_faces.add(face_idx)
         return thicknesses
 
     def ray_cast_at_uv(
@@ -212,10 +196,8 @@ class RayThicknessAnalyzer(BaseAnalyzer):
             if ray_dot_exit < self.normal_cone_cos:
                 thicknesses.append(exit_w)
 
-                exit_idx = self.face_index.index_of(exit_face)
-                if not exit_face.IsSame(face) and exit_idx not in self.measured_faces:
-                    exit_idx = self.face_index.index_of(exit_face)
-                    self.face_seeds[exit_idx].append((exit_u, exit_v, exit_w))
+                if not exit_face.IsSame(face):
+                    self.contribute(("Face", self.face_index.index_of(exit_face)), exit_w)
 
         i = 1
         while i + 1 < len(hits):
@@ -243,14 +225,10 @@ class RayThicknessAnalyzer(BaseAnalyzer):
                 thicknesses.append(wall_thickness)
 
                 if entry_ok and not entry_face.IsSame(face):
-                    entry_idx = self.face_index.index_of(entry_face)
-                    if entry_idx not in self.measured_faces:
-                        self.face_seeds[entry_idx].append((entry_u, entry_v, wall_thickness))
+                    self.contribute(("Face", self.face_index.index_of(entry_face)), wall_thickness)
 
                 if exit_ok and not exit_face.IsSame(face):
-                    exit_idx = self.face_index.index_of(exit_face)
-                    if exit_idx not in self.measured_faces:
-                        self.face_seeds[exit_idx].append((exit_u, exit_v, wall_thickness))
+                    self.contribute(("Face", self.face_index.index_of(exit_face)), wall_thickness)
 
             i += 2
 

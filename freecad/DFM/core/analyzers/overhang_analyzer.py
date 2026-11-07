@@ -49,30 +49,23 @@ class OverhangAnalyzer(BaseAnalyzer):
         self.margin = prefs.get("OverhangMargin", 0.01)
         self.bed_tolerance = prefs.get("OverhangBedTolerance", 0.5)
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], float]:
-        self.resolve_prefs(kwargs.get("prefs", {}))
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.print_orientation = kwargs.get(
             ProcessRequirement.PRINT_ORIENTATION.name, gp_Dir(0, 0, 1)
         )
         self.face_index = face_index
-
         self.bed_height = calculate_bed_height(shape, self.print_orientation)
 
-        results = {}
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            overhang = self._get_overhang_for_face(face)
-            if overhang is not None and overhang > 0.0:
-                results[self.face_index.key_of(face)] = overhang
-
-        return results
+    def analyze(self, face: TopoDS_Face) -> Optional[float]:
+        overhang = self._get_overhang_for_face(face)
+        return overhang if overhang is not None and overhang > 0.0 else None
 
     def _is_on_bed(self, surface: BRepAdaptor_Surface, u: float, v: float) -> bool:
         """Checks if a specific UV point on a face is touching the print bed."""

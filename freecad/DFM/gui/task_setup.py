@@ -688,6 +688,15 @@ class TaskSetup:
         self.form.setWindowTitle("DFM Analysis")
         self.form.setWindowIcon(QtGui.QIcon(":/icons/dfm_analysis.svg"))
 
+        # Start the worker processes now, in the background, so they are
+        # ready by the time the analysis runs (see app/parallel).
+        try:
+            from ..app.parallel.pool import prewarm
+
+            prewarm()
+        except Exception:
+            pass
+
         self.registry = ProcessRegistry.get_instance()
 
         self.target_object = None
@@ -1352,157 +1361,109 @@ class TaskSetup:
         self._start_analysis()
 
     def on_abort_clicked(self):
-        if not self.is_running:
-            return
-        self.abort_requested = True
-        self.form.pbAbort.setText("Aborting")
-        self.form.pbAbort.setEnabled(False)
+        """The old in-panel Abort button; the progress panel has its own now."""
+        pass
+
+    # -- Running ---------------------------------------------------------------
+
+    def snapshot(self) -> dict:
+        """The settings, to bring the panel back as it was (after an Abort)."""
+        handlers = {}
+        for req, handler in self.handlers.items():
+            if isinstance(handler, SideActionsRequirement):
+                handlers[req] = ("sides", handler.enabled,
+                                 [(i.value, i.pnt, i.ref, i.flipped) for i in handler.items])
+            else:
+                handlers[req] = ("plain", {a: getattr(handler, a)
+                                           for a in ("value", "pnt", "ref", "flipped")
+                                           if hasattr(handler, a)})
+        return {
+            "object": self.target_object,
+            "process": self.form.cbManProcess.currentData(),
+            "material": self.form.cbMaterial.currentText(),
+            "handlers": handlers,
+        }
+
+    def restore(self, state: dict) -> None:
+        """Set the panel back to a snapshot()."""
+        obj = state.get("object")
+        if obj is not None:
+            try:
+                self._set_target(obj)
+            except Exception:
+                pass  # deleted meanwhile: keep the auto-selected one
+        index = self.form.cbManProcess.findData(state.get("process"))
+        if index >= 0:
+            self.form.cbManProcess.setCurrentIndex(index)
+        material = state.get("material")
+        if material:
+            mat = self.form.cbMaterial.findText(material)
+            if mat >= 0:
+                self.form.cbMaterial.setCurrentIndex(mat)
+
+        for req, entry in state.get("handlers", {}).items():
+            handler = self.handlers.get(req)
+            if handler is None:
+                continue
+            if entry[0] == "sides" and isinstance(handler, SideActionsRequirement):
+                _kind, enabled, items = entry
+                handler.remove_indicator()
+                handler.items = []
+                for value, pnt, ref, flipped in items:
+                    handler.add()
+                    item = handler.items[-1]
+                    item.value, item.pnt, item.ref, item.flipped = value, pnt, ref, flipped
+                handler.enabled = enabled
+            elif entry[0] == "plain":
+                for attr, value in entry[1].items():
+                    setattr(handler, attr, value)
+
+        # Rows and arrows for the restored values.
+        self._update_options_visibility()
+        for req in self._active_requirements():
+            handler = self.handlers[req]
+            if isinstance(handler, VectorRequirement) and handler.is_satisfied() \
+                    and handler.pnt is not None:
+                v = handler.value
+                handler.indicator.show(handler.pnt, App.Vector(v.X(), v.Y(), v.Z()))
+                handler.refresh_display()
+        self._register_arrows()
+        self._update_run_button_state()
 
     def _start_analysis(self):
+        """Hand over to the progress panel, which runs the analysis."""
         assert self.target_shape is not None
         assert self.target_object is not None
         assert self.process is not None
+        from .task_progress import RunRequest, TaskProgress
 
         kwargs = {}
         for req in self._active_requirements():
             kwargs[req.name] = self.handlers[req].value
-
-        self.is_running = True
-        self.abort_requested = False
-        self.run_box.hide()
-        self._flipper.set_enabled(False)
-        self._show_progress("Getting started", 0, 0)
-        self.form.pbAbort.setText("Abort")
-        self.form.pbAbort.setEnabled(True)
-        self.form.gbAnalysis.show()
-
-        try:
-            results, runner = self._execute_analysis(kwargs)
-            if self.abort_requested:
-                App.Console.PrintMessage("DFM Analysis aborted by user.\n")
-                self.run_box.show()
-                self._update_run_button_state()
-            else:
-                self._finish_analysis(results, runner, kwargs)
-        except Exception as e:
-            App.Console.PrintError(f"A critical error occurred during analysis: {e}\n")
-            import traceback
-
-            App.Console.PrintError(traceback.format_exc())
-            self.run_box.show()
-            self._update_run_button_state()
-        finally:
-            self._cleanup_after_run()
-
-    def _show_progress(self, message: str, current: Optional[int] = None,
-                       total: Optional[int] = None) -> None:
-        """Show one message in the progress bar, with the percentage after it.
-
-        Without *current* and *total* (the steps before and after the rules)
-        the bar shows just the message and keeps its position.
-        """
-        bar = self.form.progressBar
-        text = (message or "").replace("%", "%%")
-        if total is None or total <= 0:
-            # Never a busy bar: Qt shows no text on one.
-            if total is not None:
-                bar.setMaximum(1)
-                bar.setValue(0)
-            bar.setFormat(text)
-            return
-        bar.setMaximum(total)
-        bar.setValue(current or 0)
-        bar.setFormat(f"{text}  %p%" if text else "%p%")
-
-    def _execute_analysis(self, kwargs) -> tuple[list[CheckResult], AnalysisRunner]:
-        assert self.target_shape is not None
-
-        def progress_callback(current: int, total: int, message: str = ""):
-            self._show_progress(message, current, total)
-            QtWidgets.QApplication.processEvents(
-                QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
-                | QtCore.QEventLoop.ProcessEventsFlag.WaitForMoreEvents,
-                5,
-            )
-
-        def check_abort() -> bool:
-            QtWidgets.QApplication.processEvents()
-            return self.abort_requested
-
-        process_name = self.form.cbManProcess.currentData()
-        material_name = self.form.cbMaterial.currentText()
-        runner = AnalysisRunner()
-        results = runner.run_analysis(
-            process_name=process_name,
-            material_name=material_name,
+        request = RunRequest(
+            target_object=self.target_object,
             shape=self.target_shape,
-            progress_cb=progress_callback,
-            check_abort=check_abort,
-            **kwargs,
+            process=self.process,
+            process_name=self.form.cbManProcess.currentData(),
+            material_name=self.form.cbMaterial.currentText(),
+            kwargs=kwargs,
+            setup_state=self.snapshot(),
         )
-        return results, runner
+        self.form.pbRunAnalysis.setEnabled(False)
 
-    def _finish_analysis(self, results: list[CheckResult], runner: AnalysisRunner, run_kwargs: dict):
-        assert self.target_object is not None
-        assert self.process is not None
-        self._show_progress("Marking the findings on the model")
-        QtWidgets.QApplication.processEvents()
-        _resolve_geometry_refs(results)
-        self._show_progress("Preparing the results")
-        QtWidgets.QApplication.processEvents()
-
-        material_name = self.form.cbMaterial.currentText()
-        process_name = self.form.cbManProcess.currentData()
-
-        history_manager = HistoryManager(Path(App.getUserAppDataDir()))
-
-        # Build run_settings for persistence and material switching
-        run_settings = dict(run_kwargs)
-        # Remove non-serialisable OCP objects before storing
-        run_settings.pop(ProcessRequirement.PULL_DIRECTION.name, None)
-        run_settings.pop(ProcessRequirement.SIDE_ACTIONS.name, None)
-        run_settings.pop(ProcessRequirement.PRINT_ORIENTATION.name, None)
-        run_settings.pop(ProcessRequirement.NEUTRAL_PLANE.name, None)
-        run_settings.pop("prefs", None)
-
-        report_model = DFMReportModel(results=results, process=self.process, material=material_name)
-        view_bridge = DFMViewProvider(self.target_object)
-        results_view = TaskResults()
-
-        self._remove_all_indicators()
-        try:
-            Gui.Selection.removeObserver(self)
-        except Exception:
-            pass
-        Gui.Control.closeDialog()
-
-        try:
-            self.results_presenter = TaskResultsPresenter(
-                view=results_view,
-                model=report_model,
-                bridge=view_bridge,
-                history_manager=history_manager,
-                doc_name=App.ActiveDocument.Name,  # type: ignore
-                shape_name=self.target_object.Label,  # type: ignore
-                runner=runner,
-                run_settings=run_settings,
-            )
-        except Exception as e:
-            App.Console.PrintError(f"Failed to open results panel: {e}\n")
-            import traceback
-
-            App.Console.PrintError(traceback.format_exc())
-
-    def _cleanup_after_run(self):
-        self.is_running = False
-        self.abort_requested = False
-        self._flipper.set_enabled(True)
-        if self.form:
+        def switch():
+            self._cleanup_preview()
+            self._reset_picking_ui()
+            self._remove_all_indicators()
             try:
-                self._show_progress("", 0, 1)
-                self.form.gbAnalysis.hide()
-            except RuntimeError:
+                Gui.Selection.removeObserver(self)
+            except Exception:
                 pass
+            Gui.Control.closeDialog()
+            Gui.Control.showDialog(TaskProgress(request))
+
+        # After this click handler returns: closing the panel deletes its buttons.
+        QtCore.QTimer.singleShot(0, switch)
 
     def getStandardButtons(self):
         return QtWidgets.QDialogButtonBox.StandardButton.Close
@@ -1531,6 +1492,43 @@ class TaskSetup:
 
 
 # =============================================================================
+
+
+def open_results(target_object, process, process_name: str, material_name: str,
+                 results: list[CheckResult], runner: AnalysisRunner, run_kwargs: dict):
+    """Show the results panel for a finished analysis (the task view must be free)."""
+    _resolve_geometry_refs(results)
+    history_manager = HistoryManager(Path(App.getUserAppDataDir()))
+
+    # Build run_settings for persistence and material switching
+    run_settings = dict(run_kwargs)
+    # Remove non-serialisable OCP objects before storing
+    run_settings.pop(ProcessRequirement.PULL_DIRECTION.name, None)
+    run_settings.pop(ProcessRequirement.SIDE_ACTIONS.name, None)
+    run_settings.pop(ProcessRequirement.PRINT_ORIENTATION.name, None)
+    run_settings.pop(ProcessRequirement.NEUTRAL_PLANE.name, None)
+    run_settings.pop("prefs", None)
+
+    report_model = DFMReportModel(results=results, process=process, material=material_name)
+    view_bridge = DFMViewProvider(target_object)
+    results_view = TaskResults()
+    try:
+        return TaskResultsPresenter(
+            view=results_view,
+            model=report_model,
+            bridge=view_bridge,
+            history_manager=history_manager,
+            doc_name=App.ActiveDocument.Name,  # type: ignore
+            shape_name=target_object.Label,  # type: ignore
+            runner=runner,
+            run_settings=run_settings,
+        )
+    except Exception as e:
+        App.Console.PrintError(f"Failed to open results panel: {e}\n")
+        import traceback
+
+        App.Console.PrintError(traceback.format_exc())
+        return None
 
 
 def _resolve_geometry_refs(results: list[CheckResult]) -> None:

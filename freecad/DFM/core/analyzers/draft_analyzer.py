@@ -40,6 +40,9 @@ class DraftAnalyzer(BaseAnalyzer):
     (SideActionValue).
     """
 
+    parallel = True
+    relative_cost = 8  # ~ms per face (see BaseAnalyzer.relative_cost)
+
     @property
     def analysis_type(self) -> str:
         return "DRAFT_ANALYZER"
@@ -58,47 +61,32 @@ class DraftAnalyzer(BaseAnalyzer):
         self.classifier_tol = prefs.get("DraftClassifierTol", 1e-6)
         self.side_samples = prefs.get("DraftSideActionSamples", 4)
 
-    def execute(
-        self,
-        shape,
-        face_index: FaceIndex,
-        edge_index: EdgeIndex,
-        progress_cb=None,
-        check_abort=None,
-        **kwargs,
-    ):
-        """Runs a full draft analysis on an inputted shape."""
-        self.resolve_prefs(kwargs.get("prefs", {}))
+    def prepare(self, shape, face_index: FaceIndex, edge_index: EdgeIndex, **kwargs) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
 
         self.side_actions = [d for d in (kwargs.get(ProcessRequirement.SIDE_ACTIONS.name) or []) if d]
 
         self.face_index = face_index
-        self.core_cavity_mapping = self.classify_moldside(shape)
+        # Core or cavity side, worked out per face when it is analyzed.
+        self.core_cavity_mapping = _MoldSides(self)
+        self._intersector = IntCurvesFace_ShapeIntersector()
+        self._intersector.Load(shape, self.classifier_tol)
 
+    def analyze(self, face: TopoDS_Face):
+        """The smallest draft of one face (a SideActionValue if a side action forms it)."""
+        side = 0
         if self.side_actions:
-            self._intersector = IntCurvesFace_ShapeIntersector()
-            self._intersector.Load(shape, self.classifier_tol)
-
-        results = {}
-
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            side = 0
-            if self.side_actions:
-                side = releasing_side_action(
-                    face, self._intersector, self.pull_direction, self.side_actions,
-                    self.side_samples,
-                )
-            if side:
-                result = self.get_side_action_draft(face, self.side_actions[side - 1])
-                if result is not None:
-                    result = SideActionValue(result, side)
-            else:
-                result = self.get_draft_for_face(face)
+            side = releasing_side_action(
+                face, self._intersector, self.pull_direction, self.side_actions,
+                self.side_samples,
+            )
+        if side:
+            result = self.get_side_action_draft(face, self.side_actions[side - 1])
             if result is not None:
-                results[("Face", self.face_index.index_of(face))] = result
-
-        return results
+                result = SideActionValue(result, side)
+            return result
+        return self.get_draft_for_face(face)
 
     def get_side_action_draft(self, face: TopoDS_Face, direction: gp_Dir) -> Optional[float]:
         """The smallest draft of a face formed by a side action moving along *direction*.
@@ -192,6 +180,10 @@ class DraftAnalyzer(BaseAnalyzer):
 
         return angle_deg - 90
 
+    def moldside_of(self, face: TopoDS_Face) -> MoldSide:
+        """Core or cavity side of one face (see core.utils.mold)."""
+        return moldside_of_face(face, self._intersector, self.pull_direction)
+
     def classify_moldside(self, shape: TopoDS_Shape) -> dict[int, MoldSide]:
         """Returns a mapping of TopoDS_Face to MoldSide"""
         intersector = IntCurvesFace_ShapeIntersector()
@@ -201,3 +193,20 @@ class DraftAnalyzer(BaseAnalyzer):
             i: moldside_of_face(face, intersector, self.pull_direction)
             for i, face in enumerate(self.face_index, start=1)
         }
+
+
+class _MoldSides(dict):
+    """Face index -> MoldSide, each worked out the first time it is asked for.
+
+    Classifying is a few rays per face; doing it per face, as faces are
+    analyzed, lets the work be shared between processes with the faces.
+    """
+
+    def __init__(self, analyzer: DraftAnalyzer):
+        super().__init__()
+        self._analyzer = analyzer
+
+    def __missing__(self, index: int) -> MoldSide:
+        side = self._analyzer.moldside_of(self._analyzer.face_index.face_at(index))
+        self[index] = side
+        return side

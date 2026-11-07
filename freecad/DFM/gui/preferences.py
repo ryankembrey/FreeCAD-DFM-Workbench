@@ -5,7 +5,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional, TypeVar
 
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 import FreeCADGui as Gui  # type: ignore
 
@@ -387,15 +387,6 @@ class RayThicknessPanel(AnalyzerPanel):
                     decimals=2,
                     suffix="°",
                     tooltip="Controls how strict the face must be roughly perpendicular to the ray for it to be considered a valid thickness.",
-                ),
-                IntField(
-                    "RaySeedCoverageThreshold",
-                    "Seed coverage threshold",
-                    default=50,
-                    min=0,
-                    max=100,
-                    suffix="%",
-                    tooltip="Controls the percentage of seeds required before the analyzer skips a face.",
                 ),
             ],
         ),
@@ -979,20 +970,102 @@ class DFMPreferencesGeneral:
         )
 
         layout = QtWidgets.QVBoxLayout(self.form)
+        layout.addWidget(self._build_parallel_group())
         group = QtWidgets.QGroupBox("Developer Options")
         QtWidgets.QVBoxLayout(group).addWidget(self.print_timing_report)
         layout.addWidget(group)
         layout.addStretch()
+
+    def _build_parallel_group(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Parallel Processing")
+        grid = QtWidgets.QGridLayout(group)
+
+        self.parallel_enabled = _pref(
+            QtWidgets.QCheckBox("Measure on several cores"), "ParallelEnabled")
+        self.parallel_enabled.setToolTip(
+            "Share the slow measurements (thickness, undercut, draft) between worker\n"
+            "processes, one per core. Results are the same as on one core. Workers run\n"
+            "a plain Python, never FreeCAD, so a crash in one can't take FreeCAD down.")
+        grid.addWidget(self.parallel_enabled, 0, 0, 1, 2)
+
+        def spin(label, entry, lo, hi, suffix, tip, row):
+            grid.addWidget(QtWidgets.QLabel(label), row, 0)
+            box = _pref(QtWidgets.QSpinBox(), entry)
+            box.setRange(lo, hi)
+            box.setSuffix(suffix)
+            box.setToolTip(tip)
+            grid.addWidget(box, row, 1)
+            return box
+
+        self.parallel_workers = spin(
+            "Worker processes", "ParallelWorkers", 0, 64, "",
+            "How many worker processes. 0 = automatic: one per core, less one, at most 12.", 1)
+        self.parallel_workers.setSpecialValueText("Automatic")
+        self.parallel_min_faces = spin(
+            "Only for models with at least", "ParallelMinFaces", 1, 100000, " faces",
+            "Smaller models are measured in FreeCAD's own process: starting work in\n"
+            "the workers would take longer than it saves.", 2)
+        self.parallel_timeout = spin(
+            "Give up on a batch after", "ParallelBatchTimeout", 10, 86400, " s",
+            "A worker taking longer than this on one batch of faces is taken to have\n"
+            "hung: it is replaced and the batch tried once more.", 3)
+
+        self.parallel_status = QtWidgets.QLabel()
+        self.parallel_status.setWordWrap(True)
+        self.parallel_status.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        grid.addWidget(self.parallel_status, 4, 0, 1, 2)
+        test = QtWidgets.QPushButton("Check workers")
+        test.setToolTip("Look for the Python the workers run on, and try it.")
+        test.clicked.connect(self._check_workers)
+        grid.addWidget(test, 5, 0)
+        self._show_worker_status()
+        return group
+
+    def _show_worker_status(self, checked: bool = False) -> None:
+        try:
+            from ..app.parallel import interpreter
+
+            if not interpreter._searched:
+                text = "Workers start with the first analysis."
+            elif interpreter._found:
+                text = f"Workers run on {interpreter._found}."
+            else:
+                text = f"Workers can't run: {interpreter._reason}"
+        except Exception as exc:
+            text = f"Workers can't run: {exc}"
+        self.parallel_status.setText(text)
+
+    def _check_workers(self) -> None:
+        from ..app.parallel import interpreter
+        from ..app.parallel.pool import shutdown
+
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+        try:
+            shutdown()
+            interpreter.forget()
+            interpreter.find_worker_python()
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        self._show_worker_status(True)
 
     def loadSettings(self):
         params = dfm_params()
         self.print_timing_report.setChecked(
             params.GetBool("GeneralPrintTimingReport", self.DEFAULT_PRINT_TIMING_REPORT)
         )
+        self.parallel_enabled.setChecked(params.GetBool("ParallelEnabled", True))
+        self.parallel_workers.setValue(params.GetInt("ParallelWorkers", 0))
+        self.parallel_min_faces.setValue(params.GetInt("ParallelMinFaces", 24))
+        self.parallel_timeout.setValue(params.GetInt("ParallelBatchTimeout", 600))
 
     def saveSettings(self):
         params = dfm_params()
         params.SetBool("GeneralPrintTimingReport", self.print_timing_report.isChecked())
+        params.SetBool("ParallelEnabled", self.parallel_enabled.isChecked())
+        params.SetInt("ParallelWorkers", self.parallel_workers.value())
+        params.SetInt("ParallelMinFaces", self.parallel_min_faces.value())
+        params.SetInt("ParallelBatchTimeout", self.parallel_timeout.value())
 
 
 class DFMPreferencesAnalyzers:

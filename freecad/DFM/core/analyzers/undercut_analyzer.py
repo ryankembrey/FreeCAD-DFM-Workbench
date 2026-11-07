@@ -18,6 +18,9 @@ from ...core.utils.mold import point_released_by_side_action
 
 @register_analyzer("UNDERCUT_ANALYZER")
 class UndercutAnalyzer(BaseAnalyzer):
+    parallel = True
+    relative_cost = 60  # ~ms per face (see BaseAnalyzer.relative_cost)
+
     @property
     def analysis_type(self) -> str:
         return "UNDERCUT_ANALYZER"
@@ -36,16 +39,14 @@ class UndercutAnalyzer(BaseAnalyzer):
         self.intersector_tol = prefs.get("UndercutIntersectorTol", 1e-6)
         self.self_hit_threshold = prefs.get("UndercutSelfHitThreshold", 0.05)
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], list[float]]:
-        self.resolve_prefs(kwargs.get("prefs", {}))
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.pull_direction = kwargs.get(ProcessRequirement.PULL_DIRECTION.name, gp_Dir(0, 0, 1))
         # A point trapped along the pull is fine if a slide, lifter or other
         # side action can pull straight away from it.
@@ -53,12 +54,11 @@ class UndercutAnalyzer(BaseAnalyzer):
 
         self.intersector = IntCurvesFace_ShapeIntersector()
         self.intersector.Load(shape, self.intersector_tol)
-        results = {}
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            ratio = self._analyze_face(face)
-            if ratio > 0.0:
-                results[("Face", face_index.index_of(face))] = ratio
-        return results
+
+    def analyze(self, face: TopoDS_Face) -> Optional[float]:
+        """Share of the face trapped along the pull (0..1), or None if none is."""
+        ratio = self._analyze_face(face)
+        return ratio if ratio > 0.0 else None
 
     def _analyze_face(self, face: TopoDS_Face):
         """

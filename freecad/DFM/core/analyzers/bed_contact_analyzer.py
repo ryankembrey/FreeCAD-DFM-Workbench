@@ -31,6 +31,7 @@ from ...core.utils.geometry import (
 @register_analyzer("BED_CONTACT_ANALYZER")
 class BedContactAnalyzer(BaseAnalyzer):
     """Finds flat faces on the print bed and returns their area (mm squared)."""
+    relative_cost = 0.2  # ~ms per face (see BaseAnalyzer.relative_cost)
 
     @property
     def analysis_type(self) -> str:
@@ -48,29 +49,22 @@ class BedContactAnalyzer(BaseAnalyzer):
         self.bed_tolerance = prefs.get("BedContactBedTolerance", 0.5)
         self.planarity_tolerance = prefs.get("BedContactPlanarityTolerance", 1e-6)
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], float]:
-        self.resolve_prefs(kwargs.get("prefs", {}))
-
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.print_orientation: gp_Dir = kwargs.get(
             ProcessRequirement.PRINT_ORIENTATION.name, gp_Dir(0, 0, 1)
         )
         self.bed_height = calculate_bed_height(shape, self.print_orientation)
 
-        results: dict[tuple[str, int], float] = {}
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            area = self._bed_contact_area(face)
-            if area is not None and area > 0.0:
-                results[face_index.key_of(face)] = area
-
-        return results
+    def analyze(self, face: TopoDS_Face) -> Optional[float]:
+        area = self._bed_contact_area(face)
+        return area if area is not None and area > 0.0 else None
 
     def _bed_contact_area(self, face: TopoDS_Face) -> Optional[float]:
         """Return the face area if it is flat and sits on the bed, else None."""

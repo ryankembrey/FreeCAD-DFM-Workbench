@@ -65,32 +65,23 @@ class StaircaseAnalyzer(BaseAnalyzer):
             "StaircaseHorizontalThreshold", 0.1
         )
 
-    def execute(
+    def prepare(
         self,
         shape: TopoDS_Shape,
         face_index: FaceIndex,
         edge_index: EdgeIndex,
-        progress_cb: Optional[Callable[[int], None]] = None,
-        check_abort: Optional[Callable[[], bool]] = None,
         **kwargs: Any,
-    ) -> dict[tuple[str, int], float]:
-        self.resolve_prefs(kwargs.get("prefs", {}))
-
+    ) -> None:
+        super().prepare(shape, face_index, edge_index, **kwargs)
         self.print_orientation: gp_Dir = kwargs.get(
             ProcessRequirement.PRINT_ORIENTATION.name, gp_Dir(0, 0, 1)
         )
-        self.layer_height: float = kwargs.get(
-            ProcessRequirement.LAYER_HEIGHT.name, 0.2
-        )
+        self.layer_height: float = kwargs.get(ProcessRequirement.LAYER_HEIGHT.name, 0.2)
         self.bed_height = calculate_bed_height(shape, self.print_orientation)
 
-        results: dict[tuple[str, int], float] = {}
-        for face in self.iter_faces(shape, progress_cb, check_abort):
-            cusp = self._cusp_height_for_face(face)
-            if cusp is not None and cusp > 0.0:
-                results[face_index.key_of(face)] = cusp
-
-        return results
+    def analyze(self, face: TopoDS_Face) -> Optional[float]:
+        cusp = self._cusp_height_for_face(face)
+        return cusp if cusp is not None and cusp > 0.0 else None
 
     def _cusp_height_for_face(
         self, face: TopoDS_Face
