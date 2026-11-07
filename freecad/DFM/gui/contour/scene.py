@@ -8,6 +8,12 @@ The mesh is split into a spatial grid of chunk separators so Coin prunes pick
 rays by bounding box, keeping hover picking sub-linear even on ultra-fine
 meshes. Colors are per triangle and update in place. A module-level registry
 keeps live overlays referenced so they persist after a dialog closes.
+
+The overlay never touches the analysed body: the body stays visible and the
+contour is drawn just in front of it. Its mesh is pushed out along the
+surface normals by a small display offset (a share of the model's size, see
+the ContourDisplayOffset preference), and a polygon offset pulls it a little
+further forward in depth, so the body's own faces never show through.
 """
 
 from pivy import coin
@@ -24,6 +30,8 @@ from ..utils.view import get_active_view
 
 _TARGET_PER_CHUNK_DEFAULT = 2500
 _CREASE_ANGLE_DEFAULT = 35.0
+# How far the contour sits off the body, in percent of the model's diagonal.
+_DISPLAY_OFFSET_DEFAULT = 0.1
 _NAME_PREFIX = "DFMContourChunk_"
 
 
@@ -34,6 +42,55 @@ def _pref_target_per_chunk() -> int:
 def _pref_crease_cos() -> float:
     angle = dfm_params().GetFloat("ContourCreaseAngle", _CREASE_ANGLE_DEFAULT)
     return math.cos(math.radians(angle))
+
+
+def _pref_display_offset_fraction() -> float:
+    return max(0.0, dfm_params().GetFloat("ContourDisplayOffset", _DISPLAY_OFFSET_DEFAULT)) / 100.0
+
+
+def _offset_vertices(vertices, triangles, normals, distance):
+    """Push every vertex out along its triangles' outward normals by *distance*.
+
+    A vertex on a sharp edge moves along the mean of its faces' normals, by
+    enough that each face still sits *distance* off the body (capped at twice
+    that), so faces stay flat and edges stay closed.
+    """
+    if distance <= 0.0 or not vertices:
+        return vertices
+    n = len(vertices)
+    sums = [[0.0, 0.0, 0.0] for _ in range(n)]
+    incident = [[] for _ in range(n)]
+    for ti, tri in enumerate(triangles):
+        nrm = normals[ti] if ti < len(normals) else None
+        if nrm is None:
+            continue
+        for vi in tri:
+            s_ = sums[vi]
+            s_[0] += nrm[0]
+            s_[1] += nrm[1]
+            s_[2] += nrm[2]
+            incident[vi].append(nrm)
+    out = []
+    for vi, (x, y, z) in enumerate(vertices):
+        sx, sy, sz = sums[vi]
+        length = math.sqrt(sx * sx + sy * sy + sz * sz)
+        if length < 1e-12:
+            out.append((x, y, z))
+            continue
+        mx, my, mz = sx / length, sy / length, sz / length
+        lean = min(mx * a + my * b + mz * c for a, b, c in incident[vi])
+        d = distance / max(lean, 0.5)
+        out.append((x + mx * d, y + my * d, z + mz * d))
+    return out
+
+
+def _diagonal(vertices):
+    if not vertices:
+        return 0.0
+    xs = [v[0] for v in vertices]
+    ys = [v[1] for v in vertices]
+    zs = [v[2] for v in vertices]
+    return math.sqrt((max(xs) - min(xs)) ** 2 + (max(ys) - min(ys)) ** 2 + (max(zs) - min(zs)) ** 2)
 
 
 def _partition(vertices, triangles, values, normals, target=None):
@@ -83,7 +140,6 @@ class ContourNode:
         self._chunks = []  # [{'material':..., 'values':[...]}]
         self._name_to_chunk = {}
         self._view = None
-        self._original_visibility = None
         self._smooth = False
         self._global_material = None
         self._vertex_values = None
@@ -137,7 +193,11 @@ class ContourNode:
                         continue
                     if ni[0] * nj[0] + ni[1] * nj[1] + ni[2] * nj[2] < crease_cos:
                         continue
-                    if value_gap is not None and abs(vi - values[tlist[j]]) > value_gap:
+                    vj = values[tlist[j]]
+                    # A value and "no value" (inf, e.g. flat) never blend.
+                    if math.isfinite(vi) != math.isfinite(vj):
+                        continue
+                    if value_gap is not None and math.isfinite(vi) and abs(vi - vj) > value_gap:
                         continue
                     parent[find(tlist[i])] = find(tlist[j])
 
@@ -148,6 +208,8 @@ class ContourNode:
             first = True
             for group in clusters.values():
                 mean_val = sum(values[ti] for ti in group) / len(group)
+                if mean_val != mean_val:  # NaN from inf - inf: the group is all "no value"
+                    mean_val = math.inf
                 # Average the group's face normals for smooth (Gouraud) lighting.
                 sx = sy = sz = 0.0
                 for ti in group:
@@ -200,6 +262,14 @@ class ContourNode:
         hints.shapeType = coin.SoShapeHints.UNKNOWN_SHAPE_TYPE
         hints.creaseAngle = 0.0
         root.addChild(hints)
+
+        # Drawn just in front of the body, which stays visible underneath.
+        offset = coin.SoPolygonOffset()
+        offset.factor = -1.5
+        offset.units = -2.0
+        root.addChild(offset)
+        vertices = _offset_vertices(
+            vertices, triangles, normals, _pref_display_offset_fraction() * _diagonal(vertices))
 
         if smooth:
             # Split vertices at creases and value jumps, so color and lighting
@@ -332,21 +402,11 @@ class ContourNode:
             raise RuntimeError("No active 3D view to display the contour in.")
         self._view = view
         self._view.getSceneGraph().addChild(self._sep)
-        try:
-            self._original_visibility = self.target_object.ViewObject.Visibility
-            self.target_object.ViewObject.Visibility = False
-        except Exception:
-            self._original_visibility = None
 
     def remove(self):
         if self._view is not None and self._sep is not None:
             try:
                 self._view.getSceneGraph().removeChild(self._sep)
-            except Exception:
-                pass
-        if self._original_visibility is not None:
-            try:
-                self.target_object.ViewObject.Visibility = self._original_visibility
             except Exception:
                 pass
         self._sep = None

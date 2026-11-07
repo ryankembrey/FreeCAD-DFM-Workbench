@@ -33,6 +33,8 @@ _BAND_STEPS = {
 _MEASURE_TITLES = {
     "draft": ("Draft Analysis", ":/icons/dfm_draft.svg"),
     "thickness": ("Thickness Analysis", ":/icons/dfm_thickness.svg"),
+    "undercut": ("Undercut Analysis", ":/icons/dfm_undercut.svg"),
+    "curvature": ("Curvature Analysis", ":/icons/dfm_curvature.svg"),
 }
 
 _DEFAULT_ANALYSIS_ICON = ":/icons/dfm_analysis.svg"
@@ -304,10 +306,10 @@ def create_or_update_analysis(obj, params, field):
 
 def open_panel_for(obj):
     from .panel import ContourTaskPanel
-    from ...app.contour.measures import DraftMeasure, ThicknessMeasure
+    from ...app.contour.measures import measure_for_id
 
     measure_id = getattr(obj, "Measure", "draft")
-    measure = ThicknessMeasure() if measure_id == "thickness" else DraftMeasure()
+    measure = measure_for_id(measure_id)
     title = _MEASURE_TITLES.get(measure_id, ("Analysis", None))[0]
     icon = _measure_icon(measure_id)
     Gui.Control.showDialog(ContourTaskPanel(measure, title, icon, analysis_obj=obj))

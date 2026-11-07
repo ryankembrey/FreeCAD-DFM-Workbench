@@ -4,6 +4,7 @@
 
 
 from typing import Optional
+import math
 import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -19,6 +20,7 @@ from ..utils.body_select import auto_select_body
 from ..utils.colormap_combo import populate_colormap_combo
 from ..utils.arrow_flip import ArrowFlipper
 from ..utils.direction_row import (
+    FLAT_BUTTON_CSS,
     PICK_SVG,
     DirectionRow,
     ViewSwitch,
@@ -39,12 +41,58 @@ from ...app.contour.measures import BoolOption, ChoiceOption
 
 from .scene import ContourNode, register, clear_all
 from .legend import ContourLegend
+from .category_legend import CategoryLegend
 from .resolution import ResolutionField
 from . import document  # noqa: F401
 
 from ...app.contour.colormap import _HIGHLIGHT_IN as _FLAG_RGB
 
 _LEGEND_STATE = {"pos": None, "size": None, "horizontal": False}
+# Where the category legend sat and how big it was, for the next one.
+_CATEGORY_LEGEND_STATE = {"pos": None, "size": None}
+
+# Side actions: the color and help text of the DFM analysis setup.
+_SIDE_ACTION_COLOR = (0.62, 0.32, 0.9)
+_SIDE_ACTION_MAX = 6
+_SIDE_ACTION_HELP = (
+    "Directions the mold also opens in, besides the main pull: a slide, lifter, "
+    "pickout or hand-loaded core. A face the main pull can't release but a side "
+    "action can is shown in the side action's color, not as an undercut."
+)
+_ADD_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+)
+
+# A value saved for "no value" (inf), which JSON can't hold everywhere.
+_NO_VALUE_SAVED = 1e300
+
+
+def _finite_range(values):
+    finite = [v for v in values if math.isfinite(v)]
+    if not finite:
+        return 0.0, 1.0
+    return min(finite), max(finite)
+
+
+class _SideAction:
+    """One side action in the panel: a direction with its row and arrow."""
+
+    def __init__(self, number, direction, ref):
+        self.number = number
+        self.dir = direction  # App.Vector, unit
+        self.ref = ref  # "+X" or a picked "Face12"
+        self.flipped = False
+        self.anchor = None  # where a picked direction's arrow sits
+        self.row = None
+        self.indicator = DirectionIndicator(_SIDE_ACTION_COLOR, self.label)
+
+    @property
+    def label(self):
+        return f"Side action {self.number}"
+
+    def picked(self):
+        return bool(self.ref) and self.ref[0] not in "+-\u2212"
 
 _BAND_STEPS = {
     "Smooth": 0.0,
@@ -111,6 +159,24 @@ class ContourTaskPanel:
         self._suppress_legend_sync = False
         self._applied_text_rgb = None
 
+        # Categorical measures (undercut): the legend hides/solos categories
+        # and visits regions; the options the shown values were measured with.
+        self._categorical = measure.is_categorical()
+        self._cat_hidden = set()
+        self._cat_solo = None
+        self._regions = None
+        self._region_index = {}
+        self._region_camera = None
+        self._measured_opts = None
+
+        # Side actions (undercut).
+        self._side_actions: list = []
+        self._side_enabled = False
+        self._side_box = None
+        self._side_rows = None
+        self._side_add = None
+        self._side_holder = None
+
         self._build_form()
         Gui.Selection.addObserver(self)
         self._escape_filter = EscapeFilter(self._on_escape)
@@ -172,7 +238,8 @@ class ContourTaskPanel:
         # measure's own options.
         self.direction_row = None
         self.pb_pull = None
-        if self.measure.needs_pull_direction or self.measure.options:
+        if (self.measure.needs_pull_direction or self.measure.options
+                or self.measure.needs_side_actions):
             opt_box = QtWidgets.QGroupBox("Settings")
             og2 = self._grid(opt_box)
             orow = 0
@@ -211,6 +278,9 @@ class ContourTaskPanel:
                     og2.addWidget(cb, orow, 0, 1, 2)
                     self._option_widgets[opt.id] = cb
                 orow += 1
+            if self.measure.needs_side_actions:
+                self._build_side_actions(og2, orow)
+                orow += 2
             root.addWidget(opt_box)
 
         # Mesh: changes here need "Update contour".
@@ -297,7 +367,27 @@ class ContourTaskPanel:
             "Off shows one flat color per triangle."
         )
         self.cb_smooth.toggled.connect(self._on_smooth_changed)
-        cg.addWidget(self.cb_smooth, 6, 1)
+        if self._categorical:
+            # A fixed palette: no color map, bands, range or pass/fail. The
+            # legend in the 3D view hides and solos categories instead, so
+            # smooth shading is the only setting left: put it on the left.
+            self.cb_highlight.setChecked(False)
+            self.cb_highlight.hide()
+            cg.addWidget(self.cb_smooth, 6, 0, 1, 2)
+        else:
+            cg.addWidget(self.cb_smooth, 6, 1)
+        self.cb_arrows = None
+        if self.measure.needs_pull_direction or self.measure.needs_side_actions:
+            self.cb_arrows = QtWidgets.QCheckBox("Show direction arrows")
+            self.cb_arrows.setChecked(True)
+            self.cb_arrows.setToolTip(
+                "Show the pull direction and side action arrows in the 3D view. "
+                "Same as the Pull Direction item under the saved analysis in the tree.")
+            self.cb_arrows.toggled.connect(self._on_arrows_toggled)
+            if self._categorical:
+                cg.addWidget(self.cb_arrows, 7, 0, 1, 2)
+            else:
+                cg.addWidget(self.cb_arrows, 7, 1)
         root.addWidget(disp_box)
         self._update_range_label()
 
@@ -311,7 +401,7 @@ class ContourTaskPanel:
         self.pb_clear.setMinimumHeight(30)
         self.pb_clear.setEnabled(False)
         self.pb_clear.clicked.connect(self._on_clear)
-        row.addWidget(self.pb_generate, 2)
+        row.addWidget(self.pb_generate, 1)
         row.addWidget(self.pb_clear, 1)
         root.addLayout(row)
 
@@ -344,7 +434,8 @@ class ContourTaskPanel:
 
     def setPreselection(self, doc_name, obj_name, sub_name, *_):
         """Show a live direction arrow when hovering a face or edge while picking the pull direction."""
-        if self.picking_mode == "pull" and self._preview is not None:
+        if self._preview is not None and (
+                self.picking_mode == "pull" or str(self.picking_mode).startswith("side:")):
             self._preview.show_for(doc_name, obj_name, sub_name)
 
     def removePreselection(self, *args):
@@ -367,16 +458,8 @@ class ContourTaskPanel:
             self._preview = None
         if self._pull_indicator_hidden:
             self._pull_indicator_hidden = False
-            visible = True
-            obj = self._direction_obj
-            if obj is not None:
-                try:
-                    if App.GuiUp and obj.ViewObject is not None:
-                        visible = bool(obj.ViewObject.Visibility)
-                except Exception:
-                    pass
             if self.indicator is not None:
-                self.indicator.set_visible(visible)
+                self.indicator.set_visible(self._arrows_visible())
 
     def _selection_key_from_args(self, args):
         if len(args) >= 2 and args[0] and args[1]:
@@ -428,6 +511,8 @@ class ContourTaskPanel:
             ok = self._apply_object_from_selection()
         elif self.picking_mode == "pull":
             ok = self._apply_pull_from_selection()
+        elif str(self.picking_mode).startswith("side:"):
+            ok = self._apply_side_from_selection(int(self.picking_mode.split(":")[1]))
         else:
             return
         if ok:
@@ -442,6 +527,11 @@ class ContourTaskPanel:
         if mode == "pull":
             self._begin_pull_preview()
             self._refresh_direction_row()
+        elif str(mode).startswith("side:"):
+            if self._preview is None:
+                self._preview = PullPreview(_SIDE_ACTION_COLOR)
+            self._preview.begin()
+            self._refresh_side_rows()
         else:
             self.pb_object.setChecked(True)
             self.le_object.setText("")
@@ -455,6 +545,7 @@ class ContourTaskPanel:
         self.le_object.setText(self.target_object.Label if self.target_object is not None else "")
         self.le_object.setPlaceholderText("No model selected")
         self._refresh_direction_row()
+        self._refresh_side_rows()
         self._flipper.set_enabled(True)
         self._cursor.pop()
 
@@ -506,6 +597,7 @@ class ContourTaskPanel:
         self.resolution.set_shape(shape)
         if self.indicator is not None and self.pull_anchor is None:
             self._refresh_arrow()
+        self._refresh_side_arrows()
         self._mark_dirty()
         return True
 
@@ -586,12 +678,283 @@ class ContourTaskPanel:
         self.indicator.show(anchor, App.Vector(self.pull_dir.x, self.pull_dir.y, self.pull_dir.z))
         self._flipper.add(self.indicator, self._on_flip_pull)
 
+    # -- Side actions ----------------------------------------------------------
+
+    def _build_side_actions(self, grid, row):
+        """A "Side actions" checkbox, then (when ticked) a row per side action."""
+        from ..rule_cards import apply_svg_icon
+
+        self._side_box = QtWidgets.QCheckBox("Side actions")
+        self._side_box.setToolTip(_SIDE_ACTION_HELP)
+        self._side_box.setMinimumHeight(28)
+        self._side_box.toggled.connect(self._on_side_toggled)
+        grid.addWidget(self._side_box, row, 0, 1, 2)
+
+        holder = QtWidgets.QWidget()
+        outer = QtWidgets.QHBoxLayout(holder)
+        outer.setContentsMargins(4, 0, 0, 0)
+        outer.setSpacing(0)
+        block = QtWidgets.QFrame()
+        block.setObjectName("dfmSideActions")
+        block.setStyleSheet(
+            "QFrame#dfmSideActions { border: none; border-left: 2px solid rgba(158, 82, 230, 150); }")
+        rows = QtWidgets.QVBoxLayout(block)
+        rows.setContentsMargins(8, 0, 0, 0)
+        rows.setSpacing(2)
+        outer.addWidget(block)
+        self._side_rows = QtWidgets.QVBoxLayout()
+        self._side_rows.setContentsMargins(0, 0, 0, 0)
+        self._side_rows.setSpacing(2)
+        rows.addLayout(self._side_rows)
+        add_row = QtWidgets.QHBoxLayout()
+        add_row.setContentsMargins(0, 2, 0, 0)
+        self._side_add = QtWidgets.QPushButton("Add side action")
+        self._side_add.setStyleSheet(FLAT_BUTTON_CSS.replace("padding: 0px", "padding: 3px 6px"))
+        self._side_add.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._side_add.setToolTip("Add a slide, lifter or pickout direction")
+        apply_svg_icon(self._side_add, _ADD_SVG, 14)
+        self._side_add.clicked.connect(lambda _c=False: self._add_side_action())
+        add_row.addWidget(self._side_add)
+        add_row.addStretch(1)
+        rows.addLayout(add_row)
+        grid.addWidget(holder, row + 1, 0, 1, 2)
+        self._side_holder = holder
+        holder.setVisible(False)
+
+    def _on_side_toggled(self, on):
+        self._side_enabled = bool(on)
+        if self._side_holder is not None:
+            self._side_holder.setVisible(self._side_enabled)
+        if self._side_enabled and not self._side_actions:
+            self._add_side_action()
+            return
+        self._refresh_side_arrows()
+        self._mark_dirty()
+
+    def _side_anchor(self, item):
+        """Where an axis side action's arrow sits: on the side of the part it comes from."""
+        if item.anchor is not None and item.picked():
+            return item.anchor
+        if self.target_shape is None:
+            return None
+        bb = self.target_shape.BoundBox
+        c = bb.Center
+        d = item.dir
+        reach = (abs(d.x) * bb.XLength + abs(d.y) * bb.YLength + abs(d.z) * bb.ZLength) / 2
+        return App.Vector(c.x + d.x * reach, c.y + d.y * reach, c.z + d.z * reach)
+
+    def _free_side_axis(self):
+        """The axis across the pull that no side action uses yet."""
+        pull = self.pull_dir
+        used = {(round(i.dir.x), round(i.dir.y), round(i.dir.z)) for i in self._side_actions}
+        axes = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+        axes.sort(key=lambda a: abs(a[0] * pull.x + a[1] * pull.y + a[2] * pull.z))
+        for axis in axes:
+            if axis not in used:
+                return axis
+        return axes[0]
+
+    def _add_side_action(self, direction=None, ref=None, flipped=False, anchor=None, mark=True):
+        if len(self._side_actions) >= _SIDE_ACTION_MAX:
+            return
+        if direction is None:
+            axis = self._free_side_axis()
+            direction = App.Vector(*axis)
+            ref = axis_name(axis).replace("\u2212", "-")
+        item = _SideAction(len(self._side_actions) + 1, App.Vector(direction).normalize(), ref or "")
+        item.flipped = bool(flipped)
+        item.anchor = anchor
+        self._side_actions.append(item)
+        self._rebuild_side_rows()
+        self._refresh_side_arrows()
+        if mark:
+            self._mark_dirty()
+
+    def _remove_side_action(self, item):
+        if item not in self._side_actions:
+            return
+        if self.picking_mode == f"side:{self._side_actions.index(item)}":
+            self.picking_mode = None
+            self._reset_pick_ui()
+        self._flipper.discard(item.indicator)
+        item.indicator.remove()
+        self._side_actions.remove(item)
+        for number, other in enumerate(self._side_actions, start=1):
+            if other.number != number:
+                other.number = number
+                self._flipper.discard(other.indicator)
+                other.indicator.remove()
+                other.indicator = DirectionIndicator(_SIDE_ACTION_COLOR, other.label)
+        self._rebuild_side_rows()
+        self._refresh_side_arrows()
+        self._mark_dirty()
+
+    def _rebuild_side_rows(self):
+        if self._side_rows is None:
+            return
+        while self._side_rows.count():
+            w = self._side_rows.takeAt(0).widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+        for i, item in enumerate(self._side_actions):
+            row = DirectionRow(item.label, removable=True, color=_SIDE_ACTION_COLOR)
+            row.axis_clicked.connect(lambda vec, k=i: self._on_side_axis(k, vec))
+            row.pick_clicked.connect(lambda k=i: self._on_pick_side(k))
+            row.flip_clicked.connect(lambda k=i: self._on_flip_side(k))
+            row.remove_clicked.connect(lambda it=item: self._remove_side_action(it))
+            item.row = row
+            self._side_rows.addWidget(row)
+        if self._side_add is not None:
+            self._side_add.setEnabled(len(self._side_actions) < _SIDE_ACTION_MAX)
+        self._refresh_side_rows()
+
+    def _refresh_side_rows(self):
+        for i, item in enumerate(self._side_actions):
+            if item.row is None:
+                continue
+            picking = self.picking_mode == f"side:{i}"
+            try:
+                item.row.pick_btn.setChecked(picking)
+                item.row.set_state((item.dir.x, item.dir.y, item.dir.z), item.ref, item.flipped,
+                                   picking=picking)
+            except RuntimeError:  # the row was deleted
+                item.row = None
+
+    def _refresh_side_arrows(self):
+        for item in self._side_actions:
+            anchor = self._side_anchor(item) if self._side_enabled else None
+            if anchor is None:
+                item.indicator.remove()
+                continue
+            item.indicator.set_visible(self._arrows_visible())
+            item.indicator.show(anchor, App.Vector(item.dir.x, item.dir.y, item.dir.z))
+            self._flipper.add(item.indicator, lambda it=item: self._on_flip_side(
+                self._side_actions.index(it) if it in self._side_actions else -1))
+
+    def _on_side_axis(self, index, vec):
+        if not 0 <= index < len(self._side_actions):
+            return
+        if self.picking_mode == f"side:{index}":
+            self.picking_mode = None
+            self._reset_pick_ui()
+        item = self._side_actions[index]
+        item.dir = App.Vector(*vec)
+        item.ref = axis_name(vec).replace("\u2212", "-")
+        item.flipped = False
+        item.anchor = None
+        self._refresh_side_rows()
+        self._refresh_side_arrows()
+        self._mark_dirty()
+
+    def _on_flip_side(self, index):
+        if not 0 <= index < len(self._side_actions):
+            return
+        if str(self.picking_mode).startswith("side:"):
+            return
+        item = self._side_actions[index]
+        item.dir = App.Vector(-item.dir.x, -item.dir.y, -item.dir.z)
+        item.flipped = not item.flipped
+        if not item.picked():
+            item.ref = axis_name((item.dir.x, item.dir.y, item.dir.z)).replace("\u2212", "-")
+            item.flipped = False
+        self._refresh_side_rows()
+        self._refresh_side_arrows()
+        self._mark_dirty()
+
+    def _on_pick_side(self, index):
+        mode = f"side:{index}"
+        if self.picking_mode == mode:
+            self.picking_mode = None
+            self._reset_pick_ui()
+            return
+        if self._has_contour:
+            self._on_clear()
+            App.Console.PrintMessage(
+                "DFM contour: cleared so you can pick a side action; regenerate when done.\n"
+            )
+        elif self._apply_side_from_selection(index):
+            self._reset_pick_ui()
+            Gui.Selection.clearSelection()
+            return
+        self._enter_pick(mode)
+
+    def _apply_side_from_selection(self, index):
+        if not 0 <= index < len(self._side_actions):
+            return False
+        try:
+            picked = first_selected_subelement()
+            if picked is None:
+                return False
+            sub, name = picked
+            result = compute_direction(sub)
+            if result is None:
+                App.Console.PrintWarning("DFM contour: pick a face or an edge.\n")
+                return False
+            pnt, direction = result
+            item = self._side_actions[index]
+            item.dir = App.Vector(direction.x, direction.y, direction.z).normalize()
+            item.anchor = App.Vector(pnt.x, pnt.y, pnt.z)
+            item.ref = name
+            item.flipped = False
+            self._refresh_side_rows()
+            self._refresh_side_arrows()
+            self._mark_dirty()
+            return True
+        except Exception as exc:
+            App.Console.PrintError(f"DFM contour: could not read side action direction. {exc}\n")
+            return False
+
+    def _side_action_options(self):
+        if not self._side_enabled:
+            return []
+        return [
+            {"dir": (i.dir.x, i.dir.y, i.dir.z), "ref": i.ref, "flipped": i.flipped,
+             "anchor": None if i.anchor is None else (i.anchor.x, i.anchor.y, i.anchor.z)}
+            for i in self._side_actions
+        ]
+
+    def _load_side_actions(self, items):
+        for item in list(self._side_actions):
+            self._flipper.discard(item.indicator)
+            item.indicator.remove()
+        self._side_actions = []
+        for entry in items or []:
+            try:
+                d = entry.get("dir")
+                anchor = entry.get("anchor")
+                self._add_side_action(
+                    App.Vector(*d), entry.get("ref", ""), entry.get("flipped", False),
+                    App.Vector(*anchor) if anchor else None, mark=False)
+            except Exception:
+                continue
+        if self._side_box is not None:
+            self._side_box.blockSignals(True)
+            self._side_box.setChecked(bool(self._side_actions))
+            self._side_box.blockSignals(False)
+        self._side_enabled = bool(self._side_actions)
+        if self._side_holder is not None:
+            self._side_holder.setVisible(self._side_enabled)
+        self._refresh_side_arrows()
+
+    # -- Display -----------------------------------------------------------------
+
+    def _cmap(self):
+        """The color map to draw with: the measure's palette when categorical."""
+        if self._categorical:
+            return self.measure.default_colormap
+        return self.cb_colormap.currentText()
+
     def _band(self):
+        if self._categorical:
+            return 0.0
         return _BAND_STEPS.get(self.cb_bands.currentText(), 0.0)
 
     def _highlight_spec(self):
         from ...app.contour.colormap import HighlightSpec
 
+        if self._categorical:
+            return HighlightSpec(active=False, muted=self._muted_codes())
         if not getattr(self, "cb_highlight", None) or not self.cb_highlight.isChecked():
             return HighlightSpec(active=False)
         lo, hi = self._current_range()
@@ -601,7 +964,7 @@ class ContourTaskPanel:
         spec = self._highlight_spec()
         if self._node is not None:
             low, high = self._current_range()
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
+            self._node.recolor(low, high, self._cmap(), self._band(), spec)
         if self._legend is not None:
             self._legend.set_highlight(spec)
         self._update_range_label()
@@ -609,6 +972,11 @@ class ContourTaskPanel:
     def _update_range_label(self):
         """Show the settings for the current view: color scale or pass/fail."""
         if not hasattr(self, "lbl_range"):
+            return
+        if self._categorical:
+            for widget in (self.lbl_colormap, self.cb_colormap, self.lbl_bands, self.cb_bands,
+                           self.lbl_range, self.sb_range_lo.parentWidget(), self.lbl_flag_hint):
+                widget.setVisible(False)
             return
         flag = self.cb_highlight.isChecked()
         for widget in (self.lbl_colormap, self.cb_colormap, self.lbl_bands, self.cb_bands):
@@ -636,6 +1004,8 @@ class ContourTaskPanel:
                 out[oid] = w.currentText()
             else:
                 out[oid] = w.isChecked()
+        if self.measure.needs_side_actions:
+            out["side_actions"] = self._side_action_options()
         return out
 
     def _on_option_changed(self, _checked=False):
@@ -703,7 +1073,8 @@ class ContourTaskPanel:
         self.progress.setFormat("Meshing the model")
         QtWidgets.QApplication.processEvents()
         try:
-            self._mesh = generate_uniform_mesh(self.target_shape, size)
+            self._mesh = generate_uniform_mesh(
+                self.target_shape, size, with_curvature=self.measure.needs_curvature)
         except Exception as exc:
             App.Console.PrintError(f"DFM contour: {exc}\n")
             self.progress.hide()
@@ -729,15 +1100,18 @@ class ContourTaskPanel:
                     QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
                 )
 
+            opts = self._options()
             values, normals = self.measure.measure(
                 self.target_shape,
                 self._mesh,
                 pull=pull,
-                options=self._options(),
+                options=opts,
                 progress_cb=progress_cb,
             )
-            dmin = min(values) if values else 0.0
-            dmax = max(values) if values else 1.0
+            dmin, dmax = _finite_range(values)
+            self._measured_opts = opts
+            self._regions = None
+            self._region_index = {}
             self._last = (self._mesh, values, normals, dmin, dmax)
             self._render()
             self._ensure_analysis_object()
@@ -764,7 +1138,7 @@ class ContourTaskPanel:
         low, high = self._current_range()
         spec = self._highlight_spec()
         if self._node is not None:
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
+            self._node.recolor(low, high, self._cmap(), self._band(), spec)
         if self._legend is not None:
             self._legend.set_range(low, high)
             self._legend.set_highlight(spec)
@@ -773,7 +1147,7 @@ class ContourTaskPanel:
         self._set_range_spins(low, high)
         spec = self._highlight_spec()
         if self._node is not None:
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
+            self._node.recolor(low, high, self._cmap(), self._band(), spec)
         if self._legend is not None:
             self._legend.set_highlight(spec)
 
@@ -781,7 +1155,7 @@ class ContourTaskPanel:
         if self._node is None:
             return
         low, high = self._current_range()
-        colormap = self.cb_colormap.currentText()
+        colormap = self._cmap()
         band = self._band()
         self._node.recolor(low, high, colormap, band)
         if self._legend is not None:
@@ -833,9 +1207,12 @@ class ContourTaskPanel:
         self._node = None
 
         mesh, values, normals, dmin, dmax = self._last
-        dom_lo, dom_hi = self.measure.value_limits(self._options()) or (dmin, dmax)
+        opts = self._options()
+        dom_lo, dom_hi = self.measure.data_domain(dmin, dmax, opts)
         if not self._range_initialized:
-            rng = self.measure.initial_range(self._options())
+            rng = self.measure.initial_range(opts)
+            if rng is None:
+                rng = self.measure.initial_range_for_data(values, opts)
             low, high = (dmin, dmax) if rng is None else rng
             self._range_initialized = True
         else:
@@ -845,13 +1222,15 @@ class ContourTaskPanel:
         if low > high:
             low, high = high, low
         self._set_range_spins(low, high)
-        colormap = self.cb_colormap.currentText()
+        colormap = self._cmap()
         band = self._band()
 
         node = ContourNode(self.target_object)
         smooth = self.cb_smooth.isChecked()
         span = dom_hi - dom_lo
         value_gap = 0.5 * span if (smooth and span > 0) else None
+        if self._categorical:
+            value_gap = 0.5  # categories never blend into each other
         node.build(
             mesh.vertices,
             mesh.triangles,
@@ -870,8 +1249,12 @@ class ContourTaskPanel:
         self._node = node
 
         view_widget = get_view_widget()
-        if view_widget is not None:
+        if view_widget is not None and self._categorical:
+            self._build_category_legend(view_widget, mesh, values)
+        elif view_widget is not None:
             self._legend = ContourLegend(view_widget)
+            self._legend.set_no_value_label(
+                self.measure.no_value_label if any(not math.isfinite(v) for v in values) else None)
             self._legend.rangeChanged.connect(self._on_range_changed)
             self._legend.colormapChanged.connect(self._on_legend_colormap)
             self._legend.bandsChanged.connect(self._on_legend_bands)
@@ -911,6 +1294,90 @@ class ContourTaskPanel:
         self._dirty = False
         self._update_generate_state()
 
+    # -- Category legend ---------------------------------------------------------
+
+    def _build_category_legend(self, view_widget, mesh, values):
+        from .regions import area_shares, triangle_areas
+
+        opts = self._measured_opts if self._measured_opts is not None else self._options()
+        cats = self.measure.categories_for(opts) or []
+        try:
+            areas = triangle_areas(mesh.vertices, mesh.triangles)
+            shares = area_shares(values, areas)
+        except Exception:
+            areas, shares = None, {}
+        self._areas = areas
+        legend = CategoryLegend(view_widget)
+        # Black or white text from the viewport background, as on the gradient
+        # legend (a saved analysis's legend may override it; applied below).
+        try:
+            from .document import auto_legend_text_rgb, legend_text_rgb
+
+            rgb = (legend_text_rgb(self._analysis_obj) if self._analysis_obj is not None
+                   else auto_legend_text_rgb())
+            legend.set_text_color(rgb)
+        except Exception:
+            pass
+        legend.configure(self.measure.label)
+        legend.set_categories(cats, shares)
+        legend.set_muted_state(self._cat_hidden, self._cat_solo)
+        legend.mutedChanged.connect(self._on_categories_muted)
+        legend.regionRequested.connect(self._on_region_requested)
+        self._legend = legend
+        legend.show()
+        legend.raise_()
+        self._restore_legend_geometry()
+        self._ensure_legend_object()
+        for code, (index, count) in self._region_index.items():
+            legend.set_region_position(code, index, count)
+
+    def _muted_codes(self):
+        if self._cat_solo is not None and self._legend is not None and isinstance(
+                self._legend, CategoryLegend):
+            return self._legend.muted()
+        if self._cat_solo is not None:
+            cats = self.measure.categories_for(self._measured_opts or {}) or []
+            return frozenset(c.code for c in cats if c.code != self._cat_solo)
+        return frozenset(self._cat_hidden)
+
+    def _on_categories_muted(self, _muted):
+        if isinstance(self._legend, CategoryLegend):
+            self._cat_hidden, self._cat_solo = self._legend.muted_state()
+        if self._node is not None:
+            low, high = self._current_range()
+            self._node.recolor(low, high, self._cmap(), self._band(), self._highlight_spec())
+
+    def _on_region_requested(self, code, step):
+        if self._last is None or self.target_object is None:
+            return
+        from .regions import CategoryRegions, RegionCamera
+
+        mesh, values, normals, _dmin, _dmax = self._last
+        if self._regions is None:
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+            try:
+                self._regions = CategoryRegions(
+                    mesh.vertices, mesh.triangles, values, normals, getattr(self, "_areas", None))
+                regions = self._regions.regions(code)
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
+        else:
+            regions = self._regions.regions(code)
+        if not regions:
+            return
+        index, _count = self._region_index.get(code, (-1 if step > 0 else 0, len(regions)))
+        index = (index + step) % len(regions)
+        self._region_index[code] = (index, len(regions))
+        if isinstance(self._legend, CategoryLegend):
+            self._legend.set_region_position(code, index, len(regions))
+        if self._region_camera is None or self._region_camera.target_object is not self.target_object:
+            self._region_camera = RegionCamera(self.target_object)
+        self._region_camera.show(regions[index])
+        region = regions[index]
+        Gui.getMainWindow().statusBar().showMessage(
+            f"{self.measure.format_value(code)}: region {index + 1} of {len(regions)}, "
+            f"{region.area:.1f} mm\u00b2", 6000)
+
     def _on_legend_colormap(self, name):
         if name and name != self.cb_colormap.currentText():
             self.cb_colormap.setCurrentText(name)
@@ -923,7 +1390,7 @@ class ContourTaskPanel:
         if self._last is None:
             return
         _, _, _, dmin, dmax = self._last
-        dom_lo, dom_hi = self.measure.value_limits(self._options()) or (dmin, dmax)
+        dom_lo, dom_hi = self.measure.data_domain(dmin, dmax, self._options())
         low = max(dom_lo, min(dmin, dom_hi))
         high = max(dom_lo, min(dmax, dom_hi))
         if low > high:
@@ -931,13 +1398,27 @@ class ContourTaskPanel:
         self._set_range_spins(low, high)
         spec = self._highlight_spec()
         if self._node is not None:
-            self._node.recolor(low, high, self.cb_colormap.currentText(), self._band(), spec)
+            self._node.recolor(low, high, self._cmap(), self._band(), spec)
         if self._legend is not None:
             self._legend.set_range(low, high)
             self._legend.set_highlight(spec)
 
     def _restore_legend_geometry(self):
         if self._legend is None:
+            return
+        if isinstance(self._legend, CategoryLegend):
+            size = _CATEGORY_LEGEND_STATE.get("size")
+            if size is not None:
+                self._legend.resize(size)
+            pos = _CATEGORY_LEGEND_STATE.get("pos")
+            if pos is None:
+                # First time: centered along the top of the 3D view, clear of
+                # the tree and the task panel docked over its sides.
+                parent = self._legend.parentWidget()
+                pw = parent.width() if parent is not None else self._legend.width()
+                pos = QtCore.QPoint(max(0, (pw - self._legend.width()) // 2), 12)
+            self._legend.move(pos)
+            self._legend._clamp_into_parent()
             return
         size = _LEGEND_STATE.get("size")
         pos = _LEGEND_STATE.get("pos")
@@ -979,6 +1460,8 @@ class ContourTaskPanel:
         self._node = None
         self._last = None
         self._mesh = None
+        self._regions = None
+        self._region_index = {}
         self._has_contour = False
         self._dirty = False
         self._range_initialized = False
@@ -1013,7 +1496,7 @@ class ContourTaskPanel:
         return {
             "vertices": list(mesh.vertices),
             "triangles": [tuple(t) for t in mesh.triangles],
-            "values": list(values),
+            "values": [v if math.isfinite(v) else _NO_VALUE_SAVED for v in values],
             "normals": list(normals),
             "dmin": dmin,
             "dmax": dmax,
@@ -1072,10 +1555,13 @@ class ContourTaskPanel:
             for oid, w in self._option_widgets.items():
                 if oid in (obj.Options or {}):
                     val = obj.Options[oid]
+                    w.blockSignals(True)
                     if isinstance(w, QtWidgets.QComboBox):
                         w.setCurrentText(str(val))
                     else:
                         w.setChecked(bool(val))
+                    w.blockSignals(False)
+            self._measured_opts = dict(obj.Options or {})
             if self.measure.needs_pull_direction:
                 self.pull_dir = App.Vector(obj.PullDirection)
                 self.pull_ref = obj.PullReference or self.pull_ref
@@ -1083,6 +1569,8 @@ class ContourTaskPanel:
                     self.pull_ref = self.pull_ref[: -len(" (default)")]
                 self._refresh_direction_row()
                 self._refresh_arrow()
+            if self.measure.needs_side_actions:
+                self._load_side_actions((obj.Options or {}).get("side_actions") or [])
             self._set_range_spins(obj.RangeLow, obj.RangeHigh)
 
             field = getattr(obj, "FieldData", None)
@@ -1094,9 +1582,12 @@ class ContourTaskPanel:
                 )
                 self._auto_range = False
                 self._range_initialized = True
+                values = [
+                    math.inf if v >= 0.5 * _NO_VALUE_SAVED else float(v) for v in field["values"]
+                ]
                 self._last = (
                     stub,
-                    field["values"],
+                    values,
                     field["normals"],
                     field.get("dmin", 0.0),
                     field.get("dmax", 1.0),
@@ -1179,9 +1670,13 @@ class ContourTaskPanel:
     def _destroy_legend(self):
         if self._legend is not None:
             try:
-                _LEGEND_STATE["pos"] = self._legend.pos()
-                _LEGEND_STATE["size"] = self._legend.size()
-                _LEGEND_STATE["horizontal"] = self._legend.orientation_horizontal()
+                if isinstance(self._legend, CategoryLegend):
+                    _CATEGORY_LEGEND_STATE["pos"] = self._legend.pos()
+                    _CATEGORY_LEGEND_STATE["size"] = self._legend.size()
+                else:
+                    _LEGEND_STATE["pos"] = self._legend.pos()
+                    _LEGEND_STATE["size"] = self._legend.size()
+                    _LEGEND_STATE["horizontal"] = self._legend.orientation_horizontal()
             except Exception:
                 pass
             try:
@@ -1222,29 +1717,63 @@ class ContourTaskPanel:
         analysis = self._ensure_analysis_object()
         if analysis is None:
             return
-        from .document import ensure_direction_object
+        from .document import direction_child, ensure_direction_object
 
+        existed = direction_child(analysis) is not None
         try:
             self._direction_obj = ensure_direction_object(analysis)
         except Exception as exc:
             App.Console.PrintWarning(f"DFM contour: could not create direction item. {exc}\n")
             return
         obj = self._direction_obj
-        if obj is None:
+        if obj is None or not App.GuiUp or obj.ViewObject is None:
             return
-        if App.GuiUp and obj.ViewObject is not None:
+        try:
+            if existed:
+                # A saved analysis: its tree item says whether the arrows show.
+                self.apply_indicator_visible(bool(obj.ViewObject.Visibility))
+            elif bool(obj.ViewObject.Visibility) != self._arrows_visible():
+                # A new one: the tree item starts as the checkbox is.
+                obj.ViewObject.Visibility = self._arrows_visible()
+        except Exception:
+            pass
+
+    def _arrows_visible(self):
+        cb = getattr(self, "cb_arrows", None)
+        return True if cb is None else cb.isChecked()
+
+    def _apply_arrow_visibility(self):
+        visible = self._arrows_visible()
+        if self.indicator is not None and not self._pull_indicator_hidden:
             try:
-                self.indicator.set_visible(bool(obj.ViewObject.Visibility))
+                self.indicator.set_visible(visible)
+            except Exception:
+                pass
+        for item in self._side_actions:
+            try:
+                item.indicator.set_visible(visible)
             except Exception:
                 pass
 
-    def apply_indicator_visible(self, visible):
-        if self.indicator is None:
+    def _on_arrows_toggled(self, checked):
+        self._apply_arrow_visibility()
+        obj = self._direction_obj
+        if obj is None or not App.GuiUp:
             return
         try:
-            self.indicator.set_visible(bool(visible))
+            if obj.ViewObject is not None and bool(obj.ViewObject.Visibility) != bool(checked):
+                obj.ViewObject.Visibility = bool(checked)  # calls back apply_indicator_visible
         except Exception:
             pass
+
+    def apply_indicator_visible(self, visible):
+        """The tree item's visibility changed (or a saved analysis was opened)."""
+        cb = getattr(self, "cb_arrows", None)
+        if cb is not None and cb.isChecked() != bool(visible):
+            cb.blockSignals(True)
+            cb.setChecked(bool(visible))
+            cb.blockSignals(False)
+        self._apply_arrow_visibility()
 
     def on_indicator_deleted(self):
         self._direction_obj = None
@@ -1408,6 +1937,59 @@ class ContourTaskPanel:
         if key is not None:
             self._apply_probe_state(key)
 
+    def _pick_contour(self, event_cb):
+        """(key, value, point) of the contour under the cursor, or None.
+
+        The body stays visible just underneath the contour, and FreeCAD draws it
+        with its own tessellation, so the view's single picked point lands on the
+        body or the contour more or less at random. Cast our own ray, keep every
+        hit, and take the first one on the contour, unless something else (not
+        the body just underneath) is clearly in front of it.
+        """
+        node = self._node
+        view = self._hover_view or get_active_view()
+        if node is None or view is None:
+            return None
+        try:
+            pos = event_cb.getEvent().getPosition()
+            render_manager = view.getViewer().getSoRenderManager()
+            action = coin.SoRayPickAction(render_manager.getViewportRegion())
+            action.setPoint(coin.SbVec2s(int(pos[0]), int(pos[1])))
+            action.setPickAll(True)
+            action.apply(render_manager.getSceneGraph())
+            picked = action.getPickedPointList()
+            try:
+                count = picked.getLength()
+            except Exception:
+                count = len(picked)
+            first = None
+            for i in range(count):
+                pp = picked[i]
+                point = pp.getPoint()
+                if first is None:
+                    first = (point[0], point[1], point[2])
+                result = node.pick_value(pp)
+                if result is None:
+                    continue
+                hit = result[2]
+                gap = math.dist(first, hit)
+                return result if gap <= self._occlusion_tolerance() else None
+            return None
+        except Exception:
+            try:
+                return node.pick_value(event_cb.getPickedPoint())
+            except Exception:
+                return None
+
+    def _occlusion_tolerance(self):
+        """How far in front of the contour a hit may be and still be the body
+        underneath it (its coarser facets), not something hiding the contour."""
+        try:
+            diag = self.target_shape.BoundBox.DiagonalLength
+        except Exception:
+            diag = 100.0
+        return max(0.01 * diag, 0.05)
+
     def _probe_at_cursor(self, event_cb):
         view = self._hover_view
         if view is None:
@@ -1440,10 +2022,7 @@ class ContourTaskPanel:
             self._set_hover_cursor(False)
             self._hide_hover_label()
             return
-        try:
-            result = node.pick_value(event_cb.getPickedPoint())
-        except Exception:
-            result = None
+        result = self._pick_contour(event_cb)
 
         if result is None:
             self._set_hover_cursor(False)
@@ -1539,13 +2118,7 @@ class ContourTaskPanel:
         node = self._node
         if node is None:
             return
-        picked = event_cb.getPickedPoint()
-        if picked is None:
-            return
-        try:
-            result = node.pick_value(picked)
-        except Exception:
-            result = None
+        result = self._pick_contour(event_cb)
         if result is not None:
             key, value, point = result
             self._consumed_button_downs.add(button)
@@ -1577,16 +2150,21 @@ class ContourTaskPanel:
         index = self._probe_seq
         unit = self.measure.unit
         formatted = self.measure.format_value(value)
+        text = self.measure.probe_text(value)
 
         obj = doc.addObject("App::FeaturePython", f"Probe{index:03d}")
         ContourProbeFeature(obj)
         obj.Parent = analysis
         obj.Position = App.Vector(point[0], point[1], point[2])
-        obj.Value = float(value)
+        obj.Value = float(value) if math.isfinite(value) else 0.0
         obj.Unit = unit
         obj.FormattedValue = formatted
-        obj.DisplayText = default_display_text(value, unit)
-        obj.Label = default_probe_label(index, value, unit)
+        if text:
+            obj.DisplayText = text
+            obj.Label = f"Probe {index} - {text}"
+        else:
+            obj.DisplayText = default_display_text(value, unit)
+            obj.Label = default_probe_label(index, value, unit)
         if App.GuiUp and obj.ViewObject is not None:
             ContourProbeViewProvider(obj.ViewObject)
             obj.ViewObject.Visibility = True
@@ -1636,6 +2214,11 @@ class ContourTaskPanel:
         self._flipper.detach()
         if self.indicator is not None:
             self.indicator.remove()
+        for item in self._side_actions:
+            try:
+                item.indicator.remove()
+            except Exception:
+                pass
         try:
             Gui.Selection.removeObserver(self)
         except Exception:

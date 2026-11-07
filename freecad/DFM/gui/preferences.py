@@ -640,7 +640,7 @@ class ContourSettingsPanel(AnalyzerPanel):
                     "ContourDefaultResolution",
                     "Default resolution",
                     options=["Rough", "Coarse", "Fine", "Ultra Fine"],
-                    default="Coarse",
+                    default="Fine",
                     tooltip="Default mesh resolution preset. Finer resolutions produce "
                     "more triangles and take longer to compute.",
                 ),
@@ -707,6 +707,19 @@ class ContourSettingsPanel(AnalyzerPanel):
                     suffix="°",
                     tooltip="Edges sharper than this angle stay crisp in the contour "
                     "overlay; smoother edges blend colors (Gouraud shading).",
+                ),
+                FloatField(
+                    "ContourDisplayOffset",
+                    "Display offset",
+                    default=0.1,
+                    min=0.0,
+                    max=2.0,
+                    step=0.05,
+                    decimals=2,
+                    suffix=" %",
+                    tooltip="How far the contour sits off the model, as a share of the "
+                    "model's diagonal. The model stays visible underneath; raise this if "
+                    "its faces show through the contour on curved surfaces.",
                 ),
                 IntField(
                     "ContourTargetPerChunk",

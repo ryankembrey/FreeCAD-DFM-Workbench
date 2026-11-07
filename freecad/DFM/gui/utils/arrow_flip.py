@@ -70,6 +70,14 @@ class ArrowFlipper(QtCore.QObject):
             self._items.append((indicator, on_flip))
         self._attach()
 
+    def discard(self, indicator) -> None:
+        """Stop flipping *indicator* (it was removed)."""
+        if self._hover is indicator:
+            self._set_hover(None)
+        if self._pressed is indicator:
+            self._pressed = None
+        self._items = [(ind, cb) for ind, cb in self._items if ind is not indicator]
+
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = enabled
         if not enabled:

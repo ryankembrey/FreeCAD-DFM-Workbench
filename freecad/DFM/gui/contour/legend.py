@@ -7,7 +7,7 @@ import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ...app.contour.colormap import value_to_color, COLORMAPS, HighlightSpec
+from ...app.contour.colormap import value_to_color, COLORMAPS, HighlightSpec, NO_VALUE_RGB
 
 
 _RESIZE_ZONE = 16
@@ -65,6 +65,8 @@ class ContourLegend(QtWidgets.QWidget):
         self._marker = None
         self._horizontal = False
         self._text_rgb = (1.0, 1.0, 1.0)
+        # A gray swatch for values with no value (e.g. "Flat"), or None.
+        self._no_value_label = None
 
         self._drag_mode = None
         self._press_global = None
@@ -122,9 +124,16 @@ class ContourLegend(QtWidgets.QWidget):
         self.update()
 
     def set_marker(self, value):
+        if value is not None and not math.isfinite(value):
+            value = None  # no value: nothing to point at on the bar
         if value != self._marker:
             self._marker = value
             self.update()
+
+    def set_no_value_label(self, text):
+        """Show a gray swatch named *text* for values with no value, or hide it."""
+        self._no_value_label = text or None
+        self.update()
 
     def cleanup(self):
         parent = self.parent()
@@ -155,6 +164,8 @@ class ContourLegend(QtWidgets.QWidget):
             left, top, right_pad, bottom = 14, 34, 14, 26
             return QtCore.QRect(left, top, max(2, self.width() - left - right_pad), _BAR_W)
         top, bottom_pad = 30, 12
+        if self._no_value_label:
+            bottom_pad += 26  # room for the no-value swatch under the bar
         return QtCore.QRect(10, top, _BAR_W, max(2, self.height() - top - bottom_pad))
 
     def _axis_len(self, bar):
@@ -524,11 +535,29 @@ class ContourLegend(QtWidgets.QWidget):
         p.drawRect(bar)
 
         p.setFont(tick_font)
+        self._paint_no_value(p, bar)
         self._paint_ticks(p, bar)
         self._paint_marker(p, bar)
         self._paint_handles(p, bar)
         if self._hovered:
             self._paint_resize_grip(p)
+
+    def _paint_no_value(self, p, bar):
+        text = self._no_value_label
+        if not text:
+            return
+        fm = QtGui.QFontMetrics(p.font())
+        sw, sh = 18, 11
+        if self._horizontal:
+            x = self.width() - 10 - fm.horizontalAdvance(text) - 6 - sw
+            y = 20 - sh
+        else:
+            x, y = bar.left(), bar.bottom() + 11
+        r, g, b = NO_VALUE_RGB
+        p.setBrush(QtGui.QColor(int(r * 255), int(g * 255), int(b * 255)))
+        p.setPen(QtGui.QPen(QtGui.QColor(30, 30, 30, 235), 1.2))
+        p.drawRect(QtCore.QRectF(x, y, sw, sh))
+        self._halo_text(p, x + sw + 6, y + sh, text)
 
     def _paint_segment_dividers(self, p, bar):
         span = self._dom_hi - self._dom_lo

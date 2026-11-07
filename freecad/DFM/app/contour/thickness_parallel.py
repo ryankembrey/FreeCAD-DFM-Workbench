@@ -13,17 +13,32 @@ _TOL = 1e-3
 
 
 _BACKEND = None
+_FAILED = 0.0
+
+THICKNESS_BACKEND = "thickness_backend.py"
+UNDERCUT_BACKEND = "undercut_backend.py"
+
+
+def _backend_path(backend_file):
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), backend_file)
+
+
+def _load_backend_module(backend_path, name="_dfm_contour_backend"):
+    """Load a backend straight from its file, without the package chain."""
+    spec = importlib.util.spec_from_file_location(name, backend_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"could not load backend from {backend_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _init_worker(brep_path, backend_path, method, tol):
     # Load the backend directly from its file so the child never imports the
     # freecad.* package chain (and therefore never imports FreeCAD).
-    global _BACKEND
-    spec = importlib.util.spec_from_file_location("_dfm_thickness_backend", backend_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"could not load backend from {backend_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    global _BACKEND, _FAILED
+    module = _load_backend_module(backend_path)
+    _FAILED = float(getattr(module, "FAILED_VALUE", 0.0))
 
     from OCP.TopoDS import TopoDS_Shape
     from OCP.BRep import BRep_Builder
@@ -37,13 +52,13 @@ def _init_worker(brep_path, backend_path, method, tol):
 def _measure_chunk(chunk):
     backend = _BACKEND
     if backend is None:
-        return [0.0] * len(chunk)
+        return [_FAILED] * len(chunk)
     out = []
     for centroid, outward, margin in chunk:
         try:
             out.append(backend.at(centroid, outward, margin))
         except Exception:
-            out.append(0.0)
+            out.append(_FAILED)
     return out
 
 
@@ -89,9 +104,9 @@ def _log(message):
     try:
         import FreeCAD as App  # only ever called in the main process
 
-        App.Console.PrintMessage(f"DFM thickness: {message}\n")
+        App.Console.PrintMessage(f"DFM contour: {message}\n")
     except Exception:
-        print(f"DFM thickness: {message}")
+        print(f"DFM contour: {message}")
 
 
 def _pref_min_parallel_tasks() -> int:
@@ -114,11 +129,15 @@ def measure_thickness(
     workers=None,
     enable=True,
     min_tasks=None,
+    backend_file=THICKNESS_BACKEND,
 ):
-    """Measure thickness for a list of (centroid, outward_normal, margin) tasks.
+    """Measure a list of (centroid, outward_normal, margin) tasks with a backend.
 
-    Uses a process pool when it's available and worthwhile, otherwise measures
-    serially. Returns one value per task, in order.
+    The backend is a module file next to this one with make_backend(method,
+    shape) returning an object with at(centroid, outward, margin): the
+    thickness backend by default, or the undercut one. Uses a process pool when
+    it's available and worthwhile, otherwise measures serially. Returns one
+    value per task, in order.
     """
     if min_tasks is None:
         min_tasks = _pref_min_parallel_tasks()
@@ -131,7 +150,9 @@ def measure_thickness(
         try:
             w = workers or _cpu_count()
             _log(f"measuring {n} points on {w} workers ({ctx.get_start_method()}).")
-            return _parallel(part_shape, tasks, method, progress_cb, check_abort, tol, workers, ctx)
+            return _parallel(
+                part_shape, tasks, method, progress_cb, check_abort, tol, workers, ctx, backend_file
+            )
         except Exception as exc:
             _log(f"parallel measuring failed, using serial. {exc}")
     else:
@@ -143,14 +164,20 @@ def measure_thickness(
             else "single core"
         )
         _log(f"measuring {n} points serially ({reason}).")
-    return _serial(part_shape, tasks, method, progress_cb, check_abort, tol)
+    return _serial(part_shape, tasks, method, progress_cb, check_abort, tol, backend_file)
 
 
-def _serial(part_shape, tasks, method, progress_cb, check_abort, tol):
+def measure_points(part_shape, tasks, method, backend_file, **kwargs):
+    """measure_thickness with any backend file; reads better at call sites."""
+    return measure_thickness(part_shape, tasks, method, backend_file=backend_file, **kwargs)
+
+
+def _serial(part_shape, tasks, method, progress_cb, check_abort, tol, backend_file=THICKNESS_BACKEND):
     from ...core.utils.conversion import freecad_to_ocp
-    from .thickness_backend import make_backend
 
-    backend = make_backend(method, freecad_to_ocp(part_shape))
+    module = _load_backend_module(_backend_path(backend_file))
+    failed = float(getattr(module, "FAILED_VALUE", 0.0))
+    backend = module.make_backend(method, freecad_to_ocp(part_shape))
     n = len(tasks)
     out = []
     for i, (centroid, outward, margin) in enumerate(tasks):
@@ -159,23 +186,24 @@ def _serial(part_shape, tasks, method, progress_cb, check_abort, tol):
         try:
             out.append(backend.at(centroid, outward, margin))
         except Exception:
-            out.append(0.0)
+            out.append(failed)
         if progress_cb and (i & 0xFF) == 0:
             progress_cb(i, n)
     while len(out) < n:
-        out.append(0.0)
+        out.append(failed)
     if progress_cb:
         progress_cb(n, n)
     return out
 
 
-def _parallel(part_shape, tasks, method, progress_cb, check_abort, tol, workers, ctx):
+def _parallel(part_shape, tasks, method, progress_cb, check_abort, tol, workers, ctx,
+              backend_file=THICKNESS_BACKEND):
     import sys
     import tempfile
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     workers = workers or _cpu_count()
-    backend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "thickness_backend.py")
+    backend_path = _backend_path(backend_file)
 
     fd, brep_path = tempfile.mkstemp(suffix=".brep")
     os.close(fd)

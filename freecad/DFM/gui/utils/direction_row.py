@@ -182,7 +182,8 @@ class DirectionRow(QtWidgets.QWidget):
     editing = QtCore.Signal(bool)  # the direction list opened or closed
 
     def __init__(self, label: str, removable: bool = False,
-                 parent: Optional[QtWidgets.QWidget] = None, description: str = ""):
+                 parent: Optional[QtWidgets.QWidget] = None, description: str = "",
+                 color: Optional[Sequence[float]] = None):
         super().__init__(parent)
         self.setObjectName("dfmDirectionRow")
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -191,6 +192,12 @@ class DirectionRow(QtWidgets.QWidget):
         row.setSpacing(4)
 
         self.label = QtWidgets.QLabel(label)
+        if color is not None:
+            # A swatch in the arrow's color, so the row and its arrow pair up.
+            r, g, b = (int(round(float(c) * 255)) for c in color[:3])
+            self.label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+            self.label.setText(
+                f'<span style="color: rgb({r}, {g}, {b})">\u25a0</span>&nbsp;{label}')
         self.label.setMinimumHeight(28)
         row.addWidget(self.label)
         row.addStretch(1)

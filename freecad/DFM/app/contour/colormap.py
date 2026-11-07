@@ -3,6 +3,7 @@
 # SPDX-FileNotice: Part of the DFM addon.
 
 
+import math
 from typing import Callable
 
 
@@ -210,6 +211,38 @@ def get_colormap(name: str) -> Callable[[float], tuple]:
     return COLORMAPS.get(name, viridis)
 
 
+# Categorical palettes: a color per integer category code. Kept apart from
+# COLORMAPS so they never appear in the color map lists.
+_SIDE_ACTION_PURPLES = [
+    (0.620, 0.320, 0.900),  # the side action arrow color
+    (0.820, 0.580, 0.980),
+    (0.420, 0.200, 0.660),
+    (0.910, 0.420, 0.800),
+    (0.500, 0.420, 0.960),
+    (0.720, 0.620, 0.860),
+]
+
+CATEGORICAL_PALETTES: dict = {
+    "Release direction": {
+        0: (0.902, 0.863, 0.765),  # either side: sand
+        1: (0.231, 0.490, 0.847),  # along the pull (core): blue
+        2: (0.173, 0.647, 0.553),  # against the pull (cavity): green
+        3: (0.839, 0.153, 0.157),  # undercut: red
+        **{4 + i: c for i, c in enumerate(_SIDE_ACTION_PURPLES)},
+    },
+}
+
+_UNKNOWN_CATEGORY = (0.40, 0.40, 0.40)
+
+
+def is_categorical(name: str) -> bool:
+    return name in CATEGORICAL_PALETTES
+
+
+def categorical_color(name: str, code: int) -> tuple:
+    return CATEGORICAL_PALETTES.get(name, {}).get(int(code), _UNKNOWN_CATEGORY)
+
+
 def normalize(value: float, vmin: float, vmax: float) -> float:
     if vmax - vmin < 1e-12:
         return 0.5
@@ -227,11 +260,18 @@ _HIGHLIGHT_IN = (0.85, 0.15, 0.15)  # red
 _HIGHLIGHT_OUT = (0.62, 0.62, 0.62)  # gray
 
 
+# Values with no value (math.inf), such as flat faces for curvature, and
+# categories hidden in the legend.
+NO_VALUE_RGB = _HIGHLIGHT_OUT
+
+
 class HighlightSpec:
-    def __init__(self, active=False, lo=None, hi=None):
+    def __init__(self, active=False, lo=None, hi=None, muted=None):
         self.active = bool(active)
         self.lo = lo
         self.hi = hi
+        # Category codes drawn gray (hidden or not soloed in the legend).
+        self.muted = frozenset(muted or ())
 
     def in_band(self, value: float) -> bool:
         if self.lo is not None and value < self.lo:
@@ -255,7 +295,17 @@ def value_to_color(
     """Map a value to an rgb. With an active HighlightSpec, the raw value is
     classified against its band and painted red (in) or gray (out), replacing
     the colormap entirely. The band test uses the raw value, before
-    quantization/normalization, so it's independent of the legend window."""
+    quantization/normalization, so it's independent of the legend window.
+
+    A non-finite value has no value and is gray. A categorical palette maps
+    the value's category code straight to its color; muted codes are gray."""
+    if not math.isfinite(value):
+        return NO_VALUE_RGB
+    if colormap in CATEGORICAL_PALETTES:
+        code = int(round(value))
+        if highlight is not None and code in highlight.muted:
+            return _HIGHLIGHT_OUT
+        return categorical_color(colormap, code)
     if highlight is not None and highlight.active:
         return highlight.color(value)
     v = quantize(value, band_step)

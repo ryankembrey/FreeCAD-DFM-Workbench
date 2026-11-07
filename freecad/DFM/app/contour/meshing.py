@@ -4,6 +4,7 @@
 
 
 from dataclasses import dataclass
+from typing import Optional
 import math
 import os
 import tempfile
@@ -20,7 +21,7 @@ RESOLUTION_DIVISORS = {
     "Ultra Fine": 140.0,
 }
 
-_DEFAULT_RESOLUTION = "Coarse"
+_DEFAULT_RESOLUTION = "Fine"
 _TRIANGLE_WARN = 300_000
 _TRIANGLE_HARD_CAP = 1_500_000
 _MIN_ELEMENT_SIZE = 1e-3
@@ -47,6 +48,9 @@ class UniformMesh:
     vertices: list
     triangles: list
     cad_normals: list
+    # Signed tightest curvature (1/mm) per triangle, positive = convex against
+    # the triangle's winding normal; None when not asked for or not known.
+    curvatures: Optional[list] = None
 
 
 def element_size_for(shape, resolution: str) -> float:
@@ -187,8 +191,11 @@ def _import_gmsh():
         raise RuntimeError(hint) from exc
 
 
-def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
+def generate_uniform_mesh(shape, element_size: float, with_curvature: bool = False) -> UniformMesh:
     """Mesh `shape` with gmsh at a uniform element size (mm).
+
+    With `with_curvature`, also work out each triangle's curvature from the
+    exact CAD surfaces while gmsh still has them (see curvature.py).
 
     Raises RuntimeError if gmsh is unavailable, the size is unsafe, or no
     triangles were produced.
@@ -245,6 +252,7 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
 
             triangles = []
             cad_normals = []
+            curvatures = [] if with_curvature else None
             for _dim, surf_tag in gmsh.model.getEntities(2):
                 s_tags, _s_coords, s_params = gmsh.model.mesh.getNodes(
                     2, surf_tag, includeBoundary=True, returnParametricCoord=True
@@ -265,12 +273,15 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
                             float(normals_flat[3 * k + 2]),
                         )
 
+                surf_tris = []
                 e_types, _e_tags, e_node_tags = gmsh.model.mesh.getElements(2, surf_tag)
                 for etype, enodes in zip(e_types, e_node_tags):
                     if int(etype) != 2:
                         continue
                     for j in range(0, len(enodes), 3):
                         t0, t1, t2 = int(enodes[j]), int(enodes[j + 1]), int(enodes[j + 2])
+                        if curvatures is not None:
+                            surf_tris.append((t0, t1, t2))
                         triangles.append((tag_to_index[t0], tag_to_index[t1], tag_to_index[t2]))
                         n0 = node_normal.get(t0)
                         n1 = node_normal.get(t1)
@@ -285,6 +296,13 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
                             )
                         else:
                             cad_normals.append(None)
+                if curvatures is not None and surf_tris:
+                    curvatures.extend(
+                        _surface_curvatures(
+                            gmsh, surf_tag, s_tags, s_params, node_normal, surf_tris,
+                            lambda t: vertices[tag_to_index[t]],
+                        )
+                    )
         finally:
             gmsh.finalize()
     finally:
@@ -302,4 +320,17 @@ def generate_uniform_mesh(shape, element_size: float) -> UniformMesh:
         f"DFM contour: meshed at {element_size:.3f} mm -> "
         f"{len(vertices)} nodes, {len(triangles)} triangles.\n"
     )
-    return UniformMesh(vertices=vertices, triangles=triangles, cad_normals=cad_normals)
+    return UniformMesh(
+        vertices=vertices, triangles=triangles, cad_normals=cad_normals, curvatures=curvatures
+    )
+
+
+def _surface_curvatures(gmsh, surf_tag, s_tags, s_params, node_normal, tris, coords_of):
+    """Curvature for one surface's triangles; Nones if it can't be done."""
+    try:
+        from .curvature import surface_curvatures
+
+        return surface_curvatures(gmsh, surf_tag, s_tags, s_params, node_normal, tris, coords_of)
+    except Exception as exc:
+        App.Console.PrintWarning(f"DFM contour: curvature failed on surface {surf_tag}. {exc}\n")
+        return [None] * len(tris)
