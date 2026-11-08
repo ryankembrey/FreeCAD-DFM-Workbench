@@ -7,7 +7,7 @@ from typing import Optional
 
 from ...core.models import CheckResult
 from ...core.processes.process import RuleFeedback, RuleLimit
-from ...core.rules import Rulebook
+from ...core.rules import SHAPE_FIELD_ATTRS, Rulebook
 from ...core.models import Severity
 
 
@@ -48,6 +48,29 @@ class BaseCheck(ABC):
     def covered_faces(self, analysis_data, **kwargs) -> set[int]:
         """Face numbers this rule takes over from the rules it supersedes."""
         return set()
+
+    #: Placeholders this check's messages can use besides the standard ones
+    #: (message_placeholders): name -> what it is replaced with, in a few words.
+    message_fields: dict[str, str] = {}
+
+    def message_placeholders(self, rule: Rulebook) -> dict[str, str]:
+        """Every {placeholder} a message of *rule* can use, with what it is
+        replaced with: what the rule feedback editor offers, in this order.
+        A test checks the process files use no others."""
+        return {**self.value_placeholders(rule), **self.context_placeholders(rule),
+                **self.message_fields}
+
+    def value_placeholders(self, rule: Rulebook) -> dict[str, str]:
+        """The measured value and the rule's thresholds."""
+        fields = {"measured": "The measured value, with its unit"}
+        for attr in ("target", "limit"):
+            if attr in SHAPE_FIELD_ATTRS.get(rule.shape, ()):
+                fields[attr] = f'The rule\'s "{rule.field_label_for(attr)}" value'
+        return fields
+
+    def context_placeholders(self, rule: Rulebook) -> dict[str, str]:
+        """What the finding is about (none for checks that report faces)."""
+        return {}
 
     @abstractmethod
     def run_check(

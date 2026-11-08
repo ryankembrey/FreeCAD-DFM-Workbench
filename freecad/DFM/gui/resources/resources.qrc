@@ -16,7 +16,6 @@
     <file>icons/dfm_thickness.svg</file>
     <file>icons/dfm_undercut.svg</file>
     <file>icons/dfm_curvature.svg</file>
-    <file>icons/dfm_moldflow.svg</file>
     <file>icons/direction.svg</file>
     <file>icons/legend.svg</file>
 </qresource>

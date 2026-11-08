@@ -454,6 +454,10 @@ def apply_svg_icon(
     _ThemedSvgIcon(button, svg_template, size, color, opacities)
 
 
+#: Width of a value field (and of a severity combo, so the columns line up).
+_FIELD_WIDTH = 110
+
+
 class _FieldResetButton(QtWidgets.QAbstractButton):
     """Small orange reset button shown next to a value that overrides Default.
 
@@ -924,7 +928,7 @@ class BaseRuleCard(QtWidgets.QFrame):
         col.addWidget(lbl)
 
         field = UnitInput(self.rule.unit or "")
-        field.setFixedWidth(110)
+        field.setFixedWidth(_FIELD_WIDTH)
         col.addWidget(field)
 
         if self.rule.unit_suffix:
@@ -1213,41 +1217,35 @@ class MinAndMaxCard(BaseRuleCard):
 
 class BinaryCard(BaseRuleCard):
     def _build_fields(self) -> None:
-        col = QtWidgets.QVBoxLayout()
-        col.setSpacing(3)
-        col.setContentsMargins(0, 0, 0, 0)
+        # Label over the combo; the reset button left of the combo, just
+        # outside it (a value field has room for it inside).
+        grid = QtWidgets.QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(3)
+        grid.setVerticalSpacing(3)
 
         lbl = QtWidgets.QLabel(self.rule.field_labels[0])
         lbl.setProperty("fieldLabel", True)
-        col.addWidget(lbl)
+        grid.addWidget(lbl, 0, 1)
 
         self._combo = QtWidgets.QComboBox()
         # Labels follow FreeCAD's sentence case; the stored value stays uppercase.
         self._combo.addItem("Error", "ERROR")
         self._combo.addItem("Warning", "WARNING")
-        # Combo plus its reset button take the width of a value field when the
-        # text allows, so columns line up; it never shrinks below its text.
-        self._combo.setSizeAdjustPolicy(
-            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents
-        )
-        self._combo.setMinimumWidth(
-            max(110 - _FieldResetButton._SIZE - 3, self._combo.sizeHint().width())
-        )
+        # Exactly a value field's width, so both its edges line up with the
+        # "At most" fields of the cards around it.
+        self._combo.setFixedWidth(max(_FIELD_WIDTH, self._combo.sizeHint().width()))
         self._combo.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        grid.addWidget(self._combo, 1, 1)
 
-        combo_row = QtWidgets.QHBoxLayout()
-        combo_row.setContentsMargins(0, 0, 0, 0)
-        combo_row.setSpacing(3)
-        combo_row.addWidget(self._combo)
         self._combo_reset = _FieldResetButton(self)
         self._combo_reset.clicked.connect(
             lambda: self.field_reset_requested.emit("binary_severity")
         )
-        combo_row.addWidget(self._combo_reset)
-        col.addLayout(combo_row)
+        grid.addWidget(self._combo_reset, 1, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
         self._fields_row.addStretch()
-        self._fields_row.addLayout(col)
+        self._fields_row.addLayout(grid)
         self._combo.currentIndexChanged.connect(self._on_severity_changed)
 
     def _load_values(self) -> None:

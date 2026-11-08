@@ -39,6 +39,8 @@ def root_measure(check: FeatureCheck, feature: Feature, pf: PartFeatures) -> Mea
 class BossRootRadiusCheck(FeatureCheck):
     """Root fillet of every boss, as a % of the nominal wall."""
 
+    message_fields = {"radius": "The root fillet radius"}
+
     kinds = (FeatureKind.BOSS,)
 
     @property
@@ -56,6 +58,8 @@ class BossRootRadiusCheck(FeatureCheck):
 @register_check(Rulebook.MIN_RIB_ROOT_RADIUS)
 class RibRootRadiusCheck(FeatureCheck):
     """Root fillet of every rib and gusset, as a % of the nominal wall."""
+
+    message_fields = {"radius": "The root fillet radius"}
 
     kinds = (FeatureKind.RIB,)
     skip_subtypes = frozenset({"crush"})

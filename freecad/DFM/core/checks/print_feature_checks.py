@@ -188,6 +188,8 @@ class PrintedTextCheck(PrintFeatureCheck):
     """How far lettering stands out from or is cut into the surface. Besides
     its thresholds it warns of characters too small to read."""
 
+    message_fields = {"relief": '"height" (raised text) or "depth" (cut-in text)'}
+
     kinds = (FeatureKind.TEXT,)
 
     @property
@@ -242,6 +244,10 @@ class PrintedTextStrokeCheck(PrintFeatureCheck):
 
     It judges the gaps of cut-in lettering instead of Minimum Gap, which
     would otherwise report each of its grooves too."""
+
+    message_fields = {
+        "fault": 'What happens to strokes this thin: "may not print" or "may fill in"',
+    }
 
     kinds = (FeatureKind.TEXT,)
     supersedes = (Rulebook.MIN_PRINT_GAP,)
@@ -303,6 +309,10 @@ class EscapeHoleCheck(PrintFeatureCheck):
     its thresholds it warns of a hollow with a single hole: resin or powder
     leaves through one while air comes in through another (Formlabs Fuse,
     Xometry MJF: at least two, on opposite sides)."""
+
+    message_fields = {
+        "holes": 'How many escape holes and the smallest, such as "2 escape holes, the smallest Ø3.00 mm"',
+    }
 
     kinds = (FeatureKind.VOID,)
 
@@ -366,6 +376,8 @@ class CuppingCheck(PrintFeatureCheck):
     Recesses that open towards the platform cup only when printed directly on
     it (not on supports): those findings are warnings at most."""
 
+    message_fields = {"sealed_by": "What seals the cup: the tank's film, or the build platform"}
+
     kinds = (FeatureKind.HOLE, FeatureKind.POCKET, FeatureKind.CUTOUT)
 
     @property
@@ -401,6 +413,8 @@ class PrintedHoleDepthCheck(PrintFeatureCheck):
     """A hole's depth as a multiple of its diameter: deep narrow holes trap
     uncured resin or unfused powder (Xometry LSPc: blind holes under 3x,
     through holes under 8x). Through holes may be 8/3 as long."""
+
+    message_fields = {"hole_kind": '"blind" or "through"'}
 
     kinds = (FeatureKind.HOLE,)
 

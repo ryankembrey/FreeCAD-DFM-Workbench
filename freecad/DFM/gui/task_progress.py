@@ -7,13 +7,14 @@
 The setup panel hands over to this one when Run is clicked, and this one hands
 over to the results panel when the analysis is done (or back to a setup panel
 with the same settings on Abort). It shows every rule of the process, so it
-reads well with many rules and with rules measured at the same time on
-several cores (see app/parallel):
+reads well with many rules and with rules measured at the same time (see
+app/parallel):
 
-* an overall bar, what is happening ("Measuring on 7 cores"), the time so far
-  and the time left (app/run_estimate.py);
-* a row per rule: queued, running (its own bar and how many cores are on it),
-  checking, or done (its findings and time). The running rows are kept in
+* an overall bar, what is happening, the time so far and the time left
+  (app/run_estimate.py);
+* a line per rule: queued, running (how far it has got), checking, or done
+  (its findings and time). Every line is the same height whatever it shows,
+  so the list doesn't jump as rules move on. The running lines are kept in
   view.
 
 It runs the analysis itself (AnalysisRunner), reading its progress events.
@@ -107,53 +108,39 @@ class _ElidedLabel(QtWidgets.QLabel):
 
 
 class _RuleRow:
-    """One rule's line: state mark, name, and either a bar with its share
-    (while running) or a line of details (queued, checking, done)."""
+    """One rule's line: state mark, name, and what it is doing (queued, how
+    far it has got, checking, its findings). All three cells have the same
+    fixed height: the marks come from fallback fonts of other heights."""
 
-    def __init__(self, grid: QtWidgets.QGridLayout, row: int, rule, analyzer_id: str):
+    def __init__(self, grid: QtWidgets.QGridLayout, row: int, rule, analyzer_id: str, height: int,
+                 detail_width: int):
         self.rule = rule
         self.analyzer_id = analyzer_id
         self.mark = QtWidgets.QLabel()
-        self.mark.setFixedWidth(16)
+        self.mark.setFixedSize(16, height)
         self.mark.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.name = _ElidedLabel(getattr(rule, "label", None)
                                  or rule.name.replace("_", " ").capitalize())
-
-        # Bar and details share the right-hand column.
-        self.cell = QtWidgets.QWidget()
-        cell = QtWidgets.QHBoxLayout(self.cell)
-        cell.setContentsMargins(0, 0, 0, 0)
-        cell.setSpacing(6)
-        self.bar = QtWidgets.QProgressBar()
-        self.bar.setTextVisible(False)
-        self.bar.setFixedHeight(8)
-        self.bar.setFixedWidth(64)
-        self.bar.setRange(0, 1000)
+        self.name.setFixedHeight(height)
         self.detail = QtWidgets.QLabel()
+        self.detail.setFixedHeight(height)
+        self.detail.setMinimumWidth(detail_width)
         self.detail.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight
                                  | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        cell.addStretch(1)
-        cell.addWidget(self.bar)
-        cell.addWidget(self.detail)
         grid.addWidget(self.mark, row, 0)
         grid.addWidget(self.name, row, 1)
-        grid.addWidget(self.cell, row, 2)
+        grid.addWidget(self.detail, row, 2)
         self.state = None
 
-    def show(self, state: str, mark: str, color: Optional[str], detail: str,
-             fraction: Optional[float] = None, muted: str = "") -> None:
+    def show(self, state: str, mark: str, color: Optional[str], detail: str, muted: str = "",
+             strong: bool = False) -> None:
         self.state = state
         self.mark.setText(mark)
         self.mark.setStyleSheet(f"color: {color};" if color else f"color: {muted};")
-        quiet = state == "queued"
-        self.name.setStyleSheet(f"color: {muted};" if quiet else "")
+        self.name.setStyleSheet(f"color: {muted};" if state == "queued" else "")
         self.detail.setText(detail)
-        self.detail.setStyleSheet(f"color: {muted};")
-        if fraction is None:
-            self.bar.setVisible(False)
-        else:
-            self.bar.setVisible(True)
-            self.bar.setValue(int(max(0.0, min(1.0, fraction)) * 1000))
+        # A running rule's percentage reads in the text colour; the rest is quiet.
+        self.detail.setStyleSheet("" if strong else f"color: {muted};")
 
 
 class TaskProgress:
@@ -168,7 +155,6 @@ class TaskProgress:
         self._step = 0
         self._serial: dict[str, dict] = {}  # analyzers measured in FreeCAD's process
         self._parallel: dict[str, dict] = {}  # analyzers measured by the workers
-        self._workers = 0
         self._checks: dict[Any, tuple] = {}  # rule -> (findings, seconds)
         self._phase = "Getting started"
         self._started = time.monotonic()
@@ -241,11 +227,16 @@ class TaskProgress:
         return form
 
     def _build_rows(self, rules: list) -> None:
+        metrics = self.summary.fontMetrics()
+        height = metrics.height() + 4
+        # Wide enough for the longest detail, so the names don't shift as it changes.
+        detail_width = metrics.horizontalAdvance("99 findings · 9m 59s") + 4
         for i, entry in enumerate(rules):
-            self._rows.append(_RuleRow(self.grid, i, entry["rule"], entry["analyzer"]))
+            self._rows.append(_RuleRow(self.grid, i, entry["rule"], entry["analyzer"], height,
+                                       detail_width))
         self.grid.setRowStretch(len(rules), 1)
         # Room for up to ~12 rules before it scrolls.
-        self.scroll.setMinimumHeight(min(12, max(3, len(rules))) * 24)
+        self.scroll.setMinimumHeight(min(12, max(3, len(rules))) * (height + self.grid.verticalSpacing()))
 
     # -- Running ----------------------------------------------------------------
 
@@ -336,9 +327,8 @@ class TaskProgress:
             self._estimate = RunEstimate(data.get("rules", []), load_history())
             self._refresh(force=True)
         elif kind == "workers":
-            self._workers = data.get("workers", 0)
             self._parallel = data.get("analyzers", {})
-            self._phase = f"Measuring on {self._workers} cores" if self._workers > 1 else "Measuring"
+            self._phase = "Measuring"
             self._maybe_refresh()
         elif kind == "analyzer":
             self._serial[data["id"]] = dict(data)
@@ -373,7 +363,7 @@ class TaskProgress:
             self.abort_requested = True
 
     def _analyzer_view(self, aid: str) -> tuple:
-        """(state, fraction, cores, seconds) of an analyzer."""
+        """(state, fraction, seconds) of an analyzer."""
         now = time.monotonic()
         p = self._parallel.get(aid)
         if p is not None:
@@ -381,17 +371,17 @@ class TaskProgress:
             fraction = p.get("done", 0) / total
             started, finished = p.get("started"), p.get("finished")
             if finished is not None:
-                return "measured", 1.0, 0, finished - (started or finished)
+                return "measured", 1.0, finished - (started or finished)
             if started is not None:
-                return "running", fraction, p.get("busy", 0), now - started
-            return "queued", 0.0, 0, 0.0
+                return "running", fraction, now - started
+            return "queued", 0.0, 0.0
         s = self._serial.get(aid)
         if s is not None:
             total = max(s.get("total") or 1, 1)
             if s.get("state") == "done":
-                return "measured", 1.0, 0, s.get("seconds", 0.0)
-            return "running", s.get("done", 0) / total, 1, s.get("seconds", 0.0)
-        return "queued", 0.0, 0, 0.0
+                return "measured", 1.0, s.get("seconds", 0.0)
+            return "running", s.get("done", 0) / total, s.get("seconds", 0.0)
+        return "queued", 0.0, 0.0
 
     def _draw(self) -> None:
         if self.abort_requested:
@@ -403,7 +393,7 @@ class TaskProgress:
         first_running = None
         for row in self._rows:
             checked = self._checks.get(row.rule)
-            state, fraction, cores, seconds = self._analyzer_view(row.analyzer_id)
+            state, fraction, seconds = self._analyzer_view(row.analyzer_id)
             if checked is not None:
                 done += 1
                 findings, _check_seconds = checked
@@ -419,12 +409,8 @@ class TaskProgress:
             elif state == "running":
                 if first_running is None:
                     first_running = row
-                if self._parallel.get(row.analyzer_id) is not None:
-                    detail = (f"{cores} core{'s' if cores != 1 else ''} · {fraction:.0%}"
-                              if cores else f"Waiting · {fraction:.0%}")
-                else:
-                    detail = f"{fraction:.0%}"
-                row.show("running", "●", _RUNNING, detail, fraction, muted=self._muted)
+                row.show("running", "●", _RUNNING, f"{max(0.0, min(1.0, fraction)):.0%}",
+                         muted=self._muted, strong=True)
             else:
                 row.show("queued", "○", None, "Queued", muted=self._muted)
         if self._rows:

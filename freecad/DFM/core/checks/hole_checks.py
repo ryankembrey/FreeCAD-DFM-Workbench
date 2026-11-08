@@ -45,6 +45,8 @@ class CoredHoleDepthCheck(FeatureCheck):
     go twice as deep (their pin is held at both ends); threaded holes are
     left out (usually tapped or fitted with an insert)."""
 
+    message_fields = {"hole_kind": '"blind" or "through"'}
+
     kinds = (FeatureKind.HOLE,)
     skip_subtypes = frozenset({"threaded"})
     uses_nominal = False
@@ -79,6 +81,10 @@ class HoleSpacingCheck(FeatureCheck):
 
     Holes in bosses are left to the boss wall rule.
     """
+
+    message_fields = {
+        "reference": "What the gap is compared with: the nominal wall or the hole's diameter",
+    }
 
     kinds = (FeatureKind.HOLE,)
 

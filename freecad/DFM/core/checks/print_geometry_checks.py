@@ -57,6 +57,8 @@ class PrintGapCheck(_Measured):
     Too narrow and the walls fuse: excess resin cures in it, powder sinters
     in it, or FDM lines touch."""
 
+    message_fields = {"faces": 'The two faces, such as "Face8 and Face10"'}
+
     @property
     def name(self) -> str:
         return "Print Gap Check"

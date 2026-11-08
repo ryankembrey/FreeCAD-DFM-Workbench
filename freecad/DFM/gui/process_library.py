@@ -18,14 +18,15 @@ from ..core.registries.process_registry import ProcessRegistry
 from ..core.rules import SHAPE_FIELD_ATTRS, Criticality, Rulebook
 
 from .rule_cards import (
-    ADD_SVG, CARD_STYLE, FILTER_SVG, GRID_VIEW_SVG, IMPORT_SVG, LIST_VIEW_SVG, REDO_SVG,
-    REMOVE_SVG, UNDO_SVG, BaseRuleCard, UnitInput,
+    ADD_SVG, CARD_STYLE, FILTER_SVG, GRID_VIEW_SVG, IMPORT_SVG, LIST_VIEW_SVG, OVERRIDE_COLOR,
+    REDO_SVG, REMOVE_SVG, UNDO_SVG, BaseRuleCard, UnitInput,
     apply_svg_icon, build_card, limit_conflict_message,
 )
 from .rule_cards import _RESET_SVG, _resolve_badge
 
 from .rule_information import RuleDiagramView
 from .utils import resources  # noqa: F401
+from .utils.flow_layout import FlowLayout
 
 
 TREE_FRAME_STYLE = """
@@ -376,15 +377,21 @@ _COUNT_ROLE = QtCore.Qt.ItemDataRole.UserRole + 1
 
 
 class _TreeCountDelegate(QtWidgets.QStyledItemDelegate):
-    """Draws a muted, right-aligned note (such as "4 overrides") on tree rows."""
+    """Draws a material's override count as a small orange badge at the right
+    of its row: the colour the rule cards give overridden values. The row's
+    tool tip says what it counts.
+
+    The badge is left out when the name leaves no room for it."""
+
+    _GAP = 12  # min space between the name and the badge
+    _MARGIN = 8  # from the row's right edge
 
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
-        note = index.data(_COUNT_ROLE)
-        if not note:
+        count = index.data(_COUNT_ROLE)
+        if not count:
             return
-        # Fit the note after the item's text: full ("4 overrides"), then just
-        # the number, then nothing, so it never overlaps a long name.
+        text = str(count)
         opt = QtWidgets.QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         style = opt.widget.style() if opt.widget else QtWidgets.QApplication.style()
@@ -392,33 +399,37 @@ class _TreeCountDelegate(QtWidgets.QStyledItemDelegate):
             QtWidgets.QStyle.SubElement.SE_ItemViewItemText, opt, opt.widget
         )
         text_end = text_rect.left() + opt.fontMetrics.horizontalAdvance(opt.text)
+
         small = QtGui.QFont(option.font)
-        small.setPointSizeF(small.pointSizeF() * 0.85)
+        small.setPointSizeF(small.pointSizeF() * 0.8)
+        small.setBold(True)
         fm = QtGui.QFontMetrics(small)
-        right = option.rect.right() - 8
-        for candidate in (note, note.split(" ")[0]):
-            if text_end + 12 + fm.horizontalAdvance(candidate) <= right:
-                note = candidate
-                break
-        else:
+        height = min(fm.height() + 2, option.rect.height() - 2)
+        width = max(height, fm.horizontalAdvance(text) + 10)
+        right = option.rect.right() - self._MARGIN
+        if text_end + self._GAP + width > right:
             return
+        badge = QtCore.QRectF(right - width, option.rect.center().y() - height / 2 + 0.5,
+                              width, height)
 
         painter.save()
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         selected = bool(option.state & QtWidgets.QStyle.StateFlag.State_Selected)
-        role = (
-            QtGui.QPalette.ColorRole.HighlightedText if selected
-            else QtGui.QPalette.ColorRole.Text
-        )
-        color = QtGui.QColor(option.palette.color(role))
-        color.setAlphaF(0.85 if selected else 0.55)
+        accent = QtGui.QColor(OVERRIDE_COLOR)
+        if selected:
+            # On the selection colour: a solid badge, the text in the highlight colour.
+            fill = QtGui.QColor(option.palette.color(QtGui.QPalette.ColorRole.HighlightedText))
+            ink = QtGui.QColor(option.palette.color(QtGui.QPalette.ColorRole.Highlight))
+        else:
+            fill = QtGui.QColor(accent)
+            fill.setAlphaF(0.18)
+            ink = accent
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(fill)
+        painter.drawRoundedRect(badge, height / 2, height / 2)
         painter.setFont(small)
-        painter.setPen(color)
-        rect = option.rect.adjusted(0, 0, -8, 0)
-        painter.drawText(
-            rect,
-            int(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter),
-            note,
-        )
+        painter.setPen(ink)
+        painter.drawText(badge, int(QtCore.Qt.AlignmentFlag.AlignCenter), text)
         painter.restore()
 
 
@@ -432,6 +443,16 @@ class ProcessTreeView(QtCore.QObject):
         self.tree.setIndentation(15)
         self.tree.setItemDelegate(_TreeCountDelegate(self.tree))
         self.tree.itemSelectionChanged.connect(self._on_selection)
+        # Processes start collapsed; the ones opened stay open while the
+        # library is up (the tree is rebuilt after saving, renaming...).
+        self._expanded: set[str] = set()
+        self.tree.itemExpanded.connect(lambda item: self._remember(item, True))
+        self.tree.itemCollapsed.connect(lambda item: self._remember(item, False))
+
+    def _remember(self, item: QtWidgets.QTreeWidgetItem, expanded: bool) -> None:
+        data = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+        if data and data.get("type") == "process":
+            (self._expanded.add if expanded else self._expanded.discard)(data["name"])
 
     def update_markers(self, model: "ProcessLibraryModel") -> None:
         """Refresh unsaved dots and override counts without rebuilding the tree."""
@@ -459,8 +480,7 @@ class ProcessTreeView(QtCore.QObject):
                 dirty = model.is_material_dirty(process.name, name)
                 count = model.override_count(process, name)
                 node.setText(0, name + (_UNSAVED_MARK if dirty else ""))
-                note = f"{count} override" + ("" if count == 1 else "s") if count else ""
-                node.setData(0, _COUNT_ROLE, note)
+                node.setData(0, _COUNT_ROLE, count)
                 tips = []
                 if count:
                     tips.append(
@@ -525,7 +545,13 @@ class ProcessTreeView(QtCore.QObject):
                         m_font.setItalic(True)
                         m_node.setFont(0, m_font)
 
-        self.tree.expandAll()
+        # Categories open, processes as the user left them (closed at first).
+        for node in self._iter_nodes():
+            data = node.data(0, QtCore.Qt.ItemDataRole.UserRole)
+            if not data:
+                node.setExpanded(True)
+            elif data.get("type") == "process":
+                node.setExpanded(data["name"] in self._expanded)
         self.tree.blockSignals(False)
 
     def _iter_nodes(self):
@@ -550,7 +576,11 @@ class ProcessTreeView(QtCore.QObject):
                 and data.get("process") == process_name
                 and data.get("name") == mat_name
             ):
+                # Open its process, so the selection is in sight.
+                if node.parent() is not None:
+                    node.parent().setExpanded(True)
                 self.tree.setCurrentItem(node)
+                self.tree.scrollToItem(node)
                 return
 
     def _on_selection(self):
@@ -664,15 +694,16 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
     The left card explains the rule (brief and bad / good diagram) and edits
     its values and criticality. The right column edits the warning and error
-    messages; clicking a parameter chip inserts it into the message box that
-    was used last.
+    messages; clicking a placeholder chip inserts it into the message box that
+    was used last. The chips are the placeholders this rule's check fills in
+    (BaseCheck.message_placeholders), and OK accepts no others.
     """
 
-    ALLOWED_TAGS = {"measured", "limit", "target"}
-    PARAMS = (
-        ("measured", "Current measured value"),
-        ("limit", "The threshold value"),
-        ("target", "The ideal target value"),
+    #: For a rule with no check (not expected): the placeholders every check fills.
+    FALLBACK_PARAMS = (
+        ("measured", "The measured value, with its unit"),
+        ("target", "The rule's target value"),
+        ("limit", "The rule's limit value"),
     )
 
     def __init__(
@@ -690,6 +721,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
 
         self._rule = rule
         self._values = values
+        self._params = self._rule_params(rule)
         self._fields: dict[str, UnitInput] = {}
         self._initial: dict[str, str] = {}
         self._reset_attrs: set[str] = set()
@@ -714,6 +746,20 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
+
+    @classmethod
+    def _rule_params(cls, rule: Rulebook) -> tuple[tuple[str, str], ...]:
+        """(placeholder, what it is replaced with) for *rule*'s messages."""
+        from ..core import checks  # noqa: F401  (registers the checks)
+        from ..core.registries.checks_registry import get_check_class
+
+        try:
+            check = get_check_class(rule)
+        except KeyError:
+            check = None
+        if check is None:
+            return cls.FALLBACK_PARAMS
+        return tuple(check().message_placeholders(rule).items())
 
     # ------------------------------------------------------------------
     # Left: what the rule measures, its values and criticality
@@ -837,7 +883,7 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         col = QtWidgets.QVBoxLayout()
         col.setSpacing(10)
 
-        tags = [tag for tag, _ in self.PARAMS]
+        tags = [tag for tag, _ in self._params]
         self.warn_edit = self._build_message_field(
             col,
             ":/icons/dfm_warning.svg",
@@ -890,18 +936,26 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         return edit
 
     def _build_param_chips(self) -> QtWidgets.QHBoxLayout:
+        """"Insert:" and a chip per placeholder, wrapping onto more lines."""
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(6)
-        row.addWidget(QtWidgets.QLabel("Insert:"))
-        for tag, description in self.PARAMS:
+        label = QtWidgets.QLabel("Insert:")
+        label.setToolTip("Click a placeholder to insert it where you were typing. "
+                         "Hover over one to see what it is replaced with.")
+        row.addWidget(label, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        chips = QtWidgets.QWidget()
+        flow = FlowLayout(chips, spacing=6)
+        for tag, description in self._params:
             chip = QtWidgets.QToolButton()
             chip.setObjectName("ParamChip")
             chip.setText(f"{{{tag}}}")
             chip.setToolTip(description)
             chip.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             chip.clicked.connect(lambda _=False, t=tag: self._insert_param(t))
-            row.addWidget(chip)
-        row.addStretch()
+            flow.addWidget(chip)
+        row.addWidget(chips, 1)
+        # The label sits level with the first line of chips.
+        label.setFixedHeight(chips.layout().itemAt(0).sizeHint().height() if flow.count() else 20)
         return row
 
     def _insert_param(self, tag: str) -> None:
@@ -941,11 +995,14 @@ class EditFeedbackDialog(QtWidgets.QDialog):
         import re
 
         warn, err, _ = self.get_data()
-        found_tags = re.findall(r"\{(.*?)\}", warn + err)
-        for tag in found_tags:
-            if tag not in self.ALLOWED_TAGS:
+        allowed = [tag for tag, _ in self._params]
+        for tag in re.findall(r"\{(.*?)\}", warn + err):
+            if tag not in allowed:
                 QtWidgets.QMessageBox.warning(
-                    self, "Invalid Tag", f"The tag {{{tag}}} is not recognized."
+                    self, "Unknown Placeholder",
+                    f"{{{tag}}} isn't filled in for {self._rule.label}, so it would show as "
+                    f"typed. This rule's messages can use: "
+                    + ", ".join(f"{{{t}}}" for t in allowed) + ".",
                 )
                 return
         super().accept()

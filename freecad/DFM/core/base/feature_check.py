@@ -83,6 +83,16 @@ class MeasuredCheck(BaseCheck):
     the target and limit and writes the findings. Subclasses implement
     ``run_check`` by calling ``grade_measures``."""
 
+    def value_placeholders(self, rule: Rulebook) -> dict[str, str]:
+        # A binary rule's finding is a fact, not a value.
+        return {} if rule.is_binary else super().value_placeholders(rule)
+
+    def context_placeholders(self, rule: Rulebook) -> dict[str, str]:
+        return {
+            "feature": 'What it is about, such as "Boss 3 (screw)" or "Face12"',
+            "size": 'Its size or what was found, such as "Ø3.00 mm and 9.00 mm deep"',
+        }
+
     @staticmethod
     def grade(
         value: float, target: Optional[float], limit: Optional[float], comparison: str
@@ -221,6 +231,12 @@ class FeatureCheck(MeasuredCheck):
         return "FEATURE_ANALYZER"
 
     # -- What to measure --------------------------------------------------------
+
+    def context_placeholders(self, rule: Rulebook) -> dict[str, str]:
+        fields = super().context_placeholders(rule)
+        if self.uses_nominal:
+            fields["nominal"] = 'The nominal wall and where it came from, such as "2.40 mm (measured)"'
+        return fields
 
     def select(self, pf: PartFeatures) -> list[Feature]:
         """The features this rule measures: its kinds, recognised confidently

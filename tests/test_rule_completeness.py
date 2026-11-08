@@ -96,6 +96,24 @@ class TestRuleCompleteness(unittest.TestCase):
                         float(defaults[name][attr])
                 self.assertIn(rule, process.active_rules)  # parses as a Process too
 
+    def test_messages_use_only_their_checks_placeholders(self):
+        """Every {placeholder} in a process's messages is one its check fills
+        (and the rule feedback editor offers): a mistyped or unfilled one
+        would show as "{size}" in the results."""
+        import re
+
+        for file_name, raw, _process in self.raws:
+            for name, feedback in raw["rule_feedback"].items():
+                rule = Rulebook[name]
+                check = get_check_class(rule)
+                if check is None:
+                    continue
+                offered = set(check().message_placeholders(rule))
+                for kind, text in feedback.items():
+                    used = set(re.findall(r"{(\w+)}", text or ""))
+                    with self.subTest(process=file_name, rule=name, message=kind):
+                        self.assertLessEqual(used, offered, sorted(used - offered))
+
     def test_new_rules_use_target_and_limit_or_binary(self):
         # MIN_AND_MAX thresholds are dropped by the resolver and when saving.
         for name in (n for _f, raw, _p in self.raws for n in raw["active_rules"]):

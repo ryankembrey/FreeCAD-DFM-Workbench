@@ -36,6 +36,8 @@ class WallTransitionCheck(MeasuredCheck):
     """The change between two levels of a wall, as a % of the thicker one.
     A change made over a ramp at least 3 times as long as the change is fine."""
 
+    message_fields = {"ramp": "The length to taper the change over (3 times the step)"}
+
     @property
     def name(self) -> str:
         return "Wall Transition Check"
@@ -76,6 +78,8 @@ class WallTransitionCheck(MeasuredCheck):
 class MoldSteelCheck(MeasuredCheck):
     """The narrowest gap between facing part walls: the steel between them.
     A gap shallower (along the pull) than it is wide is only a warning."""
+
+    message_fields = {"depth": "How deep the thin steel stands, along the pull"}
 
     @property
     def name(self) -> str:
