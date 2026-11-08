@@ -502,7 +502,7 @@ class CurvatureMeasure(ContourMeasure):
     id = "curvature"
     label = "Radius"
     unit = "mm"
-    default_colormap = "RdBu"
+    default_colormap = "Viridis"
     default_range = None  # from the data (initial_range_for_data)
     range_limits = None
     range_step = 0.5
