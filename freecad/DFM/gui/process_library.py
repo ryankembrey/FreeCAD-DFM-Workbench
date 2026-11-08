@@ -1501,10 +1501,8 @@ class AddProcessDialog(_NamedCategoryDialog):
         for arch in ProcessArchetype:
             self.archetype_combo.addItem(arch.label, arch)
         self.archetype_combo.setToolTip(
-            "Determines how thresholds are derived.\n"
-            "Generic: all thresholds from material data.\n"
-            "Injection Molding: material-based with draft/undercut support.\n"
-            "FDM 3D Printing: wall thickness from nozzle diameter."
+            "Determines how thresholds are derived and what the analysis asks for.\n"
+            + "\n".join(f"{arch.label}: {arch.description}" for arch in ProcessArchetype)
         )
 
         form_layout: QtWidgets.QFormLayout = self.layout()  # type: ignore

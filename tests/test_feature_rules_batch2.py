@@ -258,7 +258,7 @@ class TestPrintFeatureAnalyzer(unittest.TestCase):
 
         cls = get_analyzer_class("PRINT_FEATURE_ANALYZER")
         self.assertEqual(cls().requirements,
-                         {ProcessRequirement.PRINT_ORIENTATION, ProcessRequirement.NOZZLE_DIAMETER})
+                         {ProcessRequirement.PRINT_ORIENTATION})  # the FDM archetype asks for the nozzle
         shape = B.cut(B.box(0, 0, 0, 40, 20, 20), B.drill((0, 10, 10), (1, 0, 0), 8, 41))
         pf = cls().execute(shape, FaceIndex(shape), EdgeIndex(shape), prefs={},
                            PRINT_ORIENTATION=gp_Dir(0, 0, 1), NOZZLE_DIAMETER=0.4)

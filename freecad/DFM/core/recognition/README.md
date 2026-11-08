@@ -86,6 +86,10 @@ is linked to its boss. `interacts_with` lists the features that use each other's
   * ribs: thin_for_nozzle, perimeters
   * bosses: fragile_pin, thin_wall_for_nozzle
   * chamfers and fillets on the bed edge: bed_edge_relief
+  * holes, pockets and cutouts that cup in a resin printer: cup ("tank" when
+    open towards the tank's film, "platform" when sealed by the build
+    platform) and cup_area (the opening, mm²). Recesses meeting an opening
+    through the part are vented and left out.
   * new features: overhang and bridge (above)
 
 `report.face_draft[face]` is each face's signed draft, asin(n · pull).

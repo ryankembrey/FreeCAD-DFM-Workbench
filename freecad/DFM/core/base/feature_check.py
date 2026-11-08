@@ -63,6 +63,8 @@ class Measure:
     overview: str = ""
     #: The worst severity this finding may have (a shallow gap is only a warning).
     cap: Optional[Severity] = None
+    #: Edges to highlight as well (1-based edge numbers).
+    edges: tuple[int, ...] = ()
 
 
 def trim_number(value: float, decimals: int) -> str:
@@ -110,6 +112,8 @@ class MeasuredCheck(BaseCheck):
             return f"{trim_number(value, 2)}×"
         if unit == "°":
             return f"{value:.2f}°"
+        if unit == "mm²":
+            return f"{value:,.0f} mm²"
         if unit:
             return f"{value:.2f} {unit}"
         return trim_number(value, 2)
@@ -197,7 +201,7 @@ class MeasuredCheck(BaseCheck):
             limit=float(threshold) if threshold is not None else 0.0,
             comparison=comparison,
             unit=unit,
-            failing_geometry=[("Face", n) for n in m.faces],
+            failing_geometry=[("Face", n) for n in m.faces] + [("Edge", n) for n in m.edges],
         )
 
 

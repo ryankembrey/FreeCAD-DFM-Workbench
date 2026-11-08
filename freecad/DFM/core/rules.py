@@ -402,6 +402,96 @@ class Rulebook(Enum):
         description="Height of embossed or depth of engraved lettering; also warns of small characters.",
         per_material=False,
     )
+    MIN_PRINTED_TEXT_STROKE = RuleType(
+        "Printed Text Stroke",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Width of the thinnest stroke of printed lettering, which can fuse shut or not print.",
+        per_material=False,
+    )
+    PIN_ROOT_FILLET = RuleType(
+        "Pin Root Fillet",
+        shape=RuleShape.BINARY,
+        unit=None,
+        description="Pins under 5 mm across with no fillet where they meet the part.",
+        per_material=False,
+    )
+    MAX_PIN_SLENDERNESS = RuleType(
+        "Pin Slenderness",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="max",
+        unit_suffix="its diameter",
+        field_labels=("Aim for", "At most"),
+        description="Height of a pin compared with its diameter: tall thin pins wobble and snap.",
+        per_material=False,
+    )
+    MIN_PRINT_GAP = RuleType(
+        "Minimum Gap",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Narrowest gap between facing walls of the part, which can fuse shut as it prints.",
+    )
+    BED_EDGE_CHAMFER = RuleType(
+        "Bed Edge Chamfer",
+        shape=RuleShape.BINARY,
+        unit=None,
+        description="Edges on the print bed with no chamfer or fillet, where the first layer spreads.",
+        per_material=False,
+    )
+    # -- Resin and powder bed printing --
+    SEALED_CAVITY = RuleType(
+        "Sealed Cavity",
+        shape=RuleShape.BINARY,
+        unit=None,
+        description="A hollow inside the part with no way out for the resin or powder trapped in it.",
+        per_material=False,
+    )
+    MIN_ESCAPE_HOLE_DIAMETER = RuleType(
+        "Escape Holes",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Smallest drain hole of a hollow; also warns of a hollow with only one.",
+    )
+    MAX_PRINTED_HOLE_DEPTH = RuleType(
+        "Printed Hole Depth",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="max",
+        unit_suffix="its diameter",
+        field_labels=("Aim for", "At most"),
+        description="Depth of a blind hole compared with its diameter (through holes may be longer).",
+        per_material=False,
+    )
+    MAX_CUP_AREA = RuleType(
+        "Cupping",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm²",
+        comparison="max",
+        field_labels=("Aim for", "At most"),
+        description="Recesses that seal against the resin tank and pull like a suction cup at each peel.",
+        per_material=False,
+    )
+    MAX_FLAT_FACE_AREA = RuleType(
+        "Large Flat Face",
+        shape=RuleShape.TARGET_ONLY,
+        unit="mm²",
+        comparison="max",
+        description="Area of one flat face: large flat areas warp, and resin layers across one peel hard.",
+        per_material=False,
+    )
+    MAX_PART_ASPECT_RATIO = RuleType(
+        "Long Thin Part",
+        shape=RuleShape.TARGET_ONLY,
+        unit="×",
+        comparison="max",
+        unit_suffix="its width",
+        description="Length of the whole part compared with its width: long thin parts warp.",
+        per_material=False,
+    )
 
     @property
     def id(self) -> str:

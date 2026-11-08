@@ -1,0 +1,266 @@
+name: Resin 3D Printing (SLA)
+category: Additive Manufacturing
+archetype: RESIN
+description: >-
+    Resin printing (SLA, DLP and MSLA) cures liquid photopolymer layer by layer
+    against the film of a resin tank, peeling each layer off as the part rises.
+    Thresholds follow the Formlabs design guides (Form 2 to Form 4), with
+    Xometry and HLH figures where Formlabs gives none. The print orientation
+    decides which faces overhang, which spans bridge and which recesses cup.
+
+active_rules:
+- MIN_WALL_THICKNESS
+- MAX_OVERHANG_ANGLE
+- MAX_BRIDGE_SPAN
+- SEALED_CAVITY
+- MIN_ESCAPE_HOLE_DIAMETER
+- MAX_CUP_AREA
+- MIN_PRINTED_HOLE_DIAMETER
+- MAX_PRINTED_HOLE_DEPTH
+- MIN_PRINT_GAP
+- MIN_PIN_DIAMETER
+- MAX_PIN_SLENDERNESS
+- PIN_ROOT_FILLET
+- MIN_PRINTED_TEXT_DEPTH
+- MIN_PRINTED_TEXT_STROKE
+- MAX_FLAT_FACE_AREA
+
+rule_feedback:
+    MIN_WALL_THICKNESS:
+        warning_msg: >-
+            Thin wall ({measured}): below the recommended {target}. Thin resin
+            walls warp under the peel forces and can swell in the cleaning
+            alcohol. Thicken it, or support it on two or more sides.
+        error_msg: >-
+            Wall too thin ({measured}): below {limit}. It may warp, tear away
+            during the peel or not print at all. Thicken it to at least {target}.
+    MAX_OVERHANG_ANGLE:
+        warning_msg: >-
+            Overhang ({measured} from vertical): past the recommended {target}.
+            Faces this flat need supports, which leave marks where they are
+            removed. Tilt the part or add supports.
+        error_msg: >-
+            Unsupported overhang ({measured} from vertical): past {limit}, nearly
+            flat. Without supports it can break off during the peel. Add supports
+            or tilt the part.
+    MAX_BRIDGE_SPAN:
+        warning_msg: >-
+            Long span ({measured}): longer than the recommended {target} between
+            supports. The middle may sag. Add a support or shorten the span.
+        error_msg: >-
+            Span too long ({measured}): past {limit}. It will likely fail to print.
+            Add supports along it or reorient the part.
+    SEALED_CAVITY:
+        warning_msg: >-
+            Sealed hollow: {feature} ({size}) is closed inside the part, so it
+            prints full of liquid resin that can't drain. The resin can crack the
+            part later, and the hollow can blow out while printing. Add two drain
+            holes on opposite sides, or make it solid.
+        error_msg: >-
+            Sealed hollow: {feature} ({size}) is closed inside the part, so it
+            prints full of liquid resin that can't drain. The resin can crack the
+            part later, and the hollow can blow out while printing. Add two drain
+            holes on opposite sides, or make it solid.
+    MIN_ESCAPE_HOLE_DIAMETER:
+        warning_msg: >-
+            Small drain holes ({measured}): {feature} drains through {holes},
+            under the recommended {target}. Resin drains slowly
+            through small holes and some stays inside. Make the holes bigger.
+        error_msg: >-
+            Drain holes too small ({measured}): {feature} drains through {holes},
+            under {limit}. Resin will stay trapped inside and
+            can crack the part or blow out the hollow. Make the drain holes at
+            least {target} across.
+    MAX_CUP_AREA:
+        warning_msg: >-
+            Suction cup ({measured}): {feature} ({size}) is sealed by {sealed_by},
+            so every peel pulls a vacuum in it. Expect a poor surface inside it.
+            Vent it with a small hole through its floor, or tilt the part so it
+            doesn't face the tank.
+        error_msg: >-
+            Large suction cup ({measured}): {feature} ({size}) is sealed by
+            {sealed_by}. A cup this large will likely bow in or blow out, or pull
+            the part off its supports. Vent it through its floor, or reorient the
+            part.
+    MIN_PRINTED_HOLE_DIAMETER:
+        warning_msg: >-
+            Small hole ({measured}): {feature} is {size}, under the recommended
+            {target}. Excess resin cures at the edges of small holes, so they come
+            out undersized. Enlarge it, or drill it to size after printing.
+        error_msg: >-
+            Hole may close up ({measured}): {feature} is {size}, under {limit}.
+            Cured resin will likely seal it. Enlarge it, or print it solid and
+            drill it.
+    MAX_PRINTED_HOLE_DEPTH:
+        warning_msg: >-
+            Deep narrow hole ({measured} its diameter): {feature} is {size}, past
+            the recommended {target} its diameter. Uncured resin is hard to wash
+            out of it. Widen or shorten it, or make it a through hole.
+        error_msg: >-
+            Hole too deep to clean ({measured} its diameter): {feature} is {size},
+            past {limit} its diameter. Resin will stay in it and cure, closing it
+            up. Widen or shorten it, or make it a through hole.
+    MIN_PRINT_GAP:
+        warning_msg: >-
+            Narrow gap ({measured}): the gap between {faces} is {size}, under the
+            recommended {target}. Resin left in a narrow gap cures and bridges it.
+            Widen it to at least {target}.
+        error_msg: >-
+            Gap may fuse shut ({measured}): the gap between {faces} is {size},
+            under {limit}. Its sides will likely fuse. Widen it to at least
+            {target}.
+    MIN_PIN_DIAMETER:
+        warning_msg: >-
+            Thin pin ({measured}): {feature} is {size}, under the recommended
+            {target}. Thin resin pins are fragile and soften in the cleaning
+            alcohol. Thicken it.
+        error_msg: >-
+            Pin too thin ({measured}): {feature} is {size}, under {limit}. It may
+            not print, or will break when the supports come off. Thicken it.
+    MAX_PIN_SLENDERNESS:
+        warning_msg: >-
+            Tall thin pin ({measured} its diameter): {feature} is {size}, taller
+            than the recommended {target} its diameter. Thin pins wave as they
+            print. Thicken or shorten it.
+        error_msg: >-
+            Pin too slender ({measured} its diameter): {feature} is {size}, past
+            {limit} its diameter. It will print wavy and break easily. Thicken or
+            shorten it.
+    PIN_ROOT_FILLET:
+        warning_msg: >-
+            Pin with a sharp base: {feature} ({size}) meets the part at a sharp
+            corner, where it snaps when the supports come off or in use. Add a
+            small fillet where it meets the part.
+        error_msg: >-
+            Pin with a sharp base: {feature} ({size}) meets the part at a sharp
+            corner, where it snaps when the supports come off or in use. Add a
+            small fillet where it meets the part.
+    MIN_PRINTED_TEXT_DEPTH:
+        warning_msg: >-
+            Shallow printed text ({measured}): {feature} is {size}, under the
+            recommended {target}. It may read poorly. Raise it or cut it in by
+            about {target}.
+        error_msg: >-
+            Printed text too shallow ({measured}): {feature} is {size}, under
+            {limit}. Raised detail this low may not show, and cut-in detail may
+            fill in. Raise it or cut it in by at least {target}.
+    MIN_PRINTED_TEXT_STROKE:
+        warning_msg: >-
+            Thin letter strokes ({measured}): {feature} has {size}, under the
+            recommended {target}. Fine strokes blur as excess resin cures at their
+            edges. Use a bolder font or larger text.
+        error_msg: >-
+            Letter strokes too thin ({measured}): {feature} has {size}, under
+            {limit}, so the lettering {fault}. Use a bold font or enlarge the text.
+    MAX_FLAT_FACE_AREA:
+        warning_msg: >-
+            Large flat layer ({measured}): {feature} lies flat in the layers over
+            {size}, more than the recommended {target}. Each layer across it peels
+            off the tank with a large force, which can distort it or pull the part
+            off its supports. Tilt the part 30 to 45° on the platform.
+        error_msg: ''
+
+rule_criticality:
+    MIN_WALL_THICKNESS: CRITICAL
+    MAX_OVERHANG_ANGLE: MEDIUM
+    MAX_BRIDGE_SPAN: MEDIUM
+    SEALED_CAVITY: HIGH
+    MIN_ESCAPE_HOLE_DIAMETER: HIGH
+    MAX_CUP_AREA: HIGH
+    MIN_PRINTED_HOLE_DIAMETER: MEDIUM
+    MAX_PRINTED_HOLE_DEPTH: MEDIUM
+    MIN_PRINT_GAP: HIGH
+    MIN_PIN_DIAMETER: MEDIUM
+    MAX_PIN_SLENDERNESS: MEDIUM
+    PIN_ROOT_FILLET: LOW
+    MIN_PRINTED_TEXT_DEPTH: LOW
+    MIN_PRINTED_TEXT_STROKE: LOW
+    MAX_FLAT_FACE_AREA: LOW
+
+materials:
+    # Formlabs' figures are for its standard resins (Grey, Clear). Engineering
+    # and flexible resins print differently: add their overrides as you
+    # learn them.
+    Default:
+        category: Default
+        is_active: true
+        rule_limits:
+            # Xometry SLA: 0.6 mm unsupported, 0.4 mm supported walls.
+            MIN_WALL_THICKNESS:
+                target: '0.6'
+                limit: '0.4'
+            # Formlabs: overhangs flatter than 19° (Form 2) or 10° (Form 3 and
+            # 4) from level break off without supports: 71° and 80° from vertical.
+            MAX_OVERHANG_ANGLE:
+                target: '70'
+                limit: '80'
+            # Formlabs: 21 mm (Form 2 and 3), 29 mm (Form 4) for a 5 mm wide beam.
+            MAX_BRIDGE_SPAN:
+                target: '21'
+                limit: '29'
+            # Formlabs: a sealed hollow traps resin and can blow out.
+            SEALED_CAVITY:
+                binary_severity: ERROR
+            # Formlabs: drain holes 3.5 mm (Form 2), 2.5 mm (Form 3).
+            MIN_ESCAPE_HOLE_DIAMETER:
+                target: '3.5'
+                limit: '2.5'
+            # Ours: Formlabs says small cups usually print, large ones blow out,
+            # without a figure. 100 mm² is about an 11 mm hole; 900 mm² a 30 mm
+            # square.
+            MAX_CUP_AREA:
+                target: '100'
+                limit: '900'
+            # Formlabs: 0.8 mm (Form 2), 0.5 mm (Form 3 and 4).
+            MIN_PRINTED_HOLE_DIAMETER:
+                target: '0.8'
+                limit: '0.5'
+            # Xometry LSPc: blind holes under 3x (recommended), 8x (achievable)
+            # their diameter. Through holes get 8/3 of these.
+            MAX_PRINTED_HOLE_DEPTH:
+                target: '3'
+                limit: '8'
+            # Formlabs: 0.5 mm clearance (Form 2 and 3), 0.4 mm (Form 4).
+            MIN_PRINT_GAP:
+                target: '0.5'
+                limit: '0.4'
+            # Xometry and HLH: 1 mm pins; Formlabs: 0.4 mm wires 7 mm tall.
+            MIN_PIN_DIAMETER:
+                target: '1.0'
+                limit: '0.4'
+            # Formlabs: 0.3 mm wires print 7 mm tall, 1.5 mm ones 30 mm (about
+            # 20 diameters). The aim of 10 is ours.
+            MAX_PIN_SLENDERNESS:
+                target: '10'
+                limit: '20'
+            # Prototek: thin walls should have filleted bases.
+            PIN_ROOT_FILLET:
+                binary_severity: WARNING
+            # HLH: 0.5 mm deep engraving; Formlabs Form 4: 0.15 mm engraved
+            # detail (0.1 mm embossed).
+            MIN_PRINTED_TEXT_DEPTH:
+                target: '0.5'
+                limit: '0.15'
+            # Xometry SLA: 0.5 mm wide engraving; Formlabs Form 4: 0.15 mm.
+            MIN_PRINTED_TEXT_STROKE:
+                target: '0.5'
+                limit: '0.15'
+            # Ours: Xometry advises against large flat faces parallel to the
+            # platform without a figure. 2,500 mm² is a 50 mm square.
+            MAX_FLAT_FACE_AREA:
+                target: '2500'
+
+    Standard Resin:
+        category: Standard Resin
+        is_active: true
+        rule_limits: {}
+
+    Tough / Durable Resin:
+        category: Engineering Resin
+        is_active: true
+        rule_limits: {}
+
+    Flexible / Elastic Resin:
+        category: Flexible Resin
+        is_active: true
+        rule_limits: {}

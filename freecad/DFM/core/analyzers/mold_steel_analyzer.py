@@ -16,6 +16,9 @@ faces that meet at an edge make a corner, not a gap.
 
 Each face's value is (gap mm, the facing face's number, depth along the
 pull mm) for its narrowest gap.
+
+PRINT_GAP_ANALYZER (below) casts the same rays for printed parts: there a
+narrow gap is one that can fuse shut.
 """
 
 from __future__ import annotations
@@ -77,6 +80,14 @@ class MoldSteelAnalyzer(BaseAnalyzer):
         self.adjacent = set(RayThicknessAnalyzer._build_shared_edges(shape, face_index))
 
     def analyze(self, face: TopoDS_Face) -> Optional[tuple[float, int, float]]:
+        found = self.narrowest(face)
+        if found is None:
+            return None
+        gap, other = found
+        return (round(gap, 6), self.face_index.index_of(other), round(self._depth(face, other), 6))
+
+    def narrowest(self, face: TopoDS_Face) -> Optional[tuple[float, TopoDS_Face]]:
+        """(gap mm, the facing face) of *face*'s narrowest gap, or None."""
         best: Optional[tuple[float, TopoDS_Face]] = None
         for u, v in sample_points(face):
             normal = get_face_uv_normal(face, u, v)
@@ -97,17 +108,18 @@ class MoldSteelAnalyzer(BaseAnalyzer):
                                               self.intersector.VParameter(k))
             if other_normal is None or normal.Dot(other_normal) >= OPPOSITE_DOT:
                 continue
-            if other.IsSame(face) or _core_pin(face, other):
+            if other.IsSame(face) or self.skips(face, other):
                 continue
             if (self.face_index.index_of(face), self.face_index.index_of(other)) in self.adjacent:
                 continue
             gap = w + _EPSILON
             if best is None or gap < best[0]:
                 best = (gap, other)
-        if best is None:
-            return None
-        gap, other = best
-        return (round(gap, 6), self.face_index.index_of(other), round(self._depth(face, other), 6))
+        return best
+
+    def skips(self, face: TopoDS_Face, other: TopoDS_Face) -> bool:
+        """Gaps not to report: across a round hole (a core pin, the hole rules')."""
+        return _core_pin(face, other)
 
     def _depth(self, a: TopoDS_Face, b: TopoDS_Face) -> float:
         """How far the two faces run alongside each other along the pull."""
@@ -127,3 +139,53 @@ def _core_pin(a: TopoDS_Face, b: TopoDS_Face) -> bool:
     if not axis_a.IsParallel(axis_b, 1e-3):
         return False
     return gp_Lin(axis_a).Distance(axis_b.Location()) < 1e-3
+
+
+def _round_axis(face: TopoDS_Face):
+    """(axis, radius) of a cylinder or cone face (the cone's reference radius), or None."""
+    surface = BRepAdaptor_Surface(face)
+    if surface.GetType() == GeomAbs_Cylinder:
+        return surface.Cylinder().Axis(), surface.Cylinder().Radius()
+    if surface.GetType() == GeomAbs_Cone:
+        return surface.Cone().Axis(), surface.Cone().RefRadius()
+    return None
+
+
+@register_analyzer("PRINT_GAP_ANALYZER")
+class PrintGapAnalyzer(MoldSteelAnalyzer):
+    """The narrowest gap between facing walls of a printed part, which can
+    fuse shut: the same rays as the mould steel, with no pull direction.
+
+    Unlike in a mould, a pin standing in a hole is a gap that matters (it
+    fuses to the hole): only the gap across a hole's own bore (both faces on
+    one cylinder) is left out. Each face's value is (gap mm, the facing
+    face's number).
+    """
+
+    @property
+    def analysis_type(self) -> str:
+        return "PRINT_GAP_ANALYZER"
+
+    @property
+    def name(self) -> str:
+        return "Print Gap Analyzer"
+
+    @property
+    def requirements(self) -> set[ProcessRequirement]:
+        return set()
+
+    def analyze(self, face: TopoDS_Face) -> Optional[tuple[float, int]]:
+        found = self.narrowest(face)
+        if found is None:
+            return None
+        gap, other = found
+        return (round(gap, 6), self.face_index.index_of(other))
+
+    def skips(self, face: TopoDS_Face, other: TopoDS_Face) -> bool:
+        a, b = _round_axis(face), _round_axis(other)
+        if a is None or b is None:
+            return False
+        (axis_a, r_a), (axis_b, r_b) = a, b
+        if not axis_a.IsParallel(axis_b, 1e-3) or gp_Lin(axis_a).Distance(axis_b.Location()) >= 1e-3:
+            return False
+        return abs(r_a - r_b) < 1e-3  # one bore, split in faces: across the hole

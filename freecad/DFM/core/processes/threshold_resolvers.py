@@ -66,27 +66,27 @@ class InjectionMoldingResolver(ThresholdResolver):
 
 
 class FDMResolver(ThresholdResolver):
-    """FDM 3D Printing: wall thickness derived from nozzle diameter.
+    """FDM 3D Printing: thresholds that are a number of extrusion widths are
+    derived from the nozzle diameter.
 
-    For MIN_WALL_THICKNESS:
-        target = nozzle_diameter × target_multiplier  (default 1.5)
-        limit  = nozzle_diameter × limit_multiplier   (default 1.0)
+    MIN_WALL_THICKNESS and MIN_PRINTED_TEXT_STROKE:
+        target = nozzle_diameter × 2   (two extrusion lines)
+        limit  = nozzle_diameter × 1   (one line)
 
-    For MAX_WALL_THICKNESS:
-        Falls back to material data (same as base), since max thickness
-        in FDM is more about structural concerns than nozzle size.
-
-    All other rules: delegate to base (material data).
+    All other rules: delegate to base (material data). So do these when no
+    usable nozzle diameter was given.
     """
 
-    # Nozzle-diameter multipliers for MIN_WALL_THICKNESS.
-    # target: 2× nozzle width — two full perimeters, the practical minimum
-    #         for a part that will be handled or used.
-    # limit:  1× nozzle width — absolute physical floor; a single extrusion
-    #         line that the slicer may skip or under-extrude.
-    # Sources: Raise3D, QIDI, PrintCalcs design-for-FDM guides.
-    MIN_THICKNESS_TARGET_MULT = 2.0
-    MIN_THICKNESS_LIMIT_MULT = 1.0
+    #: rule -> (target, limit) in nozzle diameters.
+    # Walls: 2× is two full perimeters, the practical minimum for a part that
+    #        will be handled; 1× is a single line the slicer may skip or
+    #        under-extrude (Raise3D, QIDI, PrintCalcs design-for-FDM guides).
+    # Letter strokes: a stroke narrower than one line doesn't print; two lines
+    #        (0.8 mm with a 0.4 mm nozzle) is Xometry's embossed stroke.
+    NOZZLE_MULTIPLES: dict[Rulebook, tuple[float, float]] = {
+        Rulebook.MIN_WALL_THICKNESS: (2.0, 1.0),
+        Rulebook.MIN_PRINTED_TEXT_STROKE: (2.0, 1.0),
+    }
 
     def resolve(
         self,
@@ -95,45 +95,39 @@ class FDMResolver(ThresholdResolver):
         target_material: Optional["Material"],
         **kwargs: Any,
     ) -> RuleLimit:
-        if rule_id == Rulebook.MIN_WALL_THICKNESS:
-            return self._resolve_min_thickness(rule_id, process, target_material, **kwargs)
+        multiples = self.NOZZLE_MULTIPLES.get(rule_id)
+        if multiples is not None:
+            nozzle = self._nozzle(rule_id, kwargs.get(ProcessRequirement.NOZZLE_DIAMETER.name))
+            if nozzle is not None:
+                target, limit = multiples
+                return RuleLimit(
+                    target=str(round(nozzle * target, 3)),
+                    limit=str(round(nozzle * limit, 3)),
+                    binary_severity="ERROR",
+                )
 
-        # Everything else: standard material-based resolution
+        # Everything else (and no nozzle): standard material-based resolution
         return super().resolve(rule_id, process, target_material, **kwargs)
 
-    def _resolve_min_thickness(
-        self,
-        rule_id: Rulebook,
-        process: "Process",
-        target_material: Optional["Material"],
-        **kwargs: Any,
-    ) -> RuleLimit:
-        nozzle = kwargs.get(ProcessRequirement.NOZZLE_DIAMETER.name)
-
-        if nozzle is None:
+    @staticmethod
+    def _nozzle(rule_id: Rulebook, value: Any) -> Optional[float]:
+        """The nozzle diameter as a positive number, or None (with a warning)."""
+        if value is None:
             App.Console.PrintWarning(
-                "DFM: FDM process requires nozzle diameter for wall thickness. "
+                f"DFM: FDM process requires nozzle diameter for {rule_id.label}. "
                 "Falling back to material data.\n"
             )
-            return super().resolve(rule_id, process, target_material, **kwargs)
-
+            return None
         try:
-            nozzle_val = float(nozzle)
+            nozzle = float(value)
         except (TypeError, ValueError):
+            nozzle = 0.0
+        if nozzle <= 0.0:
             App.Console.PrintWarning(
-                f"DFM: Invalid nozzle diameter value '{nozzle}'. "
-                "Falling back to material data.\n"
+                f"DFM: Invalid nozzle diameter value '{value}'. Falling back to material data.\n"
             )
-            return super().resolve(rule_id, process, target_material, **kwargs)
-
-        target = round(nozzle_val * self.MIN_THICKNESS_TARGET_MULT, 3)
-        limit = round(nozzle_val * self.MIN_THICKNESS_LIMIT_MULT, 3)
-
-        return RuleLimit(
-            target=str(target),
-            limit=str(limit),
-            binary_severity="ERROR",
-        )
+            return None
+        return nozzle
 
 
 # ---- Registry ---------------------------------------------------------------
@@ -142,6 +136,8 @@ _RESOLVERS: dict[ProcessArchetype, ThresholdResolver] = {
     ProcessArchetype.GENERIC: ThresholdResolver(),
     ProcessArchetype.INJECTION_MOLDING: InjectionMoldingResolver(),
     ProcessArchetype.FDM: FDMResolver(),
+    ProcessArchetype.RESIN: ThresholdResolver(),
+    ProcessArchetype.POWDER_BED: ThresholdResolver(),
 }
 
 

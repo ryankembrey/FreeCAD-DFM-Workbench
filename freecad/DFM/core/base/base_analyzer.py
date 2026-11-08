@@ -62,6 +62,13 @@ class BaseAnalyzer(ABC):
         return set()
 
     @property
+    def optional_requirements(self) -> set[ProcessRequirement]:
+        """Those of ``requirements`` the analyzer can run without (it skips
+        what needs them). A process family that has no use for one of them
+        (``ProcessArchetype.waived_requirements``) doesn't ask for it."""
+        return set()
+
+    @property
     @abstractmethod
     def name(self) -> str:
         """

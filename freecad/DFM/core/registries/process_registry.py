@@ -53,6 +53,8 @@ class ProcessRegistry:
             raise RuntimeError("ProcessRegistry is a singleton, use get_instance()")
 
         self.processes: dict[str, Process] = {}
+        #: Names of the processes shipped with the workbench (the dev directory).
+        self.builtin_names: set[str] = set()
 
         self.dev_dir = Path(__file__).parent.parent / "processes"
         self.user_dir = Path(App.getUserAppDataDir()) / "dfm" / "processes"
@@ -71,6 +73,7 @@ class ProcessRegistry:
 
         self._load_from_dir(self.dev_dir)
         builtin = dict(self.processes)
+        self.builtin_names = set(builtin)
 
         self._load_from_dir(self.user_dir)
         for name, process in self.processes.items():
@@ -178,8 +181,12 @@ class ProcessRegistry:
         return f"{process_name.lower().replace(' ', '_')}.yaml"
 
     def is_builtin(self, process_name: str) -> bool:
-        """Returns True if a dev-directory version exists."""
-        return (self.dev_dir / self.get_process_filename(process_name)).exists()
+        """Returns True if a dev-directory version exists.
+
+        By the name read from the file, not the file name: a built-in file
+        needn't be named after its process ("FDM" is fdm_3d_printing.yaml).
+        """
+        return process_name in self.builtin_names
 
     def has_user_override(self, process_name: str) -> bool:
         """Returns True if a user-directory file exists for this process."""

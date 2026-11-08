@@ -17,7 +17,12 @@ active_rules:
 - MIN_PRINTED_HOLE_DIAMETER
 - HORIZONTAL_HOLE_TEARDROP
 - MIN_PIN_DIAMETER
+- MAX_PIN_SLENDERNESS
+- PIN_ROOT_FILLET
 - MIN_PRINTED_TEXT_DEPTH
+- MIN_PRINTED_TEXT_STROKE
+- MIN_PRINT_GAP
+- BED_EDGE_CHAMFER
 
 rule_feedback:
     MIN_WALL_THICKNESS:
@@ -119,6 +124,54 @@ rule_feedback:
             Printed text too shallow ({measured}): {feature} is {size}, under
             {limit}. The lettering may not show at all at normal layer heights.
             Raise it or cut it in by at least {target}.
+    MIN_PRINTED_TEXT_STROKE:
+        warning_msg: >-
+            Thin letter strokes ({measured}): {feature} has {size}, under the
+            recommended {target} (two extrusion widths). Strokes this thin print as
+            a single wobbly line. Use a bolder font or larger text.
+        error_msg: >-
+            Letter strokes too thin to print ({measured}): {feature} has {size},
+            under {limit} (one extrusion width). The slicer drops strokes this
+            thin, so the lettering {fault}. Use a bold font or enlarge the text.
+    MAX_PIN_SLENDERNESS:
+        warning_msg: >-
+            Tall thin pin ({measured} its diameter): {feature} is {size}, taller
+            than the recommended {target} its diameter. The nozzle pushes a thin
+            pin about as it prints, so it comes out wavy and weak. Thicken or
+            shorten it, or print it lying down.
+        error_msg: >-
+            Pin too slender ({measured} its diameter): {feature} is {size}, past
+            {limit} its diameter. It will likely break off while printing or snap
+            in use. Thicken it, print it lying down, or press in a metal pin.
+    PIN_ROOT_FILLET:
+        warning_msg: >-
+            Pin with a sharp base: {feature} ({size}) meets the part at a sharp
+            corner. Printed pins snap at their base, where stress gathers on a
+            layer line. Add a small fillet where it meets the part.
+        error_msg: >-
+            Pin with a sharp base: {feature} ({size}) meets the part at a sharp
+            corner. Printed pins snap at their base, where stress gathers on a
+            layer line. Add a small fillet where it meets the part.
+    MIN_PRINT_GAP:
+        warning_msg: >-
+            Narrow gap ({measured}): the gap between {faces} is {size}, under the
+            recommended {target}. Extruded lines bulge into a gap this narrow, so
+            its sides may touch and stick. Widen it to at least {target}.
+        error_msg: >-
+            Gap may fuse shut ({measured}): the gap between {faces} is {size},
+            under {limit}. The two sides will likely print as one. Widen it to at
+            least {target}, or print the parts separately.
+    BED_EDGE_CHAMFER:
+        warning_msg: >-
+            Sharp edges on the bed: {feature} sits on the bed with {size}. The
+            first layer is squashed and spreads sideways (elephant's foot), so the
+            base comes out wider than drawn and holes there narrower, which spoils
+            fits. Add a 0.5 to 1 mm, 45° chamfer along these edges.
+        error_msg: >-
+            Sharp edges on the bed: {feature} sits on the bed with {size}. The
+            first layer is squashed and spreads sideways (elephant's foot), so the
+            base comes out wider than drawn and holes there narrower, which spoils
+            fits. Add a 0.5 to 1 mm, 45° chamfer along these edges.
 
 rule_criticality:
     MAX_OVERHANG_ANGLE: HIGH
@@ -130,7 +183,12 @@ rule_criticality:
     MIN_PRINTED_HOLE_DIAMETER: MEDIUM
     HORIZONTAL_HOLE_TEARDROP: LOW
     MIN_PIN_DIAMETER: MEDIUM
+    MAX_PIN_SLENDERNESS: MEDIUM
+    PIN_ROOT_FILLET: LOW
     MIN_PRINTED_TEXT_DEPTH: LOW
+    MIN_PRINTED_TEXT_STROKE: LOW
+    MIN_PRINT_GAP: HIGH
+    BED_EDGE_CHAMFER: LOW
 
 materials:
     Default:
@@ -166,6 +224,26 @@ materials:
             MIN_PRINTED_TEXT_DEPTH:
                 target: '0.5'
                 limit: '0.3'
+            # Derived from the nozzle at run time (2 and 1 extrusion widths);
+            # these apply only without a nozzle diameter.
+            MIN_PRINTED_TEXT_STROKE:
+                target: '0.8'
+                limit: '0.4'
+            # Ours: no source gives an FDM figure (resin: Formlabs, about 20).
+            MAX_PIN_SLENDERNESS:
+                target: '10'
+                limit: '20'
+            # Hubs / FacFox: pins under 5 mm need a small fillet at the base.
+            PIN_ROOT_FILLET:
+                binary_severity: WARNING
+            # AMF (UZH) and HLH: 0.5 mm clearance; 0.3 mm (ours) is about the
+            # tightest print-in-place gap (0.2 to 0.3 mm a side, Sovol).
+            MIN_PRINT_GAP:
+                target: '0.5'
+                limit: '0.3'
+            # Ultimaker, Hubs: chamfer edges on the bed for elephant's foot.
+            BED_EDGE_CHAMFER:
+                binary_severity: WARNING
 
     PLA:
         category: Standard Thermoplastic

@@ -12,10 +12,9 @@ import Part  # type: ignore
 
 from OCP.gp import gp_Dir
 
-from ..core.registries.analyzers_registry import get_analyzer_class
-from ..core.registries.checks_registry import get_check_class
 from ..core.registries.process_registry import ProcessRegistry
 from ..app.analysis_runner import AnalysisRunner
+from ..app.process_requirements import required_inputs
 from ..core.models import CheckResult, GeometryRef, ProcessRequirement
 from ..core.utils.conversion import freecad_to_ocp
 from ..core.utils.nominal_wall import (
@@ -1547,26 +1546,9 @@ class TaskSetup:
         self._update_run_button_state()
 
     def get_active_requirements(self) -> set[ProcessRequirement]:
-        requirements = set()
-        if not self.process:
-            return requirements
-        for rule in self.process.active_rules:
-            try:
-                check_cls = get_check_class(rule)
-                if not check_cls:
-                    continue
-                analyzer_id = check_cls().required_analyzer_id
-                analyzer_cls = get_analyzer_class(analyzer_id)
-                if analyzer_cls:
-                    requirements.update(analyzer_cls().requirements)
-            except KeyError:
-                App.Console.PrintWarning(f"Rule '{rule.name}' not found in Rulebook.\n")
-                continue
-
-        # Merge in archetype-level requirements (e.g. NOZZLE_DIAMETER for FDM)
-        requirements.update(self.process.archetype.extra_requirements)
-
-        return requirements
+        """The inputs this process's active rules need (see app/process_requirements)."""
+        return required_inputs(
+            self.process, warn=lambda text: App.Console.PrintWarning(text + "\n"))
 
     def _missing_requirements(self) -> list[str]:
         missing = []

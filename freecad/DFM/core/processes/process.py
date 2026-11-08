@@ -22,6 +22,8 @@ class ProcessArchetype(Enum):
     GENERIC = "GENERIC"
     INJECTION_MOLDING = "INJECTION_MOLDING"
     FDM = "FDM"
+    RESIN = "RESIN"
+    POWDER_BED = "POWDER_BED"
 
     @property
     def label(self) -> str:
@@ -29,6 +31,8 @@ class ProcessArchetype(Enum):
             "GENERIC": "Generic",
             "INJECTION_MOLDING": "Injection Molding",
             "FDM": "FDM 3D Printing",
+            "RESIN": "Resin 3D Printing",
+            "POWDER_BED": "Powder Bed 3D Printing",
         }.get(self.name, self.name.replace("_", " ").title())
 
     @property
@@ -43,6 +47,14 @@ class ProcessArchetype(Enum):
                 "Wall thickness derived from nozzle diameter. "
                 "Overhang, bridge, and staircase thresholds from material. "
                 "Requires print orientation, nozzle diameter, and layer height."
+            ),
+            "RESIN": (
+                "Resin printing (SLA, DLP, MSLA). Thresholds from material data. "
+                "Requires a print orientation for overhangs, bridges and cupping."
+            ),
+            "POWDER_BED": (
+                "Powder bed fusion (SLS, MJF). Thresholds from material data. "
+                "The powder holds the part up, so no print orientation is needed."
             ),
         }.get(self.name, "")
 
@@ -62,6 +74,21 @@ class ProcessArchetype(Enum):
         }.get(self.name, set())
 
     @property
+    def waived_requirements(self) -> set:
+        """Inputs this process family can do without, for analyzers that list
+        them as optional (``BaseAnalyzer.optional_requirements``).
+
+        A powder bed holds the part on every side: nothing needs a print
+        orientation, so its setup doesn't ask for one. A rule that does need
+        one (an overhang rule added by the user) still asks.
+        """
+        from ..models import ProcessRequirement
+
+        return {
+            "POWDER_BED": {ProcessRequirement.PRINT_ORIENTATION},
+        }.get(self.name, set())
+
+    @property
     def derived_rules(self) -> dict:
         """Rules whose thresholds are computed by the archetype at runtime,
         not edited manually. Returns {Rulebook member: hint string}.
@@ -75,6 +102,9 @@ class ProcessArchetype(Enum):
             "INJECTION_MOLDING": {},
             "FDM": {
                 Rulebook.MIN_WALL_THICKNESS: (
+                    "Derived from nozzle diameter during DFM analysis setup."
+                ),
+                Rulebook.MIN_PRINTED_TEXT_STROKE: (
                     "Derived from nozzle diameter during DFM analysis setup."
                 ),
             },

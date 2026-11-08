@@ -23,7 +23,8 @@ from freecad.DFM.core.rules import SHAPE_FIELD_ATTRS, Rulebook, RuleShape
 PROCESSES = os.path.join(S.ROOT, "freecad", "DFM", "core", "processes")
 YAML = os.path.join(PROCESSES, "plastic_injection_molding.yaml")
 #: Every built-in process: each one's active rules must be fully wired.
-YAMLS = (YAML, os.path.join(PROCESSES, "fdm_3d_printing.yaml"))
+YAMLS = (YAML, *(os.path.join(PROCESSES, name) for name in (
+    "fdm_3d_printing.yaml", "resin_3d_printing.yaml", "powder_bed_fusion.yaml")))
 
 
 def diagrams():

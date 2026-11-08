@@ -132,8 +132,11 @@ class FeatureAnalyzer(BaseAnalyzer):
 @register_analyzer("PRINT_FEATURE_ANALYZER")
 class PrintFeatureAnalyzer(FeatureAnalyzer):
     """The part's features for the 3D printing rules: annotated for the print
-    direction and nozzle (horizontal holes, slender pins...), no pull
-    direction and no nominal wall. Shares the recognition cache."""
+    direction and nozzle (horizontal holes, slender pins, cups...), no pull
+    direction and no nominal wall. Shares the recognition cache.
+
+    FDM, resin and powder bed rules all read it; a powder bed has no print
+    direction, so it runs without one."""
 
     measures_nominal_wall = False
 
@@ -147,7 +150,14 @@ class PrintFeatureAnalyzer(FeatureAnalyzer):
 
     @property
     def requirements(self) -> set[ProcessRequirement]:
-        return {ProcessRequirement.PRINT_ORIENTATION, ProcessRequirement.NOZZLE_DIAMETER}
+        # The nozzle is an FDM input: the FDM archetype asks for it.
+        return {ProcessRequirement.PRINT_ORIENTATION}
+
+    @property
+    def optional_requirements(self) -> set[ProcessRequirement]:
+        # Without a direction the features are just not annotated for it:
+        # a powder bed's rules don't need one.
+        return {ProcessRequirement.PRINT_ORIENTATION}
 
     def annotate(self, result, shape: TopoDS_Shape, **kwargs: Any) -> Optional[DirectionalReport]:
         direction = kwargs.get(ProcessRequirement.PRINT_ORIENTATION.name)

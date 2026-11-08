@@ -1,0 +1,302 @@
+name: Powder Bed Fusion (SLS)
+category: Additive Manufacturing
+archetype: POWDER_BED
+description: >-
+    Powder bed fusion (SLS and HP Multi Jet Fusion) fuses nylon or TPU powder
+    layer by layer. The unfused powder holds the part up, so nothing needs
+    support and no print orientation is asked for; instead, hollows need
+    escape holes for the powder, and thick or flat sections warp as they cool.
+    Thresholds follow the Formlabs Fuse, HP MJF, Xometry, Materialise and HLH
+    design guides, for PA12 unless a material says otherwise.
+
+active_rules:
+- MIN_WALL_THICKNESS
+- MAX_WALL_THICKNESS
+- MAX_WALL_THICKNESS_VARIATION
+- SHARP_INTERNAL_CORNERS
+- SEALED_CAVITY
+- MIN_ESCAPE_HOLE_DIAMETER
+- MIN_PRINTED_HOLE_DIAMETER
+- MAX_PRINTED_HOLE_DEPTH
+- MIN_PRINT_GAP
+- MIN_PIN_DIAMETER
+- MAX_PIN_SLENDERNESS
+- PIN_ROOT_FILLET
+- MIN_PRINTED_TEXT_DEPTH
+- MIN_PRINTED_TEXT_STROKE
+- MAX_FLAT_FACE_AREA
+- MAX_PART_ASPECT_RATIO
+
+rule_feedback:
+    MIN_WALL_THICKNESS:
+        warning_msg: >-
+            Thin wall ({measured}): below the recommended {target}. Thin sintered
+            walls are weak and can warp, or break when the powder is blasted off.
+            Thicken it, or brace it with ribs.
+        error_msg: >-
+            Wall too thin ({measured}): below {limit}. It may not fuse, or may warp
+            or snap off during depowdering. Thicken it to at least {target}.
+    MAX_WALL_THICKNESS:
+        warning_msg: >-
+            Thick section ({measured}): over the recommended {target}. Thick
+            sections hold heat in the powder bed and shrink more as they cool,
+            so they can warp or sink. Hollow it out (with escape holes) or core it.
+        error_msg: >-
+            Section too thick ({measured}): over {limit}. Expect warping and sink
+            as it cools. Hollow it out, leaving walls of about 2 mm and escape
+            holes, or replace the solid with a lattice.
+    MAX_WALL_THICKNESS_VARIATION:
+        warning_msg: >-
+            Wall thickness change ({measured}): the wall steps {size}, more than
+            the recommended {target} of the thicker wall. Thick and thin sections
+            cool at different rates in the powder, which builds stress and can
+            warp the part. Blend the change over at least {ramp}.
+        error_msg: >-
+            Abrupt wall thickness change ({measured}): the wall steps {size}, past
+            {limit} of the thicker wall. Expect warping where the sections meet.
+            Make the walls more even, or taper the change over at least {ramp}.
+    SHARP_INTERNAL_CORNERS:
+        warning_msg: >-
+            Sharp internal corner ({measured}): powder cakes in sharp inside
+            corners and is hard to blast out, and the corner gathers stress.
+            Round it with a small fillet.
+        error_msg: >-
+            Sharp internal corner ({measured}): powder cakes in sharp inside
+            corners and is hard to blast out, and the corner gathers stress.
+            Round it with a small fillet.
+    SEALED_CAVITY:
+        warning_msg: >-
+            Sealed hollow: {feature} ({size}) is closed inside the part, so it
+            stays full of unfused powder: the part is heavier than it looks and
+            the powder can rattle. Add two escape holes on opposite sides, or make
+            it solid. Leaving it sealed is fine if you want the weight or damping.
+        error_msg: >-
+            Sealed hollow: {feature} ({size}) is closed inside the part, so it
+            stays full of unfused powder. Add two escape holes on opposite sides,
+            or make it solid.
+    MIN_ESCAPE_HOLE_DIAMETER:
+        warning_msg: >-
+            Small escape holes ({measured}): {feature} empties through {holes},
+            under the recommended {target}. Powder is slow to
+            blast out of small holes and some stays inside. Make the holes bigger.
+        error_msg: >-
+            Escape holes too small ({measured}): {feature} empties through
+            {holes}, under {limit}. Powder will stay packed
+            inside. Make the escape holes at least {target} across.
+    MIN_PRINTED_HOLE_DIAMETER:
+        warning_msg: >-
+            Small hole ({measured}): {feature} is {size}, under the recommended
+            {target}. Heat from the laser fuses powder at its edge, so small holes
+            come out undersized and are hard to clear. Enlarge it, or ream it.
+        error_msg: >-
+            Hole may close up ({measured}): {feature} is {size}, under {limit}.
+            Fused powder will likely fill it. Enlarge it, or drill it after
+            printing.
+    MAX_PRINTED_HOLE_DEPTH:
+        warning_msg: >-
+            Deep narrow hole ({measured} its diameter): {feature} is {size}, past
+            the recommended {target} its diameter. Powder packs into deep holes
+            and is hard to blast out. Widen or shorten it, or make it a through
+            hole.
+        error_msg: >-
+            Hole too deep to clear ({measured} its diameter): {feature} is {size},
+            past {limit} its diameter. Powder will stay packed in it. Make it a
+            through hole, or widen or shorten it.
+    MIN_PRINT_GAP:
+        warning_msg: >-
+            Narrow gap ({measured}): the gap between {faces} is {size}, under the
+            recommended {target}. Powder in a narrow gap fuses to its sides and is
+            hard to clear. Widen it to at least {target}.
+        error_msg: >-
+            Gap may fuse shut ({measured}): the gap between {faces} is {size},
+            under {limit}. Heat from the laser will likely fuse it. Widen it to at
+            least {target}.
+    MIN_PIN_DIAMETER:
+        warning_msg: >-
+            Thin pin ({measured}): {feature} is {size}, under the recommended
+            {target}. Thin pins are fragile and can break off when the part is
+            blasted clean. Thicken it.
+        error_msg: >-
+            Pin too thin ({measured}): {feature} is {size}, under {limit}. It will
+            likely break during depowdering. Thicken it.
+    MAX_PIN_SLENDERNESS:
+        warning_msg: >-
+            Tall thin pin ({measured} its diameter): {feature} is {size}, taller
+            than the recommended {target} its diameter. Long thin pins warp and
+            break off during depowdering. Thicken, shorten or brace it.
+        error_msg: >-
+            Pin too slender ({measured} its diameter): {feature} is {size}, past
+            {limit} its diameter. It will likely warp or break off. Thicken,
+            shorten or brace it.
+    PIN_ROOT_FILLET:
+        warning_msg: >-
+            Pin with a sharp base: {feature} ({size}) meets the part at a sharp
+            corner, where it snaps when the powder is blasted off. Add a small
+            fillet where it meets the part.
+        error_msg: >-
+            Pin with a sharp base: {feature} ({size}) meets the part at a sharp
+            corner, where it snaps when the powder is blasted off. Add a small
+            fillet where it meets the part.
+    MIN_PRINTED_TEXT_DEPTH:
+        warning_msg: >-
+            Shallow printed text ({measured}): {feature} is {size}, under the
+            recommended {target}. Shallow lettering is worn away by bead blasting
+            and lost in the grainy surface. Raise it or cut it in by about
+            {target}.
+        error_msg: >-
+            Printed text too shallow ({measured}): {feature} is {size}, under
+            {limit}. It may not show after cleaning. Raise it or cut it in by at
+            least {target}.
+    MIN_PRINTED_TEXT_STROKE:
+        warning_msg: >-
+            Thin letter strokes ({measured}): {feature} has {size}, under the
+            recommended {target}. Fine strokes blur in the grainy surface. Use a
+            bolder font or larger text.
+        error_msg: >-
+            Letter strokes too thin ({measured}): {feature} has {size}, under
+            {limit}, so the lettering {fault}. Use a bold font or enlarge the text.
+    MAX_FLAT_FACE_AREA:
+        warning_msg: >-
+            Large flat face ({measured}): {feature} is {size}, more than the
+            recommended {target}. Large flat panels cool unevenly in the powder
+            and warp. Where you can, give it a slight curve or split it into
+            smaller panels, and keep its thickness even.
+        error_msg: ''
+    MAX_PART_ASPECT_RATIO:
+        warning_msg: >-
+            Long thin part ({measured} its width): the part is {size}, more than
+            {target} as long as it is wide. Long thin parts warp as they cool in
+            the powder. Thicken, brace or split it; tilting it about 20° in the
+            build also helps.
+        error_msg: ''
+
+rule_criticality:
+    MIN_WALL_THICKNESS: CRITICAL
+    MAX_WALL_THICKNESS: MEDIUM
+    MAX_WALL_THICKNESS_VARIATION: MEDIUM
+    SHARP_INTERNAL_CORNERS: LOW
+    SEALED_CAVITY: MEDIUM
+    MIN_ESCAPE_HOLE_DIAMETER: HIGH
+    MIN_PRINTED_HOLE_DIAMETER: MEDIUM
+    MAX_PRINTED_HOLE_DEPTH: MEDIUM
+    MIN_PRINT_GAP: HIGH
+    MIN_PIN_DIAMETER: MEDIUM
+    MAX_PIN_SLENDERNESS: MEDIUM
+    PIN_ROOT_FILLET: LOW
+    MIN_PRINTED_TEXT_DEPTH: LOW
+    MIN_PRINTED_TEXT_STROKE: LOW
+    MAX_FLAT_FACE_AREA: LOW
+    MAX_PART_ASPECT_RATIO: LOW
+
+materials:
+    Default:
+        category: Default
+        is_active: true
+        rule_limits:
+            # HLH: 1 mm recommended; Formlabs Fuse: 0.6 mm (vertical walls).
+            MIN_WALL_THICKNESS:
+                target: '1.0'
+                limit: '0.6'
+            # 3DPrintUK: 5 mm recommended maximum; Xometry MJF: hollow walls
+            # over 7 mm.
+            MAX_WALL_THICKNESS:
+                target: '5'
+                limit: '7'
+            # Ours: Formlabs Fuse and HP advise even walls and smooth
+            # transitions without a figure. Looser than moulding's 15% / 25%.
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '25'
+                limit: '50'
+            # Fast Radius (MJF): powder cakes in sharp internal corners.
+            SHARP_INTERNAL_CORNERS:
+                binary_severity: WARNING
+            # Powder can be left in a sealed hollow on purpose (Raise3D).
+            SEALED_CAVITY:
+                binary_severity: WARNING
+            # Formlabs Fuse, HLH: at least 3.5 mm; Xometry MJF: 5 mm.
+            MIN_ESCAPE_HOLE_DIAMETER:
+                target: '5'
+                limit: '3.5'
+            # Hubs, Xometry MJF: 1.5 mm; Formlabs Fuse, HLH: 1 mm.
+            MIN_PRINTED_HOLE_DIAMETER:
+                target: '1.5'
+                limit: '1.0'
+            # Ours (resin's Xometry figures): HLH and Fast Radius say deep and
+            # blind holes trap powder, without a figure.
+            MAX_PRINTED_HOLE_DEPTH:
+                target: '3'
+                limit: '8'
+            # Xometry MJF: 1 mm recommended, 0.5 mm minimum gap between walls.
+            MIN_PRINT_GAP:
+                target: '1.0'
+                limit: '0.5'
+            # Xometry MJF: 1.5 mm; Formlabs Fuse, HLH: 0.8 mm.
+            MIN_PIN_DIAMETER:
+                target: '1.5'
+                limit: '0.8'
+            # Ours (Formlabs' resin wire figures, about 20 diameters).
+            MAX_PIN_SLENDERNESS:
+                target: '10'
+                limit: '20'
+            # Formlabs Fuse: fillet thin features where they meet the part.
+            PIN_ROOT_FILLET:
+                binary_severity: WARNING
+            # HP MJF: at least 1 mm deep or high; Formlabs Fuse: 0.3 mm font
+            # depth.
+            MIN_PRINTED_TEXT_DEPTH:
+                target: '1.0'
+                limit: '0.3'
+            # Creabis (MJF): 0.5 mm strokes; Formlabs Fuse: 0.35 mm wide detail.
+            MIN_PRINTED_TEXT_STROKE:
+                target: '0.5'
+                limit: '0.35'
+            # Ours: Xometry and Stratasys advise against large flat faces
+            # without a figure. 10,000 mm² is a 100 mm square.
+            MAX_FLAT_FACE_AREA:
+                target: '10000'
+            # HP MJF handbook: avoid parts over 10 times longer than wide.
+            MAX_PART_ASPECT_RATIO:
+                target: '10'
+
+    PA12 (SLS):
+        category: Polyamide
+        is_active: true
+        rule_limits: {}
+
+    PA12 (MJF):
+        category: Polyamide
+        is_active: true
+        rule_limits:
+            # Xometry MJF: 1.5 mm recommended, 0.5 mm minimum.
+            MIN_WALL_THICKNESS:
+                target: '1.5'
+                limit: '0.5'
+
+    PA11:
+        category: Polyamide
+        is_active: true
+        rule_limits: {}
+
+    PA12 Carbon-filled:
+        category: Filled Polyamide
+        is_active: true
+        rule_limits:
+            # Hubs: 2 mm minimum walls for carbon-filled polyamide (the aim
+            # is ours).
+            MIN_WALL_THICKNESS:
+                target: '2.5'
+                limit: '2.0'
+
+    TPU:
+        category: Elastomer
+        is_active: true
+        rule_limits:
+            # Materialise TPU: at least two escape holes of 10 mm.
+            MIN_ESCAPE_HOLE_DIAMETER:
+                target: '10'
+                limit: '10'
+            # Materialise TPU: hollow parts with walls over 20 mm (the aim is
+            # ours).
+            MAX_WALL_THICKNESS:
+                target: '10'
+                limit: '20'

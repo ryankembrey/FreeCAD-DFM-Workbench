@@ -4,8 +4,9 @@
 
 """The moulding process end to end through AnalysisRunner, with FreeCAD
 stand-ins: the old rules and the feature rules run together on one part,
-then again for another material (checks only). Run by
-tests/test_feature_rules_end_to_end.py in a fresh interpreter."""
+then again for another material (checks only). Then the FDM, resin and
+powder bed processes. Run by tests/test_feature_rules_end_to_end.py in a
+fresh interpreter."""
 
 import os
 import sys
@@ -80,5 +81,29 @@ printed = B.cut(printed, B.drill((40, 20, 3), (0, 0, -1), 0.8, 4))
 results = analysis_runner.AnalysisRunner().run_analysis(
     "FDM", "PLA", printed, PRINT_ORIENTATION=gp_Dir(0, 0, 1), NOZZLE_DIAMETER=0.4, LAYER_HEIGHT=0.2)
 fdm = {r.rule_id for r in results}
-assert {R.MIN_PIN_DIAMETER, R.MIN_PRINTED_HOLE_DIAMETER} <= fdm, sorted(r.name for r in fdm)
+assert {R.MIN_PIN_DIAMETER, R.MIN_PRINTED_HOLE_DIAMETER, R.PIN_ROOT_FILLET, R.BED_EDGE_CHAMFER} <= fdm, \
+    sorted(r.name for r in fdm)
+
+# Resin and powder bed: a hollow block with one small drain hole, a pocket
+# open towards the tank and a thin pin.
+hollow = B.cut(B.box(0, 0, 0, 60, 40, 20), B.box(10, 10, 5, 30, 30, 15), B.drill((20, 20, 20), (0, 0, -1), 2, 6),
+               B.box(38, 8, 12, 56, 32, 21))
+hollow = B.fuse(hollow, B.cylinder((47, 20, 12), 0.3, 15))  # 25 diameters tall
+resin = analysis_runner.AnalysisRunner().run_analysis(
+    "Resin 3D Printing (SLA)", "Default", hollow, PRINT_ORIENTATION=gp_Dir(0, 0, 1))
+found = {r.rule_id for r in resin}
+assert {R.MIN_ESCAPE_HOLE_DIAMETER, R.MAX_CUP_AREA, R.MAX_PIN_SLENDERNESS} <= found, sorted(r.name for r in found)
+single = [r for r in resin if r.rule_id == R.MIN_ESCAPE_HOLE_DIAMETER and "one escape hole" in r.overview]
+assert single, "the single-hole warning"
+
+# Powder bed: no print orientation given; the same part, sealed.
+sealed = B.cut(B.box(0, 0, 0, 150, 12, 12), B.box(20, 3, 3, 120, 9, 9))
+powder_runner = analysis_runner.AnalysisRunner()
+powder = powder_runner.run_analysis("Powder Bed Fusion (SLS)", "PA12 (SLS)", sealed)
+found = {r.rule_id: r for r in powder}
+assert found[R.SEALED_CAVITY].severity == Severity.WARNING, found.get(R.SEALED_CAVITY)
+assert R.MAX_PART_ASPECT_RATIO in found and not found[R.MAX_PART_ASPECT_RATIO].failing_geometry
+# TPU: same measurements, its own thresholds.
+again = powder_runner.rerun_checks_only("Powder Bed Fusion (SLS)", "TPU")
+assert {r.rule_id for r in again} >= {R.SEALED_CAVITY, R.MAX_PART_ASPECT_RATIO}
 print("end to end: ok")

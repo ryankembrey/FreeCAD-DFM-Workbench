@@ -16,7 +16,10 @@ cached once per shape. This pass is cheap and runs per direction:
   that holds them (a side hole, a side boss) or the side action that
   releases them (after Fu, Fuh & Nee's undercut features);
 * FDM annotations for a print direction: horizontal holes (teardrop),
-  holes and walls too small for the nozzle.
+  holes and walls too small for the nozzle;
+* resin annotations for a print direction: recesses that cup (seal against
+  the tank film or the build platform while they print, so each peel pulls
+  a vacuum in them).
 """
 
 from __future__ import annotations
@@ -237,6 +240,7 @@ def annotate_directional(
             if not ann:
                 report.annotations.pop(f.id, None)
         next_id = _supports(result, shape, faces, adj, p, options, owner, report, new_features, next_id)
+        _cups(result, shape, faces, p, report)
 
     report.features = tuple(new_features)
     report.annotations = {k: v for k, v in report.annotations.items() if v}
@@ -356,3 +360,121 @@ def _bridge(faces, adj, face, p, levels):
     if best <= 0:
         return None
     return best, len(supports)
+
+
+#: A recess opening within this angle of the print direction faces the tank (degrees).
+CUP_ANGLE = 30.0
+#: Openings within this distance of the lowest point of the part are on the platform (mm).
+CUP_BED_TOLERANCE = 0.05
+_RECESSES = (FeatureKind.HOLE, FeatureKind.POCKET, FeatureKind.CUTOUT)
+
+
+def _cups(result, shape, faces, p, report) -> None:
+    """Resin printing: recesses that cup, annotated with ``cup`` (where they
+    seal: "tank" or "platform") and ``cup_area`` (their opening, mm²).
+
+    Upside-down resin printers cure each layer against the tank's film and
+    then peel it off. A recess open towards the film is sealed by it at every
+    layer: the peel pulls a vacuum in it ("cupping"; Formlabs). So is one
+    open towards the build platform when it is printed on the platform, as
+    is a hole running through the part there. A recess that meets an
+    opening through the part (a vent hole through a pocket's floor) lets
+    air in and doesn't cup. Sealed hollows are the Sealed Cavity rule's.
+    """
+    from ..utils.geometry import face_area
+    from ._topology.descriptors import _interior_sample
+
+    cos_cup = math.cos(math.radians(CUP_ANGLE))
+    level = {}  # face -> (lowest, highest) along p
+
+    def extent(i):
+        if i not in level:
+            from ..utils.geometry import get_extent_along
+
+            level[i] = get_extent_along(faces.face_at(i), gp_Dir(*p))
+        return level[i]
+
+    bed = min(extent(i)[0] for i in range(1, len(faces) + 1))
+    by_id = {f.id: f for f in result.features}
+
+    def on_bed(lowest: float) -> bool:
+        return abs(lowest - bed) <= CUP_BED_TOLERANCE
+
+    def vented(f) -> bool:
+        """Air gets in: its floor is pierced, or it meets an opening through the part."""
+        if f.params.get("pierced"):
+            return True
+        for other in (by_id.get(i) for i in f.interacts_with):
+            if other is None:
+                continue
+            if other.kind == FeatureKind.CUTOUT or (other.kind in (FeatureKind.HOLE, FeatureKind.SLOT)
+                                                    and other.params.get("through")):
+                return True
+        return False
+
+    for f in result.features:
+        if f.kind not in _RECESSES or f.params.get("partial") or vented(f):
+            continue
+        where, area = None, 0.0
+        if f.kind == FeatureKind.HOLE:
+            axis, d = f.params.get("axis"), float(f.params.get("diameter") or 0.0)
+            if not axis or d <= 0.0:
+                continue
+            along = V.dot(V.unit(axis), p)  # the axis points into the hole from its entry
+            low = min(extent(i)[0] for i in f.faces)
+            area = math.pi * d * d / 4.0
+            if f.params.get("through"):
+                if abs(along) >= cos_cup and on_bed(low):
+                    where = "platform"
+            elif -along >= cos_cup:
+                where = "tank"
+            elif along >= cos_cup and on_bed(low):
+                where = "platform"
+        else:
+            sampled = [(i, _interior_sample(faces.face_at(i))[1]) for i in f.faces]
+            normals = {i: n for i, n in sampled if n is not None}
+            if f.kind == FeatureKind.CUTOUT:
+                # Open at both ends: it cups only standing on the platform, its
+                # walls along the print direction.
+                if not normals or any(abs(V.dot(n, p)) > 1.0 - cos_cup for n in normals.values()):
+                    continue
+                if not on_bed(min(extent(i)[0] for i in f.faces)):
+                    continue
+                where = "platform"
+                area = float(f.params.get("floor_area") or 0.0) or _cross_section(faces, f.faces, p)
+            else:
+                # A pocket opens the way its floor faces (the floor's normal
+                # points out of the material, into the pocket).
+                floors = [i for i, n in normals.items() if abs(V.dot(n, p)) >= cos_cup]
+                if not floors:
+                    continue
+                facing = sum(V.dot(normals[i], p) * face_area(faces.face_at(i)) for i in floors)
+                area = abs(facing)
+                if facing > 0:
+                    where = "tank"
+                elif on_bed(min(extent(i)[0] for i in f.faces)):
+                    where = "platform"
+        if where and area > 0.0:
+            ann = report.annotations.setdefault(f.id, {})
+            ann["cup"] = where
+            ann["cup_area"] = round(area, 3)
+
+
+def _cross_section(faces, members, p) -> float:
+    """The area a cutout's walls enclose across *p*, from their outline's
+    bounding rectangle across p (an estimate, generous for round shapes)."""
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+
+    a = V.unit(V.cross(p, (1.0, 0.0, 0.0) if abs(p[0]) < 0.9 else (0.0, 1.0, 0.0)))
+    b = V.cross(p, a)
+    pts = []
+    for i in members:
+        box = Bnd_Box()
+        BRepBndLib.Add_s(faces.face_at(i), box)
+        x0, y0, z0, x1, y1, z1 = box.Get()
+        pts += [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
+    if not pts:
+        return 0.0
+    span = [max(V.dot(q, u) for q in pts) - min(V.dot(q, u) for q in pts) for u in (a, b)]
+    return span[0] * span[1]

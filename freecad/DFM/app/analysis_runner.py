@@ -80,7 +80,7 @@ class AnalysisRunner:
         kwargs["face_index"] = self.face_index
         kwargs["total_surface_area"] = self.total_surface_area
         kwargs["_target_material"] = target_material
-        self._add_run_context(kwargs, active_rules)
+        self._add_run_context(kwargs, active_rules, process)
 
         self._emit_plan(active_rules, analyzer_counts, total_steps)
 
@@ -193,7 +193,7 @@ class AnalysisRunner:
         active_rules = [
             rule_id for rule_id in process.active_rules if get_check_class(rule_id)
         ]
-        self._add_run_context(kwargs, active_rules)
+        self._add_run_context(kwargs, active_rules, process)
         total_steps = len(active_rules)
         results: list[CheckResult] = []
 
@@ -259,16 +259,19 @@ class AnalysisRunner:
         return [r for r in results if not taken_over(r)]
 
     @staticmethod
-    def _add_run_context(kwargs: dict, active_rules: list) -> None:
+    def _add_run_context(kwargs: dict, active_rules: list, process: Any = None) -> None:
         """What checks may share within one run.
 
         ``_active_rules``: the rules being checked, in order.
         ``run_notes``: a set a check adds to so a note common to several
         rules is reported once per run (such as "the nominal wall couldn't
         be measured").
+        ``_archetype``: the process family (a rule shared by FDM, resin and
+        powder bed may word or size its advice for each).
         """
         kwargs["_active_rules"] = list(active_rules)
         kwargs["run_notes"] = set()
+        kwargs["_archetype"] = getattr(process, "archetype", None)
 
     def _check_rule(
         self,
