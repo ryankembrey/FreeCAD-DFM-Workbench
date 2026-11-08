@@ -15,22 +15,25 @@ every worker process. Instead the workbench asks this service, which:
 * caches results per shape (geometric fingerprint + options + engine
   version), so analyzers, checks and the bench share one result.
 
-How analyzers and checks will use it (not wired in yet; see DESIGN.md §7):
-AnalysisRunner calls ``features_for(shape_occ, target_object)`` once when a
-check or analyzer declares ``requires_features = True`` and passes the
-result in ``kwargs["features"]``. The result is plain data (face numbers,
-floats, strings), so it pickles to the worker processes cheaply.
+The feature rules get their features from FEATURE_ANALYZER
+(core/analyzers/feature_analyzer.py), which shares this service's cache
+(core.utils.part_features.FEATURE_CACHE): a part measured from the setup
+panel, or inspected in the bench, isn't recognised again by the analysis.
+The analysis is given the same history hints (``history_hints``), so it
+finds the same cache entry.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from ..core.recognition import FeatureCache, RecognitionOptions, RecognitionResult, options_from_prefs, pref_key
+from ..core.recognition import RecognitionOptions, RecognitionResult, options_from_prefs, pref_key
 from ..core.recognition.options import RecognitionOptions as _Options
+from ..core.utils.part_features import FEATURE_CACHE
 from .prefs import dfm_params
 
-_CACHE = FeatureCache(maxsize=8)
+#: One cache for the bench, the setup panel and the analysis.
+_CACHE = FEATURE_CACHE
 
 #: The developer switch that shows the recognition test bench.
 BENCH_PREF = "DeveloperRecognitionBench"
@@ -90,17 +93,37 @@ def features_for(shape_occ, target_object=None, options: Optional[RecognitionOpt
     """Recognise *shape_occ* (a TopoDS_Shape), with history hints from
     *target_object* when it has history and the preference allows."""
     options = options or read_options()
-    hints = []
-    if target_object is not None and options.use_history_hints:
-        try:
-            from .recognition_hints import hints_for
-            hints = hints_for(target_object)
-        except Exception:
-            hints = []
+    hints = history_hints(target_object, options)
     if use_cache:
         return _CACHE.get(shape_occ, options, hints=hints, **kwargs)
     from ..core.recognition import recognize
     return recognize(shape_occ, options, hints=hints, **kwargs)
+
+
+def history_hints(target_object, options: Optional[RecognitionOptions] = None) -> list:
+    """Hints from *target_object*'s history ([] without one, or when the
+    preference to use them is off)."""
+    options = options or read_options()
+    if target_object is None or not options.use_history_hints:
+        return []
+    try:
+        from .recognition_hints import hints_for
+        return list(hints_for(target_object))
+    except Exception:
+        return []
+
+
+def uses_recognition(process) -> bool:
+    """True when an active rule of *process* is measured on recognised features."""
+    from ..core.registries.analyzers_registry import get_analyzer_class
+    from ..core.registries.checks_registry import get_check_class
+
+    for rule in getattr(process, "active_rules", ()):
+        check = get_check_class(rule)
+        analyzer = get_analyzer_class(check().required_analyzer_id) if check else None
+        if analyzer is not None and getattr(analyzer, "uses_recognition", False):
+            return True
+    return False
 
 
 def features_for_object(obj, options: Optional[RecognitionOptions] = None, **kwargs):

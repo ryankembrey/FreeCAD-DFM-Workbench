@@ -273,7 +273,7 @@ def format_value(rule: Rulebook, value) -> str:
     except (TypeError, ValueError):
         text = str(value)
     unit = rule.unit
-    if unit and unit not in ("°", "%"):
+    if unit and unit not in ("°", "%", "×"):
         text += f" {unit}"
     elif unit:
         text += unit

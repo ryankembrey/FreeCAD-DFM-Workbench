@@ -52,7 +52,8 @@ def link(ctx: Context) -> None:
             od = b.params.get("outer_diameter", 0.0)
             b.params["wall_thickness"] = r3((od - h.params.get("diameter", 0.0)) / 2.0)
             b.params["inner_hole"] = h.id
-            if b.subtype in ("solid", "stepped"):
+            # A pin is solid by definition: a slender boss with a core is a screw boss.
+            if b.subtype in ("solid", "stepped", "pin"):
                 b.subtype = "screw"
             b.score.ok(f"coaxial hole Ø{h.params.get('diameter')}: wall {b.params['wall_thickness']}")
 

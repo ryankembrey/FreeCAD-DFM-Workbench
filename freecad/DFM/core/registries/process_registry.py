@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
+import copy
 import yaml
 from pathlib import Path
 from typing import Optional
@@ -11,6 +12,31 @@ import FreeCAD as App  # type: ignore
 
 from ...core.processes.process import Process
 from ...core.rules import Rulebook
+
+
+def mentioned_rules(process: Process) -> set[Rulebook]:
+    """Every rule *process* says anything about."""
+    rules = set(process.active_rules) | set(process.rule_feedback) | set(process.rule_criticality)
+    for material in process.materials.values():
+        rules |= set(material.rule_limits)
+    return rules
+
+
+def merge_new_rules(process: Process, builtin: Process) -> list[Rulebook]:
+    """Add the rules *builtin* has and *process* (a user's copy of it) never
+    mentions: their messages, criticality and thresholds (for the materials
+    both have), turned off. Returns the rules added."""
+    added = sorted(mentioned_rules(builtin) - mentioned_rules(process), key=lambda r: r.name)
+    for rule in added:
+        if rule in builtin.rule_feedback:
+            process.rule_feedback[rule] = copy.deepcopy(builtin.rule_feedback[rule])
+        if rule in builtin.rule_criticality:
+            process.rule_criticality[rule] = builtin.rule_criticality[rule]
+        for name, material in builtin.materials.items():
+            target = process.materials.get(name)
+            if target is not None and rule in material.rule_limits:
+                target.rule_limits[rule] = copy.deepcopy(material.rule_limits[rule])
+    return added
 
 
 class ProcessRegistry:
@@ -34,12 +60,23 @@ class ProcessRegistry:
         self.discover_processes()
 
     def discover_processes(self):
-        """Scans both dev and user directories. User versions override Dev versions."""
+        """Scans both dev and user directories. User versions override Dev versions.
+
+        A user copy saved before a rule was added to the built-in process
+        doesn't mention it: the rule is added to the copy turned off, with
+        the built-in thresholds and messages, so it can be switched on in
+        the Process Library (see merge_new_rules).
+        """
         self.processes.clear()
 
         self._load_from_dir(self.dev_dir)
+        builtin = dict(self.processes)
 
         self._load_from_dir(self.user_dir)
+        for name, process in self.processes.items():
+            source = builtin.get(name)
+            if source is not None and process is not source:
+                merge_new_rules(process, source)
 
         print(f"Registry initialized: {len(self.processes)} processes loaded.")
 

@@ -12,6 +12,22 @@ active_rules:
 - NO_UNDERCUTS
 - SHARP_INTERNAL_CORNERS
 - SHARP_EXTERNAL_CORNERS
+- MAX_BOSS_WALL_RATIO
+- MAX_RIB_THICKNESS_RATIO
+- MAX_BOSS_HEIGHT_RATIO
+- MAX_RIB_HEIGHT_RATIO
+- MIN_BOSS_CORE_DEPTH
+- STANDALONE_BOSS
+- MIN_BOSS_SPACING
+- MIN_RIB_SPACING
+- MIN_BOSS_ROOT_RADIUS
+- MIN_RIB_ROOT_RADIUS
+- MAX_HOLE_DEPTH_RATIO
+- MIN_HOLE_EDGE_DISTANCE
+- MAX_WALL_THICKNESS_VARIATION
+- MIN_MOLD_STEEL_THICKNESS
+- MAX_LIVING_HINGE_WEB
+- MAX_SNAP_FIT_STRAIN
 rule_feedback:
     MIN_DRAFT_ANGLE:
         warning_msg: 'Insufficient Draft ({measured}): This angle is below the recommended
@@ -68,6 +84,150 @@ rule_feedback:
             an external fillet of radius at least 0.5mm is recommended to reduce tooling
             cost and lead time.'
         error_msg: ''
+    MAX_BOSS_WALL_RATIO:
+        warning_msg: 'Thick Boss Wall ({measured}): {feature} has a {size}, above the
+            recommended {target} of the nominal wall, {nominal}. The extra mass at its
+            base can show as a sink mark on the opposite face. Core the boss out
+            further or reduce its outer diameter.'
+        error_msg: 'Boss Wall Too Thick ({measured}): {feature} has a {size}, past
+            {limit} of the nominal wall, {nominal}. Expect sink marks and voids at its
+            base and a longer cycle. Core it out so its wall is at most {target} of
+            the nominal wall, and support it with ribs or gussets if it needs
+            strength.'
+    MAX_RIB_THICKNESS_RATIO:
+        warning_msg: 'Thick Rib ({measured}): {feature} is {size}, above the
+            recommended {target} of the nominal wall, {nominal}. Expect a faint sink
+            line on the opposite face.'
+        error_msg: 'Rib Too Thick ({measured}): {feature} is {size}, past {limit} of
+            the nominal wall, {nominal}, and will sink on the opposite face. Make it
+            at most {target} of the nominal wall, and add a second rib if it needs the
+            stiffness.'
+    MAX_BOSS_HEIGHT_RATIO:
+        warning_msg: 'Tall Boss ({measured} its diameter): {feature} is {size}, taller
+            than the recommended {target} its outer diameter. Tall bosses are hard to
+            fill and vent, and their core pins bend. Add gussets, or shorten the boss
+            and raise the mating part to meet it.'
+        error_msg: 'Boss Too Tall ({measured} its diameter): {feature} is {size}, past
+            {limit} its outer diameter. Expect short shots, trapped gas at its tip and
+            a core pin that deflects. Shorten the boss and raise the mating part to
+            meet it, or brace it with gussets.'
+    MAX_RIB_HEIGHT_RATIO:
+        warning_msg: 'Tall Rib ({measured} the nominal wall): {feature} is {size},
+            above the recommended {target} the nominal wall, {nominal}. A tall rib is
+            hard to fill and vent, and its drafted tip ends up thin. Consider two
+            shorter ribs instead.'
+        error_msg: 'Rib Too Tall ({measured} the nominal wall): {feature} is {size},
+            past {limit} the nominal wall, {nominal}. Expect short shots and burn
+            marks at its tip, and sticking in the mould. Use two or more shorter ribs
+            for the same stiffness.'
+    MIN_BOSS_CORE_DEPTH:
+        warning_msg: 'Shallow Boss Core ({measured} of its height): the hole in
+            {feature} is {size}, so it stops short of the base and leaves a thicker
+            section there. Core the boss down to its base plane.'
+        error_msg: 'Solid Plug at Boss Base ({measured} of its height): the hole in
+            {feature} is {size}, leaving a solid plug at its base. The plug is a thick
+            section that sinks and slows cooling. Core the boss down to its base
+            plane.'
+    STANDALONE_BOSS:
+        warning_msg: 'Standalone Boss: {feature} is {size} and stands on its own, with
+            no side wall, rib or gusset to support it. A free-standing boss fills
+            late, traps gas at its tip and bends when the part is ejected or loaded.
+            Tie it to the nearest wall with a rib, or add gussets around it.'
+        error_msg: 'Standalone Boss: {feature} is {size} and stands on its own, with
+            no side wall, rib or gusset to support it. A free-standing boss fills
+            late, traps gas at its tip and bends when the part is ejected or loaded.
+            Tie it to the nearest wall with a rib, or add gussets around it.'
+    MIN_BOSS_SPACING:
+        warning_msg: 'Bosses Close Together ({measured} the nominal wall): {feature}
+            are {size}, closer than the recommended {target} the nominal wall,
+            {nominal}. The steel between them is a thin blade that runs hot and wears.
+            Move them apart, or join them with a rib.'
+        error_msg: 'Bosses Too Close ({measured} the nominal wall): {feature} are
+            {size}, under {limit} the nominal wall, {nominal}. The thin blade of steel
+            between them overheats, causing sink and long cycles, and can crack. Move
+            them at least {target} the nominal wall apart, or merge them into one
+            feature.'
+    MIN_RIB_SPACING:
+        warning_msg: 'Ribs Close Together ({measured} the nominal wall): {feature} are
+            {size}, closer than the recommended {target} the nominal wall, {nominal}.
+            The steel between them is a thin blade that is hard to cool. Space them
+            further apart.'
+        error_msg: 'Ribs Too Close ({measured} the nominal wall): {feature} are
+            {size}, under {limit} the nominal wall, {nominal}. The thin blade of steel
+            between them overheats and wears, and the plastic around it sinks. Space
+            them at least {target} the nominal wall apart, or replace the pair with
+            one rib.'
+    MIN_BOSS_ROOT_RADIUS:
+        warning_msg: 'Small Boss Root Radius ({measured}): {feature} has a {size},
+            below the recommended {target} of the nominal wall, {nominal}. A larger
+            fillet where it meets its base eases the flow and spreads the stress.'
+        error_msg: 'Sharp Boss Root ({measured}): {feature} has a {size}, under
+            {limit} of the nominal wall, {nominal}. The sharp corner at its base
+            concentrates stress and is where the boss will crack. Add a root fillet of
+            about {target} of the nominal wall; much larger adds a thick section.'
+    MIN_RIB_ROOT_RADIUS:
+        warning_msg: 'Small Rib Root Radius ({measured}): {feature} has a {size},
+            below the recommended {target} of the nominal wall, {nominal}. A larger
+            fillet where it meets its base eases the flow and spreads the stress.'
+        error_msg: 'Sharp Rib Root ({measured}): {feature} has a {size}, under {limit}
+            of the nominal wall, {nominal}. The sharp corner at its base concentrates
+            stress and is where the rib will crack. Add a root fillet of about
+            {target} of the nominal wall; much larger adds a thick section that sinks.'
+    MAX_HOLE_DEPTH_RATIO:
+        warning_msg: 'Deep Cored Hole ({measured} its diameter): {feature} is {size},
+            deeper than the recommended {target} its diameter for a {hole_kind} hole.
+            Its long core pin can bend under injection pressure and is hard to cool.
+            Make the hole shallower or wider, or core it from both sides.'
+        error_msg: 'Cored Hole Too Deep ({measured} its diameter): {feature} is
+            {size}, past {limit} its diameter for a {hole_kind} hole. The slender core
+            pin will deflect, leaving the hole off axis with an uneven wall, and may
+            break. Core it from both sides, make it a through hole, or drill it after
+            moulding.'
+    MIN_HOLE_EDGE_DISTANCE:
+        warning_msg: 'Crowded Hole ({measured}): {feature}, {size}, is closer than the
+            recommended {target} {reference}. The narrow strip of material fills
+            poorly and leaves a weak knit line. Move the hole further from the edge or
+            from its neighbour.'
+        error_msg: 'Hole Too Close ({measured}): {feature}, {size}, is under {limit}
+            {reference}. The thin strip of material fills last, leaves a weak knit
+            line and can crack when a screw or pin goes in. Leave at least {target}
+            {reference} around the hole.'
+    MAX_WALL_THICKNESS_VARIATION:
+        warning_msg: 'Wall Thickness Change ({measured}): the wall steps {size}, more
+            than the recommended {target} of the thicker wall. The two sections cool
+            and shrink at different rates, which can warp the part. Blend the change
+            over a taper at least {ramp} long (3 times the step).'
+        error_msg: 'Abrupt Wall Thickness Change ({measured}): the wall steps {size},
+            past {limit} of the thicker wall. Expect warping, sink and internal stress
+            where the sections meet, and hesitation as the plastic flows from thick to
+            thin. Make the walls more even, or taper the change over at least {ramp}
+            (3 times the step).'
+    MIN_MOLD_STEEL_THICKNESS:
+        warning_msg: 'Thin Mould Steel ({measured}): the gap between {feature} is
+            {size}, so the mould steel filling it is thinner than the recommended
+            {target}. Thin steel runs hot and wears. Widen the gap, or make it
+            shallower.'
+        error_msg: 'Mould Steel Too Thin ({measured}): the gap between {feature} is
+            {size}, so the mould steel filling it is a blade under {limit} thick. It
+            overheats, slows the cycle, and can bend or break under injection
+            pressure. Widen the gap, fill it in, or make it much shallower.'
+    MAX_LIVING_HINGE_WEB:
+        warning_msg: 'Thick Living Hinge ({measured}): {feature} has a web {size},
+            above the recommended {target}. A thicker web is stiffer and strains more
+            each time it flexes. Keep living hinge webs between 0.2 and 0.5 mm.'
+        error_msg: 'Living Hinge Too Thick ({measured}): {feature} has a web {size},
+            past {limit}. Webs this thick have been reported cracking within a few
+            flexes. Thin the web to {target} or less, with radiused shoulders either
+            side.'
+    MAX_SNAP_FIT_STRAIN:
+        warning_msg: 'High Snap-Fit Strain ({measured}): {feature} is {size},
+            straining its root past {target}, the limit for a snap that is opened and
+            closed often. Lengthen or thin the beam, taper it to half its thickness at
+            the hook, or reduce the catch.'
+        error_msg: 'Snap-Fit Overstrained ({measured}): {feature} is {size}, straining
+            its root past {limit}, more than the material takes even once. It will
+            whiten, take a set or break as it is assembled. Lengthen or thin the beam,
+            taper it to half its thickness at the hook, or reduce the catch.'
 rule_criticality:
     MIN_DRAFT_ANGLE: CRITICAL
     NO_UNDERCUTS: CRITICAL
@@ -75,6 +235,22 @@ rule_criticality:
     MIN_WALL_THICKNESS: HIGH
     MAX_WALL_THICKNESS: MEDIUM
     SHARP_EXTERNAL_CORNERS: LOW
+    MAX_BOSS_WALL_RATIO: HIGH
+    MAX_RIB_THICKNESS_RATIO: HIGH
+    MAX_BOSS_HEIGHT_RATIO: MEDIUM
+    MAX_RIB_HEIGHT_RATIO: MEDIUM
+    MIN_BOSS_CORE_DEPTH: MEDIUM
+    STANDALONE_BOSS: LOW
+    MIN_BOSS_SPACING: MEDIUM
+    MIN_RIB_SPACING: MEDIUM
+    MIN_BOSS_ROOT_RADIUS: LOW
+    MIN_RIB_ROOT_RADIUS: LOW
+    MAX_HOLE_DEPTH_RATIO: MEDIUM
+    MIN_HOLE_EDGE_DISTANCE: MEDIUM
+    MAX_WALL_THICKNESS_VARIATION: HIGH
+    MIN_MOLD_STEEL_THICKNESS: HIGH
+    MAX_LIVING_HINGE_WEB: MEDIUM
+    MAX_SNAP_FIT_STRAIN: HIGH
 materials:
     Default:
         category: Default
@@ -95,6 +271,57 @@ materials:
                 binary_severity: ERROR
             SHARP_EXTERNAL_CORNERS:
                 binary_severity: WARNING
+            MAX_BOSS_WALL_RATIO:
+                target: '60'
+                limit: '75'
+            MAX_RIB_THICKNESS_RATIO:
+                target: '60'
+                limit: '75'
+            MAX_BOSS_HEIGHT_RATIO:
+                target: '2.5'
+                limit: '3.0'
+            MAX_RIB_HEIGHT_RATIO:
+                target: '3.0'
+                limit: '5.0'
+            MIN_BOSS_CORE_DEPTH:
+                target: '100'
+                limit: '80'
+            STANDALONE_BOSS:
+                binary_severity: WARNING
+            MIN_BOSS_SPACING:
+                target: '2.0'
+                limit: '1.0'
+            MIN_RIB_SPACING:
+                target: '2.0'
+                limit: '1.0'
+            MIN_BOSS_ROOT_RADIUS:
+                target: '50'
+                limit: '25'
+            MIN_RIB_ROOT_RADIUS:
+                target: '40'
+                limit: '25'
+            MAX_HOLE_DEPTH_RATIO:
+                target: '2.0'
+                limit: '3.0'
+            MIN_HOLE_EDGE_DISTANCE:
+                target: '2.0'
+                limit: '1.0'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '15'
+                limit: '25'
+            MIN_MOLD_STEEL_THICKNESS:
+                target: '1.5'
+                limit: '1.0'
+            MAX_LIVING_HINGE_WEB:
+                target: '0.4'
+                limit: '0.6'
+            # Permissible snap-fit strain (%): limit = one assembly, target = about
+            # 60% of it, for snaps opened often (Bayer/Covestro, Snap-Fit Joints for
+            # Plastics, Table 2). Default is a conservative placeholder, not a
+            # published value: set each material from its supplier's data.
+            MAX_SNAP_FIT_STRAIN:
+                target: '1.2'
+                limit: '2.0'
     PLA:
         category: Bio-Thermoplastic
         is_active: true
@@ -125,6 +352,9 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.05'
                 limit: '4.0'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '10'
+                limit: '15'
     PMMA:
         category: Amorphous Thermoplastic
         is_active: true
@@ -145,6 +375,9 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.05'
                 limit: '4.0'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '10'
+                limit: '15'
     Long-Fiber Reinforced Plastics:
         category: Composite Thermoplastic
         is_active: true
@@ -168,6 +401,14 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '2.92'
                 limit: '3.5'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '10'
+                limit: '15'
+            # Durethan PA, dry: 4% (6% conditioned) (Bayer, Part and Mold Design,
+            # Table 4-1).
+            MAX_SNAP_FIT_STRAIN:
+                target: '2.4'
+                limit: '4.0'
     PC:
         category: Amorphous Thermoplastic
         is_active: true
@@ -181,6 +422,10 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
+            # Makrolon PC: 4% (Covestro, Snap-Fit Joints for Plastics, Table 2).
+            MAX_SNAP_FIT_STRAIN:
+                target: '2.4'
+                limit: '4.0'
     PET / PBT:
         category: Semi-Crystalline Thermoplastic
         is_active: true
@@ -191,6 +436,9 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.18'
                 limit: '4.0'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '10'
+                limit: '15'
     PE:
         category: Semi-Crystalline Thermoplastic
         is_active: true
@@ -204,8 +452,11 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '5.08'
                 limit: '6.0'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '10'
+                limit: '15'
     PSU:
-        category: Semi-Crystalline Thermoplastic
+        category: Amorphous Thermoplastic
         is_active: true
         rule_limits:
             MIN_WALL_THICKNESS:
@@ -227,6 +478,9 @@ materials:
             MAX_WALL_THICKNESS:
                 target: '3.81'
                 limit: '4.5'
+            MAX_WALL_THICKNESS_VARIATION:
+                target: '10'
+                limit: '15'
     PS:
         category: Amorphous Thermoplastic
         is_active: true

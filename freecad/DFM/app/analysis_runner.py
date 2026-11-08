@@ -80,6 +80,7 @@ class AnalysisRunner:
         kwargs["face_index"] = self.face_index
         kwargs["total_surface_area"] = self.total_surface_area
         kwargs["_target_material"] = target_material
+        self._add_run_context(kwargs, active_rules)
 
         self._emit_plan(active_rules, analyzer_counts, total_steps)
 
@@ -192,6 +193,7 @@ class AnalysisRunner:
         active_rules = [
             rule_id for rule_id in process.active_rules if get_check_class(rule_id)
         ]
+        self._add_run_context(kwargs, active_rules)
         total_steps = len(active_rules)
         results: list[CheckResult] = []
 
@@ -223,6 +225,18 @@ class AnalysisRunner:
             results.extend(check_results)
 
         return results
+
+    @staticmethod
+    def _add_run_context(kwargs: dict, active_rules: list) -> None:
+        """What checks may share within one run.
+
+        ``_active_rules``: the rules being checked, in order.
+        ``run_notes``: a set a check adds to so a note common to several
+        rules is reported once per run (such as "the nominal wall couldn't
+        be measured").
+        """
+        kwargs["_active_rules"] = list(active_rules)
+        kwargs["run_notes"] = set()
 
     def _check_rule(
         self,

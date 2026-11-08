@@ -60,17 +60,33 @@ class BaseCheck(ABC):
         except ValueError:
             return None
 
+    def format_number(self, value: float, unit: str = "") -> str:
+        """A measured value or threshold as messages show it, such as "1.20mm"."""
+        return f"{value:.2f}{unit}"
+
     def format_feedback(
-        self, template: str, measured: float, target: float, limit: float, unit: str = ""
+        self,
+        template: str,
+        measured: float,
+        target: float,
+        limit: float,
+        unit: str = "",
+        **extra: object,
     ) -> str:
         """
         Replaces placeholders in the feedback template with formatted values.
+
+        ``{measured}``, ``{target}`` and ``{limit}`` are formatted with the
+        rule's unit (see format_number). Any *extra* keyword fills the
+        placeholder of the same name as text: ``feature="Boss 3"`` fills
+        ``{feature}``. Placeholders with no value are left as they are.
         """
         replacements = {
-            "{measured}": f"{measured:.2f}{unit}",
-            "{limit}": f"{limit:.2f}{unit}",
-            "{target}": f"{target:.2f}{unit}",
+            "{measured}": self.format_number(measured, unit),
+            "{limit}": self.format_number(limit, unit),
+            "{target}": self.format_number(target, unit),
         }
+        replacements.update({f"{{{key}}}": str(value) for key, value in extra.items()})
 
         formatted_msg = template
         for placeholder, value in replacements.items():

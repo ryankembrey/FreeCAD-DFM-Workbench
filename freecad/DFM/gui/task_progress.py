@@ -52,6 +52,23 @@ class RunRequest:
         self.setup_state = setup_state
 
 
+def _recognition_kwargs(req: "RunRequest") -> dict:
+    """History hints for the run, when one of its rules recognises features.
+
+    Kept out of the request's settings (they are FreeCAD-derived, and the
+    settings are stored with the results); the setup panel's "measure now"
+    uses the same hints, so the analysis finds its recognition in the cache.
+    """
+    try:
+        from ..app.recognition_service import history_hints, uses_recognition
+
+        if uses_recognition(req.process):
+            return {"recognition_hints": history_hints(req.target_object)}
+    except Exception as exc:  # hints only refine recognition: run without them
+        App.Console.PrintLog(f"DFM: no history hints for the analysis ({exc}).\n")
+    return {}
+
+
 def _clock(seconds: float) -> str:
     seconds = max(0, int(round(seconds)))
     minutes, secs = divmod(seconds, 60)
@@ -262,6 +279,7 @@ class TaskProgress:
                 check_abort=check_abort,
                 events=self._on_event,
                 **dict(req.kwargs),
+                **_recognition_kwargs(req),
             )
         except Exception as exc:
             import traceback

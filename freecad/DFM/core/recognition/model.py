@@ -159,8 +159,8 @@ class Feature:
 
     @property
     def label(self) -> str:
-        sub = f" ({self.subtype})" if self.subtype else ""
-        return f"{self.kind.value.capitalize()} {self.id}{sub}"
+        sub = f" ({self.subtype.replace('_', ' ')})" if self.subtype else ""
+        return f"{self.kind.value.replace('_', ' ').capitalize()} {self.id}{sub}"
 
     def to_dict(self) -> dict:
         return {

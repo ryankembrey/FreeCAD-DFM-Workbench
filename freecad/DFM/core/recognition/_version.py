@@ -5,4 +5,4 @@
 """Engine version. Bump it whenever recognition output can change for the
 same shape and options: it is part of every cache key and golden file."""
 
-ENGINE_VERSION = "1.3.0"
+ENGINE_VERSION = "1.3.1"  # 1.3.1: a cored slender boss is a screw boss, not a pin

@@ -181,6 +181,142 @@ class Rulebook(Enum):
         ),
     )
 
+    # -- Injection moulding features (recognised; see core/base/feature_check.py) --
+    MAX_BOSS_WALL_RATIO = RuleType(
+        "Boss Wall Thickness",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="max",
+        unit_suffix="of nominal wall",
+        field_labels=("Aim for", "At most"),
+        description="Boss wall thickness compared with the nominal wall.",
+    )
+    MAX_RIB_THICKNESS_RATIO = RuleType(
+        "Rib Thickness",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="max",
+        unit_suffix="of nominal wall",
+        field_labels=("Aim for", "At most"),
+        description="Rib thickness at its base compared with the nominal wall.",
+    )
+    MAX_BOSS_HEIGHT_RATIO = RuleType(
+        "Boss Height",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="max",
+        unit_suffix="outer diameter",
+        field_labels=("Aim for", "At most"),
+        description="Boss height compared with its outer diameter.",
+    )
+    MAX_RIB_HEIGHT_RATIO = RuleType(
+        "Rib Height",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="max",
+        unit_suffix="nominal wall",
+        field_labels=("Aim for", "At most"),
+        description="Rib height compared with the nominal wall.",
+    )
+    MIN_BOSS_CORE_DEPTH = RuleType(
+        "Boss Core Depth",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="min",
+        unit_suffix="of boss height",
+        field_labels=("Aim for", "At least"),
+        description="How far the hole in a screw boss reaches down towards its base.",
+    )
+    STANDALONE_BOSS = RuleType(
+        "Standalone Boss",
+        shape=RuleShape.BINARY,
+        unit=None,
+        description="Bosses not tied to a side wall, rib or gusset.",
+    )
+    MIN_BOSS_SPACING = RuleType(
+        "Boss Spacing",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="min",
+        unit_suffix="nominal wall",
+        description="Clear gap between neighbouring bosses compared with the nominal wall.",
+    )
+    MIN_RIB_SPACING = RuleType(
+        "Rib Spacing",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="min",
+        unit_suffix="nominal wall",
+        description="Gap between parallel ribs compared with the nominal wall.",
+    )
+    MIN_BOSS_ROOT_RADIUS = RuleType(
+        "Boss Root Radius",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="min",
+        unit_suffix="of nominal wall",
+        description="Fillet radius where a boss meets its base, compared with the nominal wall.",
+    )
+    MIN_RIB_ROOT_RADIUS = RuleType(
+        "Rib Root Radius",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="min",
+        unit_suffix="of nominal wall",
+        description="Fillet radius where a rib meets its base, compared with the nominal wall.",
+    )
+    MAX_HOLE_DEPTH_RATIO = RuleType(
+        "Cored Hole Depth",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="max",
+        unit_suffix="hole diameter",
+        field_labels=("Aim for", "At most"),
+        description="Depth of holes formed by core pins compared with their diameter.",
+    )
+    MIN_HOLE_EDGE_DISTANCE = RuleType(
+        "Hole Spacing",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="min",
+        unit_suffix="wall or hole Ø (larger)",
+        description="Gap from a hole to the next hole or the edge of its face.",
+    )
+    MAX_WALL_THICKNESS_VARIATION = RuleType(
+        "Wall Thickness Transition",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="max",
+        unit_suffix="of the thicker wall",
+        field_labels=("Aim for", "At most"),
+        description="Abrupt change in thickness where one wall steps to another.",
+    )
+    MIN_MOLD_STEEL_THICKNESS = RuleType(
+        "Thin Steel",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Narrowest gap between facing part walls: the mould steel between them.",
+        per_material=False,
+    )
+    MAX_LIVING_HINGE_WEB = RuleType(
+        "Living Hinge",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="max",
+        field_labels=("Aim for", "At most"),
+        description="Web thickness of living hinges.",
+    )
+    MAX_SNAP_FIT_STRAIN = RuleType(
+        "Snap-Fit Strain",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="max",
+        unit_suffix="strain at the root",
+        field_labels=("Aim for", "At most"),
+        description="Bending strain at a snap-fit's root as it is pushed home.",
+    )
+
     @property
     def id(self) -> str:
         return self.name

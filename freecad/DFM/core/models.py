@@ -67,6 +67,9 @@ class ProcessRequirement(Enum):
     PRINT_ORIENTATION = "PRINT_ORIENTATION"
     NOZZLE_DIAMETER = "NOZZLE_DIAMETER"
     LAYER_HEIGHT = "LAYER_HEIGHT"
+    # The part's nominal wall, measured or typed in: {"mode": "auto"} or
+    # {"mode": "manual", "value": mm}. See core/utils/nominal_wall.py.
+    NOMINAL_WALL_THICKNESS = "NOMINAL_WALL_THICKNESS"
 
     @classmethod
     def from_str(cls, label: str):

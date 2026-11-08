@@ -54,6 +54,8 @@ class _PanelResizeFilter(QtCore.QObject):
 
 # Delay before the rule info popup opens when hovering a rule's info icon.
 _INFO_HOVER_DELAY_MS = 250
+#: Row name of a finding about the whole part (no face or edge to show).
+_WHOLE_PART = "Whole part"
 
 
 class TaskResults(QtCore.QObject):
@@ -507,7 +509,7 @@ class TaskResults(QtCore.QObject):
                             seen_per_geo[ref.label].add(fid)
                             geo_groups[ref.label].append(f)
                 else:
-                    geo_groups["Unknown"].append(f)
+                    geo_groups[_WHOLE_PART].append(f)
 
         all_item = self._make_group_item("Recommendations", all_findings, "all")
         root.appendRow(all_item)
@@ -543,7 +545,7 @@ class TaskResults(QtCore.QObject):
         root.appendRow(all_item)
 
         for finding in all_findings:
-            primary = finding.refs[0].label if finding.refs else "Unknown"
+            primary = finding.refs[0].label if finding.refs else _WHOLE_PART
             secondary = f"[{finding.rule_id.label}] {finding.overview}"
             child = self._make_finding_item(finding, primary, secondary)
             all_item.appendRow(child)
@@ -594,6 +596,8 @@ class TaskResults(QtCore.QObject):
         elif all_ignored:
             worst = max((f.severity for f in findings), key=lambda s: s.value)
             item.setIcon(self._get_greyed_icon(worst))
+        elif any(f.severity == Severity.INFO for f in active):
+            item.setIcon(self._get_icon(Severity.INFO))
         else:
             item.setIcon(self._get_icon(Severity.SUCCESS))
 
@@ -627,7 +631,7 @@ class TaskResults(QtCore.QObject):
     ):
         """Add leaf nodes under *parent* for each finding."""
         for finding in findings:
-            name = finding.refs[0].label if finding.refs else "Unknown"
+            name = finding.refs[0].label if finding.refs else _WHOLE_PART
             child = self._make_finding_item(finding, name, finding.overview)
             parent.appendRow(child)
 

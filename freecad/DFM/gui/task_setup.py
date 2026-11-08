@@ -18,6 +18,12 @@ from ..core.registries.process_registry import ProcessRegistry
 from ..app.analysis_runner import AnalysisRunner
 from ..core.models import CheckResult, GeometryRef, ProcessRequirement
 from ..core.utils.conversion import freecad_to_ocp
+from ..core.utils.nominal_wall import (
+    AUTO as NOMINAL_AUTO,
+    MANUAL as NOMINAL_MANUAL,
+    make_requirement as make_nominal_requirement,
+    parse_requirement as parse_nominal_requirement,
+)
 
 from ..app.history import HistoryManager
 
@@ -37,8 +43,8 @@ from ..gui.utils.pull_direction import PULL_DIRECTION_COLOR, compute_direction
 from ..gui.utils.pull_preview import PullPreview
 from ..gui.utils.qt_filters import EscapeFilter
 from ..gui.utils.direction_row import (
-    FLAT_BUTTON_CSS, ICON_BUTTON_CSS, PICK_SVG, DirectionRow, axis_name, axis_of, icon_button, is_element_ref, muted_color,
-    style_primary_button,
+    FLAT_BUTTON_CSS, ICON_BUTTON_CSS, PICK_SVG, DirectionRow, ViewSwitch, axis_name, axis_of, icon_button,
+    is_element_ref, muted_color, style_primary_button,
 )
 from ..gui.utils.arrow_flip import ArrowFlipper
 from ..gui.rule_cards import apply_svg_icon
@@ -49,6 +55,7 @@ _REQUIREMENT_LABELS = {
     ProcessRequirement.SIDE_ACTIONS: "Side actions",
     ProcessRequirement.PRINT_ORIENTATION: "Print direction",
     ProcessRequirement.NEUTRAL_PLANE: "Neutral plane",
+    ProcessRequirement.NOMINAL_WALL_THICKNESS: "Nominal wall",
 }
 
 _muted = muted_color
@@ -662,11 +669,264 @@ class NumericRequirement(RequirementHandler):
 
 # =============================================================================
 
+# A ruler: measure the model now.
+_MEASURE_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="COLOR"'
+    b' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M3 17L17 3l4 4L7 21z"/><path d="M7.5 12.5l2 2M10.5 9.5l2 2M13.5 6.5l2 2"/></svg>'
+)
+
+_NOMINAL_HELP = (
+    "The part's main wall thickness. Boss walls, ribs, root radii and spacings are "
+    "judged as fractions or multiples of it.\n\n"
+    "Auto measures it from the model when the analysis runs (click the ruler to "
+    "measure it now). Manual uses the value you type."
+)
+
+#: Mode and typed value per model, for this FreeCAD session.
+_NOMINAL_MEMORY: dict[str, dict] = {}
+
+
+def _object_key(obj) -> str:
+    try:
+        return f"{obj.Document.Name}:{obj.Name}"
+    except Exception:
+        return str(id(obj))
+
+
+class NominalWallRequirement(RequirementHandler):
+    """The nominal wall: measured from the model (Auto) or typed in (Manual).
+
+    ``value`` is the plain dict the analysis reads (core/utils/nominal_wall.py):
+    {"mode": "auto"} or {"mode": "manual", "value": mm}.
+    """
+
+    MIN, MAX, STEP, DEFAULT = 0.1, 20.0, 0.1, 2.0
+
+    def __init__(self, requirement: ProcessRequirement):
+        super().__init__(requirement)
+        self.value = make_nominal_requirement(NOMINAL_AUTO)
+        #: Measured on the current model (Auto), once known; None before.
+        self.measured: Optional[float] = None
+        #: The last measurement found no clear wall.
+        self.measure_failed = False
+        self._target = None
+        self.switch: Optional[ViewSwitch] = None
+        self.spin: Optional[QtWidgets.QDoubleSpinBox] = None
+        self.measure_btn: Optional[QtWidgets.QPushButton] = None
+        # Set by the panel.
+        self.on_changed = lambda: None
+
+    @property
+    def manual(self) -> bool:
+        return self.value.get("mode") == NOMINAL_MANUAL
+
+    # -- Row ---------------------------------------------------------------------
+
+    def build_row(self, layout: QtWidgets.QLayout, on_pick) -> None:
+        """Nominal wall   [Auto|Manual]  [2.48 mm]  [ruler]"""
+        holder = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(holder)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+
+        label = QtWidgets.QLabel(self.label)
+        label.setMinimumHeight(28)
+        label.setToolTip(_NOMINAL_HELP)
+        row.addWidget(label)
+        row.addStretch(1)
+
+        self.switch = ViewSwitch("Auto", "Manual")
+        self.switch.setToolTip(_NOMINAL_HELP)
+        self.switch.setMinimumWidth(110)
+        self.switch.setChecked(self.manual)
+        self.switch.toggled.connect(self.set_manual)
+        row.addWidget(self.switch)
+
+        self.spin = QtWidgets.QDoubleSpinBox()
+        self.spin.setMinimumHeight(26)
+        self.spin.setMinimumWidth(116)
+        self.spin.setDecimals(2)
+        self.spin.setSingleStep(self.STEP)
+        self.spin.setSuffix(" mm")
+        self.spin.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        self.spin.setKeyboardTracking(False)
+        self.spin.valueChanged.connect(self._on_spin_changed)
+        label.setBuddy(self.spin)
+        row.addWidget(self.spin)
+
+        self.measure_btn = icon_button(_MEASURE_SVG, "Measure the nominal wall of the model now")
+        policy = self.measure_btn.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)  # the row doesn't shift when it hides
+        self.measure_btn.setSizePolicy(policy)
+        self.measure_btn.clicked.connect(lambda _c=False: self.measure_now())
+        row.addWidget(self.measure_btn)
+
+        layout.addWidget(holder)
+        self.refresh_display()
+
+    def detach(self) -> None:
+        super().detach()
+        self.switch = None
+        self.spin = None
+        self.measure_btn = None
+
+    def refresh_display(self) -> None:
+        """Show the mode, and the typed value (Manual) or what was measured (Auto)."""
+        spin, name = self.spin, self._target_name()
+        if spin is None:
+            return
+        spin.blockSignals(True)
+        if self.switch is not None:
+            self.switch.setChecked(self.manual)
+        if self.manual:
+            spin.setReadOnly(False)
+            spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+            spin.setSpecialValueText("")
+            spin.setRange(self.MIN, self.MAX)
+            spin.setValue(float(self.value["value"]))
+            spin.setToolTip("The part's main wall thickness, used by every feature rule")
+        else:
+            spin.setReadOnly(True)
+            spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
+            spin.setRange(0.0, self.MAX)
+            if self.measured is not None:
+                spin.setSpecialValueText("")
+                spin.setValue(self.measured)
+                spin.setToolTip(f"Measured on {name}. Switch to Manual to change it.")
+            else:
+                spin.setSpecialValueText("not found" if self.measure_failed else "measured at run")
+                spin.setValue(0.0)
+                spin.setToolTip(
+                    f"No clear nominal wall was found on {name}. Switch to Manual and type "
+                    "the part's main wall thickness." if self.measure_failed else
+                    "Measured from the model when the analysis runs. Click the ruler to "
+                    "measure it now.")
+        spin.blockSignals(False)
+        if self.measure_btn is not None:
+            self.measure_btn.setVisible(not self.manual)
+            self.measure_btn.setEnabled(self._target is not None)
+
+    def reset_ui(self) -> None:
+        pass
+
+    def enter_picking_ui(self) -> None:
+        pass
+
+    def apply_selection(self) -> bool:
+        return False  # nothing to pick in the 3D view
+
+    # -- State ---------------------------------------------------------------------
+
+    def is_satisfied(self) -> bool:
+        """Auto always is; Manual needs a value above 0."""
+        if not self.manual:
+            return True
+        return parse_nominal_requirement(self.value)[0] == NOMINAL_MANUAL
+
+    def clear(self) -> None:
+        self.value = make_nominal_requirement(NOMINAL_AUTO)
+        self.refresh_display()
+
+    def set_manual(self, manual: bool) -> None:
+        """Switch mode. Manual starts from the measured value, if there is one."""
+        if manual == self.manual:
+            return
+        if manual:
+            typed = self._remembered().get("manual")
+            start = self.measured or typed or self.DEFAULT
+            self.value = make_nominal_requirement(NOMINAL_MANUAL, round(start, 2))
+        else:
+            self.value = make_nominal_requirement(NOMINAL_AUTO)
+        self._remember()
+        self.refresh_display()
+        self.on_changed()
+
+    def _on_spin_changed(self, mm: float) -> None:
+        if not self.manual:
+            return
+        self.value = make_nominal_requirement(NOMINAL_MANUAL, mm)
+        self._remember()
+        self.on_changed()
+
+    def target_changed(self, obj) -> None:
+        """A new model: forget what was measured; bring back its mode and typed
+        value from earlier in the session, else keep a typed value as it is."""
+        if obj is self._target:
+            return
+        self._target = obj
+        self.measured = None
+        self.measure_failed = False
+        remembered = self._remembered()
+        if remembered:
+            self.value = dict(remembered["value"])
+        self.refresh_display()
+
+    def _remembered(self) -> dict:
+        return _NOMINAL_MEMORY.get(_object_key(self._target), {}) if self._target else {}
+
+    def _remember(self) -> None:
+        if self._target is None:
+            return
+        entry = _NOMINAL_MEMORY.setdefault(_object_key(self._target), {})
+        entry["value"] = dict(self.value)
+        if self.manual:
+            entry["manual"] = self.value["value"]
+
+    def _target_name(self) -> str:
+        try:
+            return self._target.Label if self._target is not None else "the model"
+        except Exception:
+            return "the model"
+
+    # -- Measuring now -------------------------------------------------------------
+
+    def measure_now(self) -> Optional[float]:
+        """Recognise the model and measure its nominal wall (Auto).
+
+        Uses the workbench's recognition cache, so the analysis that follows
+        doesn't recognise the model again.
+        """
+        if self._target is None:
+            return None
+        from ..app.recognition_service import features_for_object
+        from ..core.utils.geometry import FaceIndex
+        from ..core.utils.nominal_wall import measure_nominal_wall
+
+        if self.spin is not None:
+            self.spin.setSpecialValueText("measuring…")
+            self.spin.setValue(0.0)
+        app = QtWidgets.QApplication.instance()
+
+        def pump(_stage: str = "", _fraction: float = 0.0) -> None:
+            if app is not None:
+                app.processEvents(QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+        pump()
+        try:
+            shape_occ, result = features_for_object(self._target, progress=pump)
+            measured = measure_nominal_wall(shape_occ, FaceIndex(shape_occ), result)
+        except Exception as exc:
+            App.Console.PrintWarning(f"DFM: could not measure the nominal wall: {exc}\n")
+            measured = None
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        self.measured = measured
+        self.measure_failed = measured is None
+        self.refresh_display()
+        return measured
+
+
+# =============================================================================
+
 REQUIREMENT_HANDLER_TYPES: dict[ProcessRequirement, type[RequirementHandler]] = {
     ProcessRequirement.PULL_DIRECTION: VectorRequirement,
     ProcessRequirement.SIDE_ACTIONS: SideActionsRequirement,
     ProcessRequirement.PRINT_ORIENTATION: VectorRequirement,
     ProcessRequirement.NEUTRAL_PLANE: PlaneRequirement,
+    # After the directions: what the part is, then the machine's values.
+    ProcessRequirement.NOMINAL_WALL_THICKNESS: NominalWallRequirement,
     ProcessRequirement.NOZZLE_DIAMETER: NumericRequirement,
     ProcessRequirement.LAYER_HEIGHT: NumericRequirement,
 }
@@ -719,6 +979,8 @@ class TaskSetup:
         sides.pull_provider = lambda: self.handlers[ProcessRequirement.PULL_DIRECTION].value
         sides.on_changed = self._direction_changed
         sides.on_structure_changed = self._side_actions_changed
+        self.handlers[ProcessRequirement.NOMINAL_WALL_THICKNESS].on_changed = \
+            self._update_run_button_state
         # Which direction's row or arrow is hovered, and which is being edited.
         self._hovered_dir = None
         self._arrow_hovered_dir = None
@@ -1120,6 +1382,7 @@ class TaskSetup:
                 v = handler.value
                 handler.indicator.show(handler.pnt, App.Vector(v.X(), v.Y(), v.Z()))
         self.handlers[ProcessRequirement.SIDE_ACTIONS].move_arrows()
+        self.handlers[ProcessRequirement.NOMINAL_WALL_THICKNESS].target_changed(obj)
         self._register_arrows()
         return True
 

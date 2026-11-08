@@ -307,6 +307,14 @@ case("boss_screw",
       Expect(K.HOLE, S.cyl(1.25, Z, (50, 30, 0)), "simple", {"diameter": (2.5, 1e-3), "depth": (12, 1e-3)})],
      tags=("boss", "hole"))
 
+case("boss_screw_slender",
+     lambda: B.cut(B.fuse(plate(), B.cylinder((50, 30, 10), 3, 20)), B.drill((50, 30, 30), DOWN, 3, 20)),
+     [Expect(K.BOSS, S.cyl(3, Z, (50, 30, 0)), "screw", {"outer_diameter": (6, 1e-3), "height": (20, 1e-3),
+                                                          "wall_thickness": (1.5, 1e-3)}),
+      Expect(K.HOLE, S.cyl(1.5, Z, (50, 30, 0)), "simple", {"diameter": (3, 1e-3), "depth": (20, 1e-3)})],
+     tags=("boss", "hole", "molding"),
+     notes="Over three diameters tall, but cored: a screw boss, not a (solid) pin.")
+
 case("boss_screw_through",
      lambda: B.cut(B.fuse(plate(), B.cylinder((50, 30, 10), 4, 15)), B.drill((50, 30, 25), DOWN, 3, 25)),
      [Expect(K.BOSS, S.cyl(4, Z, (50, 30, 0)), "screw", {"inner_diameter": (3, 1e-3)}),
