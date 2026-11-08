@@ -14,6 +14,10 @@ active_rules:
 - MAX_BED_CONTACT_AREA
 - MAX_CUSP_HEIGHT
 - MAX_SUPPORT_MATERIAL
+- MIN_PRINTED_HOLE_DIAMETER
+- HORIZONTAL_HOLE_TEARDROP
+- MIN_PIN_DIAMETER
+- MIN_PRINTED_TEXT_DEPTH
 
 rule_feedback:
     MIN_WALL_THICKNESS:
@@ -77,6 +81,44 @@ rule_feedback:
             supports, difficult removal, and scarred surfaces. Reorient
             the part or redesign overhanging features to reduce
             dependence on supports.
+    MIN_PRINTED_HOLE_DIAMETER:
+        warning_msg: >-
+            Small hole ({measured}): {feature} is {size}, under the recommended
+            {target}. Small printed holes come out undersized and rough. Enlarge
+            it, or drill or ream it to size after printing.
+        error_msg: >-
+            Hole too small to print ({measured}): {feature} is {size}, under
+            {limit}. It may close up entirely. Enlarge it, or print it solid and
+            drill it afterwards.
+    HORIZONTAL_HOLE_TEARDROP:
+        warning_msg: >-
+            Sagging hole top: {feature} ({size}) is a round hole lying across the
+            print direction. Its top has to bridge, so it sags and the hole comes
+            out oval. Give it a teardrop or diamond top (a 45° point) so it prints
+            without support.
+        error_msg: >-
+            Sagging hole top: {feature} ({size}) is a round hole lying across the
+            print direction. Its top has to bridge, so it sags and the hole comes
+            out oval. Give it a teardrop or diamond top (a 45° point) so it prints
+            without support.
+    MIN_PIN_DIAMETER:
+        warning_msg: >-
+            Slender pin ({measured}): {feature} is {size}, thinner than the
+            recommended {target}. Thin printed pins are weak between layers and
+            wobble as they print. Thicken it, or print it lying down.
+        error_msg: >-
+            Pin too thin ({measured}): {feature} is {size}, under {limit}. It will
+            likely snap at a layer line or fail to print cleanly. Thicken it, add
+            a fillet at its base, or press in a metal pin instead.
+    MIN_PRINTED_TEXT_DEPTH:
+        warning_msg: >-
+            Shallow printed text ({measured}): {feature} is {size}, under the
+            recommended {target}. Letters this shallow are only a layer or two and
+            read poorly.
+        error_msg: >-
+            Printed text too shallow ({measured}): {feature} is {size}, under
+            {limit}. The lettering may not show at all at normal layer heights.
+            Raise it or cut it in by at least {target}.
 
 rule_criticality:
     MAX_OVERHANG_ANGLE: HIGH
@@ -85,6 +127,10 @@ rule_criticality:
     MAX_BED_CONTACT_AREA: MEDIUM
     MAX_CUSP_HEIGHT: LOW
     MAX_SUPPORT_MATERIAL: MEDIUM
+    MIN_PRINTED_HOLE_DIAMETER: MEDIUM
+    HORIZONTAL_HOLE_TEARDROP: LOW
+    MIN_PIN_DIAMETER: MEDIUM
+    MIN_PRINTED_TEXT_DEPTH: LOW
 
 materials:
     Default:
@@ -109,6 +155,17 @@ materials:
             MAX_SUPPORT_MATERIAL:
                 target: '15'
                 limit: '30'
+            MIN_PRINTED_HOLE_DIAMETER:
+                target: '2.0'
+                limit: '1.0'
+            HORIZONTAL_HOLE_TEARDROP:
+                binary_severity: WARNING
+            MIN_PIN_DIAMETER:
+                target: '3.0'
+                limit: '2.0'
+            MIN_PRINTED_TEXT_DEPTH:
+                target: '0.5'
+                limit: '0.3'
 
     PLA:
         category: Standard Thermoplastic

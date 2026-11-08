@@ -316,6 +316,92 @@ class Rulebook(Enum):
         field_labels=("Aim for", "At most"),
         description="Bending strain at a snap-fit's root as it is pushed home.",
     )
+    MIN_RIB_DRAFT = RuleType(
+        "Rib Draft",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="°",
+        comparison="min",
+        unit_suffix="per side",
+        description="Draft on the sides of ribs, which replaces the general draft rule there.",
+    )
+    MIN_BOSS_DRAFT = RuleType(
+        "Boss Draft",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="°",
+        comparison="min",
+        unit_suffix="outside (half for the hole)",
+        description="Draft on boss walls and their holes, which replaces the general draft rule there.",
+    )
+    MIN_BOSS_HOLE_BASE_RADIUS = RuleType(
+        "Boss Hole Base Radius",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="min",
+        unit_suffix="of nominal wall",
+        description="Fillet radius at the bottom of the hole in a screw boss.",
+    )
+    BOSS_HOLE_LEAD_IN = RuleType(
+        "Screw Boss Lead-In",
+        shape=RuleShape.BINARY,
+        unit=None,
+        description="Screw bosses whose hole has no chamfer or countersink to start the screw.",
+    )
+    MIN_BOSS_OD_RATIO = RuleType(
+        "Boss Outer Diameter",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="×",
+        comparison="min",
+        unit_suffix="hole diameter",
+        description="Screw boss outer diameter compared with its hole.",
+    )
+    MIN_INTERNAL_CORNER_RADIUS = RuleType(
+        "Internal Corner Radius",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="%",
+        comparison="min",
+        unit_suffix="of nominal wall",
+        description="Radius of filleted inside corners compared with the nominal wall.",
+    )
+    MIN_TEXT_STROKE = RuleType(
+        "Moulded Text",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Stroke width of moulded lettering; also warns of text recessed into the part.",
+        per_material=False,
+    )
+    # -- 3D printing features (recognised for the print direction) --
+    MIN_PRINTED_HOLE_DIAMETER = RuleType(
+        "Printed Hole Diameter",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Smallest hole that prints open and close to size.",
+        per_material=False,
+    )
+    HORIZONTAL_HOLE_TEARDROP = RuleType(
+        "Horizontal Hole Shape",
+        shape=RuleShape.BINARY,
+        unit=None,
+        description="Large round holes lying across the print direction, which sag without a teardrop top.",
+        per_material=False,
+    )
+    MIN_PIN_DIAMETER = RuleType(
+        "Pin Diameter",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Diameter of slender pins and posts (at least twice as tall as wide).",
+        per_material=False,
+    )
+    MIN_PRINTED_TEXT_DEPTH = RuleType(
+        "Printed Text",
+        shape=RuleShape.TARGET_AND_LIMIT,
+        unit="mm",
+        comparison="min",
+        description="Height of embossed or depth of engraved lettering; also warns of small characters.",
+        per_material=False,
+    )
 
     @property
     def id(self) -> str:

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Moulded details: living hinges and cantilever snap fits."""
+"""Moulded details: living hinges, cantilever snap fits and lettering."""
 
 from __future__ import annotations
 
@@ -150,3 +150,54 @@ class SnapFitStrainCheck(FeatureCheck):
             size=f"{mm(h)} thick{' at the root' if tapered else ''} and {mm(length)} long, and bends "
                  f"{mm(y)} to clear its catch",
         )
+
+
+@register_check(Rulebook.MIN_TEXT_STROKE)
+class MouldedTextCheck(FeatureCheck):
+    """The thinnest stroke of moulded lettering. Besides its thresholds it warns
+    of text recessed into the part: in the mould its letters are thin raised
+    steel that chips off (raised text, cut into the steel, lasts)."""
+
+    kinds = (FeatureKind.TEXT,)
+    uses_nominal = False
+
+    @property
+    def name(self) -> str:
+        return "Moulded Text Check"
+
+    @property
+    def progress_text(self) -> str:
+        return "Checking moulded text"
+
+    def measure(self, text: Feature, pf: PartFeatures) -> Optional[Measure]:
+        stroke = self.param(text, "min_stroke")
+        if not stroke:
+            return None
+        return Measure(stroke, text.label, text.faces, size=f"strokes as thin as {mm(stroke)}")
+
+    def run_check(
+        self,
+        analysis_data_map: Any,
+        rule_config: RuleLimit,
+        rule: Rulebook,
+        feedback: Optional[RuleFeedback] = None,
+        **kwargs: Any,
+    ) -> list[CheckResult]:
+        results = super().run_check(analysis_data_map, rule_config, rule, feedback, **kwargs)
+        if not isinstance(analysis_data_map, PartFeatures):
+            return results
+        for text in self.select(analysis_data_map):
+            if text.subtype != "engraved":
+                continue
+            depth = self.param(text, "depth") or 0.0
+            results.append(CheckResult(
+                rule_id=rule, severity=Severity.WARNING,
+                overview=f"{text.label}: recessed into the part",
+                message=(f"Recessed Text: {text.label} is cut {mm(depth)} into the part, so in the mould "
+                         "its letters are thin raised ribs of steel that chip and wear. Raise the text "
+                         "from the part instead (about 0.4 to 0.8 mm), or set it in a shallow recessed "
+                         "panel so it is raised but stays below the surface."),
+                ignore=False, value=float(depth), limit=0.0, unit="mm",
+                failing_geometry=[("Face", n) for n in text.faces],
+            ))
+        return results

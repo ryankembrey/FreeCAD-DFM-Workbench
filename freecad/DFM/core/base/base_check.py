@@ -40,6 +40,15 @@ class BaseCheck(ABC):
         """
         pass
 
+    #: Rules this one judges some faces for instead: their findings on the faces
+    #: in covered_faces() are dropped while this rule is on (a rib's own draft
+    #: rule replaces the general draft rule on the rib's sides).
+    supersedes: tuple[Rulebook, ...] = ()
+
+    def covered_faces(self, analysis_data, **kwargs) -> set[int]:
+        """Face numbers this rule takes over from the rules it supersedes."""
+        return set()
+
     @abstractmethod
     def run_check(
         self,

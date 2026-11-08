@@ -200,3 +200,94 @@ class StandaloneBossCheck(FeatureCheck):
             return None
         return Measure(1.0, boss.label, boss_faces(boss, inner_hole(boss, pf)),
                        size=f"{mm(height)} tall", overview="not tied to a wall or rib")
+
+
+def is_cored_from_top(boss: Feature, hole: Optional[Feature]) -> bool:
+    """A screw boss's hole going in from its top (where a screw starts)."""
+    return hole is not None and not _from_the_base(boss, hole)
+
+
+@register_check(Rulebook.MIN_BOSS_HOLE_BASE_RADIUS)
+class BossHoleBaseRadiusCheck(FeatureCheck):
+    """The fillet where the hole in a screw boss meets its flat bottom, as a %
+    of the nominal wall. A sharp corner there wears the core pin's tip and
+    concentrates stress where the screw bottoms out. Through holes and holes
+    with a drilled or round bottom have no such corner."""
+
+    kinds = (FeatureKind.BOSS,)
+
+    @property
+    def name(self) -> str:
+        return "Boss Hole Base Radius Check"
+
+    @property
+    def progress_text(self) -> str:
+        return "Checking boss hole radii"
+
+    def measure(self, boss: Feature, pf: PartFeatures) -> Optional[Measure]:
+        hole = inner_hole(boss, pf)
+        if hole is None or hole.params.get("through") or hole.params.get("bottom") != "flat":
+            return None
+        fillets = [f for f in pf.result.of_kind(FeatureKind.FILLET)
+                   if f.parent == hole.id and f.subtype == "concave"]
+        radius = min((self.param(f, "radius_min") or self.param(f, "radius") or 0.0 for f in fillets),
+                     default=0.0)
+        faces = set(hole.faces).union(*(f.faces for f in fillets)) if fillets else set(hole.faces)
+        size = f"{mm(radius)} radius at the bottom of its hole" if radius > 0 else \
+            "sharp corner at the bottom of its hole"
+        return Measure(self.percent_of_nominal(radius, pf), boss.label, tuple(sorted(faces)), size=size)
+
+
+@register_check(Rulebook.BOSS_HOLE_LEAD_IN)
+class BossLeadInCheck(FeatureCheck):
+    """Screw bosses whose hole has no lead-in at its entry: no chamfer, round,
+    countersink or counterbore to start the screw straight."""
+
+    kinds = (FeatureKind.BOSS,)
+    uses_nominal = False
+    _LEAD_IN_HOLES = frozenset({"countersunk", "counterbored", "counterdrilled", "stepped"})
+
+    @property
+    def name(self) -> str:
+        return "Screw Boss Lead-In Check"
+
+    @property
+    def progress_text(self) -> str:
+        return "Checking screw boss lead-ins"
+
+    def measure(self, boss: Feature, pf: PartFeatures) -> Optional[Measure]:
+        hole = inner_hole(boss, pf)
+        if not is_cored_from_top(boss, hole) or hole.subtype in self._LEAD_IN_HOLES:
+            return None
+        hole_faces = set(hole.faces)
+        for blend in pf.result.of_kind(FeatureKind.CHAMFER, FeatureKind.FILLET):
+            if blend.subtype == "convex" and (blend.parent == hole.id or hole_faces & set(blend.support_faces)):
+                return None
+        d = self.param(hole, "diameter") or 0.0
+        return Measure(1.0, boss.label, boss_faces(boss, hole), size=f"Ø{d:.2f} mm",
+                       overview="no lead-in chamfer on its hole")
+
+
+@register_check(Rulebook.MIN_BOSS_OD_RATIO)
+class BossOuterDiameterCheck(FeatureCheck):
+    """A screw boss's outer diameter as a multiple of its hole: too little wall
+    and the boss splits as the screw goes in (DFMPro: 2 to 3 times)."""
+
+    kinds = (FeatureKind.BOSS,)
+    uses_nominal = False
+
+    @property
+    def name(self) -> str:
+        return "Boss Outer Diameter Check"
+
+    @property
+    def progress_text(self) -> str:
+        return "Checking screw boss diameters"
+
+    def measure(self, boss: Feature, pf: PartFeatures) -> Optional[Measure]:
+        hole = inner_hole(boss, pf)
+        od, d = self.param(boss, "outer_diameter"), self.param(hole, "diameter") if hole else None
+        if not od or not d:
+            return None
+        return Measure(od / d, boss.label, boss_faces(boss, hole),
+                       size=f"{mm(od)} across for a {mm(d)} hole")

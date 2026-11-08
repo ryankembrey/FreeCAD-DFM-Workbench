@@ -108,6 +108,8 @@ class MeasuredCheck(BaseCheck):
             return f"{trim_number(value, 1)}%"
         if unit == "×":
             return f"{trim_number(value, 2)}×"
+        if unit == "°":
+            return f"{value:.2f}°"
         if unit:
             return f"{value:.2f} {unit}"
         return trim_number(value, 2)

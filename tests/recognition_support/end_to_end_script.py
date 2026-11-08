@@ -54,6 +54,12 @@ assert "2.50 mm (measured)" in by_rule[R.MAX_BOSS_WALL_RATIO][0].message
 assert steps and steps[-1][0] <= steps[-1][1], steps[-1:]
 assert "FEATURE_ANALYZER" in runner.analyzer_cache
 
+# Rib and boss draft take their faces over from the general draft rule.
+judged = {n for r in results if r.rule_id in (R.MIN_RIB_DRAFT, R.MIN_BOSS_DRAFT) for _k, n in r.failing_geometry}
+assert judged, "rib and boss draft findings"
+general = {n for r in by_rule[R.MIN_DRAFT_ANGLE] for _k, n in r.failing_geometry}
+assert not (judged & general), sorted(judged & general)
+
 # Another material: the checks again, nothing measured again.
 cached = dict(runner.analyzer_cache)
 again = runner.rerun_checks_only("Plastic Injection Molding", "PP")
@@ -68,4 +74,11 @@ results = runner.run_analysis(
 rib = [r for r in results if r.rule_id == R.MAX_RIB_THICKNESS_RATIO]
 assert [r.severity for r in rib] == [Severity.WARNING], [r.overview for r in rib]
 assert "4.00 mm (entered)" in rib[0].message
+# The FDM process: its feature rules read the print-direction recognition.
+printed = B.fuse(B.box(0, 0, 0, 60, 40, 3), B.cylinder((10, 10, 3), 0.75, 8))
+printed = B.cut(printed, B.drill((40, 20, 3), (0, 0, -1), 0.8, 4))
+results = analysis_runner.AnalysisRunner().run_analysis(
+    "FDM", "PLA", printed, PRINT_ORIENTATION=gp_Dir(0, 0, 1), NOZZLE_DIAMETER=0.4, LAYER_HEIGHT=0.2)
+fdm = {r.rule_id for r in results}
+assert {R.MIN_PIN_DIAMETER, R.MIN_PRINTED_HOLE_DIAMETER} <= fdm, sorted(r.name for r in fdm)
 print("end to end: ok")

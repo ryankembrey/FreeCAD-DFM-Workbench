@@ -20,7 +20,10 @@ from freecad.DFM.core.registries.analyzers_registry import get_analyzer_class
 from freecad.DFM.core.registries.checks_registry import get_check_class
 from freecad.DFM.core.rules import SHAPE_FIELD_ATTRS, Rulebook, RuleShape
 
-YAML = os.path.join(S.ROOT, "freecad", "DFM", "core", "processes", "plastic_injection_molding.yaml")
+PROCESSES = os.path.join(S.ROOT, "freecad", "DFM", "core", "processes")
+YAML = os.path.join(PROCESSES, "plastic_injection_molding.yaml")
+#: Every built-in process: each one's active rules must be fully wired.
+YAMLS = (YAML, os.path.join(PROCESSES, "fdm_3d_printing.yaml"))
 
 
 def diagrams():
@@ -53,43 +56,58 @@ def diagrams():
 class TestRuleCompleteness(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        import copy
+
         import yaml
 
-        with open(YAML, encoding="utf-8") as f:
-            cls.raw = yaml.safe_load(f)
-        cls.process = S.moulding_process()
+        from freecad.DFM.core.processes.process import Process
+
+        cls.raws = []
+        for path in YAMLS:
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            cls.raws.append((os.path.basename(path), raw, Process.from_yaml(copy.deepcopy(raw))))
+        cls.raw = cls.raws[0][1]
         cls.diagrams = diagrams()
 
     def test_every_active_rule_is_wired(self):
-        defaults = self.raw["materials"]["Default"]["rule_limits"]
-        for name in self.raw["active_rules"]:
-            with self.subTest(rule=name):
+        for file_name, raw, process in self.raws:
+            self._wired(file_name, raw, process)
+
+    def _wired(self, file_name, raw, process):
+        defaults = raw["materials"]["Default"]["rule_limits"]
+        for name in raw["active_rules"]:
+            with self.subTest(process=file_name, rule=name):
                 rule = Rulebook[name]
                 check = get_check_class(rule)
                 self.assertIsNotNone(check, "no registered check")
                 self.assertIsNotNone(get_analyzer_class(check().required_analyzer_id), "no analyzer")
                 self.assertTrue(check().progress_text, "no progress text")
-                self.assertIn(name, self.raw.get("rule_feedback", {}), "no feedback")
-                feedback = self.raw["rule_feedback"][name]
+                self.assertIn(name, raw.get("rule_feedback", {}), "no feedback")
+                feedback = raw["rule_feedback"][name]
                 self.assertEqual(set(feedback), {"warning_msg", "error_msg"})
                 self.assertTrue(feedback["warning_msg"] or feedback["error_msg"], "empty feedback")
-                self.assertIn(name, self.raw.get("rule_criticality", {}), "no criticality")
+                self.assertIn(name, raw.get("rule_criticality", {}), "no criticality")
                 self.assertIn(name, defaults, "no Default thresholds")
                 for attr in SHAPE_FIELD_ATTRS[rule.shape]:
                     self.assertTrue(str(defaults[name].get(attr, "")).strip(), f"Default {attr} missing")
                     if rule.shape != RuleShape.BINARY:
                         float(defaults[name][attr])
-                self.assertIn(rule, self.process.active_rules)  # parses as a Process too
+                self.assertIn(rule, process.active_rules)  # parses as a Process too
 
     def test_new_rules_use_target_and_limit_or_binary(self):
         # MIN_AND_MAX thresholds are dropped by the resolver and when saving.
-        for name in self.raw["active_rules"]:
+        for name in (n for _f, raw, _p in self.raws for n in raw["active_rules"]):
             self.assertIn(Rulebook[name].shape, (RuleShape.TARGET_AND_LIMIT, RuleShape.BINARY,
                                                 RuleShape.TARGET_ONLY, RuleShape.LIMIT_ONLY), name)
 
     def test_target_is_no_looser_than_limit(self):
-        defaults = self.raw["materials"]["Default"]["rule_limits"]
-        for material, data in self.raw["materials"].items():
+        for _file, raw, _process in self.raws:
+            self._targets(raw)
+
+    def _targets(self, raw):
+        defaults = raw["materials"]["Default"]["rule_limits"]
+        for material, data in raw["materials"].items():
             for name, limits in (data.get("rule_limits") or {}).items():
                 rule = Rulebook[name]
                 if rule.shape != RuleShape.TARGET_AND_LIMIT:

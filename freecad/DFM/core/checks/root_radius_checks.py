@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Root radius rules: the fillet where a boss or rib meets its base.
+"""Radius rules: the fillet where a boss or rib meets its base, and every
+other filleted inside corner.
 
 A sharp root concentrates stress and the flow stalls there; a root fillet
 of a fair fraction of the nominal wall fixes both. A boss or rib with no
@@ -69,3 +70,36 @@ class RibRootRadiusCheck(FeatureCheck):
 
     def measure(self, rib: Feature, pf: PartFeatures) -> Optional[Measure]:
         return root_measure(self, rib, pf)
+
+
+#: Fillets that belong to these have rules of their own (root and hole radii).
+_OWN_RULES = frozenset({FeatureKind.BOSS, FeatureKind.RIB, FeatureKind.HOLE})
+
+
+@register_check(Rulebook.MIN_INTERNAL_CORNER_RADIUS)
+class InternalCornerRadiusCheck(FeatureCheck):
+    """Every filleted inside corner, as a % of the nominal wall (DFMPro: at
+    least half the wall). Corners with no fillet at all are Sharp Internal
+    Corners; roots of bosses and ribs, and hole bottoms, have their own rules."""
+
+    kinds = (FeatureKind.FILLET,)
+
+    @property
+    def name(self) -> str:
+        return "Internal Corner Radius Check"
+
+    @property
+    def progress_text(self) -> str:
+        return "Checking inside corner radii"
+
+    def measure(self, fillet: Feature, pf: PartFeatures) -> Optional[Measure]:
+        if fillet.subtype != "concave":
+            return None
+        owner = pf.feature(fillet.parent)
+        if owner is not None and owner.kind in _OWN_RULES:
+            return None
+        radius = self.param(fillet, "radius_min") or self.param(fillet, "radius")
+        if not radius:
+            return None
+        return Measure(self.percent_of_nominal(radius, pf), fillet.label, fillet.faces,
+                       size=f"{mm(radius)} radius")

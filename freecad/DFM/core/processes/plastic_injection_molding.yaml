@@ -28,6 +28,13 @@ active_rules:
 - MIN_MOLD_STEEL_THICKNESS
 - MAX_LIVING_HINGE_WEB
 - MAX_SNAP_FIT_STRAIN
+- MIN_RIB_DRAFT
+- MIN_BOSS_DRAFT
+- MIN_BOSS_HOLE_BASE_RADIUS
+- BOSS_HOLE_LEAD_IN
+- MIN_BOSS_OD_RATIO
+- MIN_INTERNAL_CORNER_RADIUS
+- MIN_TEXT_STROKE
 rule_feedback:
     MIN_DRAFT_ANGLE:
         warning_msg: 'Insufficient Draft ({measured}): This angle is below the recommended
@@ -228,6 +235,67 @@ rule_feedback:
             its root past {limit}, more than the material takes even once. It will
             whiten, take a set or break as it is assembled. Lengthen or thin the beam,
             taper it to half its thickness at the hook, or reduce the catch.'
+    MIN_RIB_DRAFT:
+        warning_msg: 'Little Rib Draft ({measured}): {feature} is {size}, under the
+            recommended {target} per side. The part shrinks onto its ribs'' cores, so
+            ribs with little draft drag and scuff as the part is ejected. Draft each
+            side by at least {target}.'
+        error_msg: 'Rib Draft Too Small ({measured}): {feature} is {size}, under
+            {limit} per side. The rib will stick in its slot in the mould, drag on
+            ejection and may tear or distort the part. Draft each side by {target} or
+            more; 1 to 1.5° is usual.'
+    MIN_BOSS_DRAFT:
+        warning_msg: 'Little Boss Draft ({measured}): {feature} is {size}, under the
+            recommended {target}. Bosses, and the pins that core their holes, need
+            draft to release cleanly. Add a little more draft.'
+        error_msg: 'Boss Draft Too Small ({measured}): {feature} is {size}, under
+            {limit}. It will drag on ejection: expect scuffed walls, a boss pulled out
+            of round, or a part held on its core pin. Draft it by {target} or more.'
+    MIN_BOSS_HOLE_BASE_RADIUS:
+        warning_msg: 'Small Radius in Boss Hole ({measured}): {feature} has a {size},
+            below the recommended {target} of the nominal wall, {nominal}. A larger
+            radius on the core pin''s tip spreads the stress where the screw bottoms
+            out.'
+        error_msg: 'Sharp Corner in Boss Hole ({measured}): {feature} has a {size},
+            under {limit} of the nominal wall, {nominal}. The core pin''s sharp tip
+            wears, and the corner concentrates stress where the screw bottoms out, a
+            common place for bosses to crack. Round the bottom of the hole by about
+            {target} of the nominal wall.'
+    BOSS_HOLE_LEAD_IN:
+        warning_msg: 'No Lead-In on Screw Boss: the hole in {feature} ({size}) starts
+            square. Without a chamfer or countersink the screw is hard to start
+            straight, and its first thread can crack the top of the boss. Add a small
+            chamfer, about 0.3 to 0.5 mm, at the top of the hole.'
+        error_msg: 'No Lead-In on Screw Boss: the hole in {feature} ({size}) starts
+            square. Without a chamfer or countersink the screw is hard to start
+            straight, and its first thread can crack the top of the boss. Add a small
+            chamfer, about 0.3 to 0.5 mm, at the top of the hole.'
+    MIN_BOSS_OD_RATIO:
+        warning_msg: 'Slim Screw Boss ({measured} its hole): {feature} is {size},
+            under the recommended {target} its hole diameter. A thin boss wall is
+            stretched hard by the screw. Make the boss larger for the hole.'
+        error_msg: 'Screw Boss Too Slim ({measured} its hole): {feature} is {size},
+            under {limit} its hole diameter. The screw will split the boss as it goes
+            in, or strip it under load. Make the outer diameter at least {target} the
+            hole diameter, and support the boss with ribs or gussets rather than a
+            thicker wall.'
+    MIN_INTERNAL_CORNER_RADIUS:
+        warning_msg: 'Small Inside Radius ({measured}): {feature} has a {size}, below
+            the recommended {target} of the nominal wall, {nominal}. A larger radius
+            lets the plastic flow round the corner and spreads stress.'
+        error_msg: 'Inside Radius Too Small ({measured}): {feature} has a {size},
+            under {limit} of the nominal wall, {nominal}. A tight inside corner
+            concentrates stress and stalls the flow. Enlarge it to about {target} of
+            the nominal wall, and round the outside corner to match (the inside radius
+            plus the wall) to keep the wall even.'
+    MIN_TEXT_STROKE:
+        warning_msg: 'Thin Text Strokes ({measured}): {feature} has {size}, under the
+            recommended {target}. Fine strokes are hard to cut into the steel and fill
+            poorly. Use a bolder, plain (sans-serif) font.'
+        error_msg: 'Text Strokes Too Thin ({measured}): {feature} has {size}, under
+            {limit}. Strokes this fine won''t cut cleanly into the mould or fill, and
+            the letters come out broken. Use a bold sans-serif font with strokes of at
+            least {target}.'
 rule_criticality:
     MIN_DRAFT_ANGLE: CRITICAL
     NO_UNDERCUTS: CRITICAL
@@ -251,6 +319,13 @@ rule_criticality:
     MIN_MOLD_STEEL_THICKNESS: HIGH
     MAX_LIVING_HINGE_WEB: MEDIUM
     MAX_SNAP_FIT_STRAIN: HIGH
+    MIN_RIB_DRAFT: HIGH
+    MIN_BOSS_DRAFT: HIGH
+    MIN_BOSS_HOLE_BASE_RADIUS: LOW
+    BOSS_HOLE_LEAD_IN: LOW
+    MIN_BOSS_OD_RATIO: MEDIUM
+    MIN_INTERNAL_CORNER_RADIUS: LOW
+    MIN_TEXT_STROKE: LOW
 materials:
     Default:
         category: Default
@@ -322,6 +397,26 @@ materials:
             MAX_SNAP_FIT_STRAIN:
                 target: '1.2'
                 limit: '2.0'
+            MIN_RIB_DRAFT:
+                target: '1.0'
+                limit: '0.5'
+            MIN_BOSS_DRAFT:
+                target: '1.0'
+                limit: '0.5'
+            MIN_BOSS_HOLE_BASE_RADIUS:
+                target: '50'
+                limit: '25'
+            BOSS_HOLE_LEAD_IN:
+                binary_severity: WARNING
+            MIN_BOSS_OD_RATIO:
+                target: '2.0'
+                limit: '1.8'
+            MIN_INTERNAL_CORNER_RADIUS:
+                target: '50'
+                limit: '25'
+            MIN_TEXT_STROKE:
+                target: '0.5'
+                limit: '0.25'
     PLA:
         category: Bio-Thermoplastic
         is_active: true

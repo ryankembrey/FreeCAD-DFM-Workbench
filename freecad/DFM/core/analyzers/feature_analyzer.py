@@ -21,7 +21,7 @@ from OCP.TopoDS import TopoDS_Shape
 
 from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.models import ProcessRequirement
-from ...core.recognition import RecognitionOptions, annotate_directional, options_from_prefs
+from ...core.recognition import DirectionalReport, RecognitionOptions, annotate_directional, options_from_prefs
 from ...core.registries import register_analyzer
 from ...core.utils.geometry import EdgeIndex, FaceIndex
 from ...core.utils.nominal_wall import SOURCE_NONE, resolve_nominal_wall
@@ -94,17 +94,14 @@ class FeatureAnalyzer(BaseAnalyzer):
         report(_RECOGNISED)
 
         directional = None
-        pull = kwargs.get(ProcessRequirement.PULL_DIRECTION.name)
-        sides = kwargs.get(ProcessRequirement.SIDE_ACTIONS.name) or []
-        if not aborted and (pull is not None or sides) and not (check_abort and check_abort()):
+        if not aborted and not (check_abort and check_abort()):
             try:
-                directional = annotate_directional(result, shape, pull=pull, side_actions=sides,
-                                                   options=self.options)
+                directional = self.annotate(result, shape, **kwargs)
             except Exception:  # annotations are extras: the rules still run without them
                 directional = None
         report(_ANNOTATED)
 
-        if aborted:
+        if aborted or not self.measures_nominal_wall:
             nominal, source = None, SOURCE_NONE
         else:
             nominal, source = resolve_nominal_wall(
@@ -117,8 +114,51 @@ class FeatureAnalyzer(BaseAnalyzer):
             nominal_wall=nominal,
             nominal_source=source,
             min_confidence=self.options.min_confidence,
-            side_actions=tuple(_vector(d) for d in sides),
+            side_actions=tuple(_vector(d) for d in kwargs.get(ProcessRequirement.SIDE_ACTIONS.name) or ()),
         )
+
+    #: Resolve the nominal wall (moulding rules are ratios to it).
+    measures_nominal_wall = True
+
+    def annotate(self, result, shape: TopoDS_Shape, **kwargs: Any) -> Optional[DirectionalReport]:
+        """Draft and undercut annotations for the run's pull and side actions."""
+        pull = kwargs.get(ProcessRequirement.PULL_DIRECTION.name)
+        sides = kwargs.get(ProcessRequirement.SIDE_ACTIONS.name) or []
+        if pull is None and not sides:
+            return None
+        return annotate_directional(result, shape, pull=pull, side_actions=sides, options=self.options)
+
+
+@register_analyzer("PRINT_FEATURE_ANALYZER")
+class PrintFeatureAnalyzer(FeatureAnalyzer):
+    """The part's features for the 3D printing rules: annotated for the print
+    direction and nozzle (horizontal holes, slender pins...), no pull
+    direction and no nominal wall. Shares the recognition cache."""
+
+    measures_nominal_wall = False
+
+    @property
+    def analysis_type(self) -> str:
+        return "PRINT_FEATURE_ANALYZER"
+
+    @property
+    def name(self) -> str:
+        return "Feature Recognition (printing)"
+
+    @property
+    def requirements(self) -> set[ProcessRequirement]:
+        return {ProcessRequirement.PRINT_ORIENTATION, ProcessRequirement.NOZZLE_DIAMETER}
+
+    def annotate(self, result, shape: TopoDS_Shape, **kwargs: Any) -> Optional[DirectionalReport]:
+        direction = kwargs.get(ProcessRequirement.PRINT_ORIENTATION.name)
+        if direction is None:
+            return None
+        try:
+            nozzle = float(kwargs.get(ProcessRequirement.NOZZLE_DIAMETER.name) or 0.4)
+        except (TypeError, ValueError):
+            nozzle = 0.4
+        return annotate_directional(result, shape, print_direction=direction, nozzle_diameter=nozzle,
+                                    options=self.options)
 
 
 def _vector(direction) -> tuple[float, float, float]:

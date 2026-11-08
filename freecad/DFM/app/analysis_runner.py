@@ -151,7 +151,7 @@ class AnalysisRunner:
             timing.stop_total()
             timing.report()
 
-        return results
+        return self._apply_supersession(results, active_rules, **kwargs)
 
     def rerun_checks_only(
         self,
@@ -224,7 +224,39 @@ class AnalysisRunner:
             )
             results.extend(check_results)
 
-        return results
+        return self._apply_supersession(results, active_rules, **kwargs)
+
+    def _apply_supersession(self, results: list, active_rules: list, **kwargs: Any) -> list:
+        """Drop findings of a rule on faces a more specific active rule judges
+        instead (see BaseCheck.supersedes): a rib's sides are judged by Rib
+        Draft, not by Minimum Draft Angle as well."""
+        covered: dict[Any, set[int]] = {}
+        for rule_id in active_rules:
+            check_class = get_check_class(rule_id)
+            if check_class is None or not check_class.supersedes:
+                continue
+            check = check_class()
+            data = self.analyzer_cache.get(check.required_analyzer_id)
+            if data is None:
+                continue
+            try:
+                faces = check.covered_faces(data, **kwargs)
+            except Exception as exc:  # a broken override must not hide the general findings
+                App.Console.PrintLog(f"DFM: {rule_id.name} could not list its faces ({exc}).\n")
+                continue
+            for other in check.supersedes:
+                if other in active_rules:
+                    covered.setdefault(other, set()).update(faces)
+        if not covered:
+            return results
+
+        def taken_over(result: CheckResult) -> bool:
+            faces = covered.get(result.rule_id)
+            if not faces or not result.failing_geometry:
+                return False
+            return all(kind == "Face" and n in faces for kind, n in result.failing_geometry)
+
+        return [r for r in results if not taken_over(r)]
 
     @staticmethod
     def _add_run_context(kwargs: dict, active_rules: list) -> None:

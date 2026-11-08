@@ -1465,6 +1465,433 @@ _SNAP_FIT_SVG = (
 )
 
 
+# Injection moulding: feature draft, boss details, inside corners, text
+
+_RIB_DRAFT_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,125 L76,125 L76,35 L94,35 L94,125 L155,125 L155,140 L15,140 Z" fill="__BODY__"'
+    b' stroke="__STROKE__" stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M76,35 L76,125" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M94,35 L94,125" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<line x1="150" y1="60" x2="150" y2="22" stroke="__STROKE__" stroke-width="1" opacity="0.4"/>'
+    b'<polygon points="150.0,16.0 153.5,23.0 146.5,23.0" fill="__STROKE__" opacity="0.4"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,125 L74,125 L80,35 L90,35 L96,125 L155,125 L155,140 L15,140 Z" fill="__BODY__"'
+    b' stroke="__STROKE__" stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M96,125 L96,40" fill="none" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="4,3" opacity="0.5"/>'
+    b'<path d="M96,70 A55,55 0 0,0 92.4,70.1" fill="none" stroke="__ACCENT__" stroke-width="2"/>'
+    b'<text x="104.0" y="66.0" text-anchor="start" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'&#952;'
+    b'</text>'
+    b'<line x1="150" y1="60" x2="150" y2="22" stroke="__STROKE__" stroke-width="1" opacity="0.4"/>'
+    b'<polygon points="150.0,16.0 153.5,23.0 146.5,23.0" fill="__STROKE__" opacity="0.4"/>'
+    b'</g>'
+    b'</svg>'
+)
+
+_BOSS_DRAFT_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,125 L52,125 L52,40 L74,40 L74,125 L96,125 L96,40 L118,40 L118,125 L155,125'
+    b' L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<path d="M52,40 L52,125" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M118,40 L118,125" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M74,40 L74,125" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M96,40 L96,125" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<line x1="150" y1="60" x2="150" y2="22" stroke="__STROKE__" stroke-width="1" opacity="0.4"/>'
+    b'<polygon points="150.0,16.0 153.5,23.0 146.5,23.0" fill="__STROKE__" opacity="0.4"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,125 L48,125 L54,40 L72,40 L76,125 L94,125 L98,40 L116,40 L122,125 L155,125'
+    b' L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<path d="M122,125 L122,45" fill="none" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="4,3" opacity="0.5"/>'
+    b'<path d="M122,80 A45,45 0 0,0 119.1,80.1" fill="none" stroke="__ACCENT__" stroke-width="2"/>'
+    b'<text x="128.0" y="76.0" text-anchor="start" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'&#952;'
+    b'</text>'
+    b'<line x1="150" y1="60" x2="150" y2="22" stroke="__STROKE__" stroke-width="1" opacity="0.4"/>'
+    b'<polygon points="150.0,16.0 153.5,23.0 146.5,23.0" fill="__STROKE__" opacity="0.4"/>'
+    b'</g>'
+    b'</svg>'
+)
+
+_BOSS_HOLE_RADIUS_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,125 L50,125 L50,35 L72,35 L72,100 L98,100 L98,35 L120,35 L120,125 L155,125'
+    b' L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<circle cx="72" cy="100" r="4" fill="__BAD__"/>'
+    b'<circle cx="98" cy="100" r="4" fill="__BAD__"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,125 L50,125 L50,35 L72,35 L72,92 A8,8 0 0,0 80,100 L90,100 A8,8 0 0,0 98,92'
+    b' L98,35 L120,35 L120,125 L155,125 L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__"'
+    b' stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M72,92 A8,8 0 0,0 80,100" fill="none" stroke="__ACCENT__" stroke-width="3"/>'
+    b'<path d="M90,100 A8,8 0 0,0 98,92" fill="none" stroke="__ACCENT__" stroke-width="3"/>'
+    b'<text x="85.0" y="88.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'r'
+    b'</text>'
+    b'</g>'
+    b'</svg>'
+)
+
+_BOSS_LEAD_IN_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,125 L50,125 L50,40 L74,40 L74,125 L96,125 L96,40 L120,40 L120,125 L155,125'
+    b' L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<circle cx="74" cy="40" r="4" fill="__BAD__"/>'
+    b'<circle cx="96" cy="40" r="4" fill="__BAD__"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,125 L50,125 L50,40 L68,40 L74,48 L74,125 L96,125 L96,48 L102,40 L120,40'
+    b' L120,125 L155,125 L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__"'
+    b' stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M68,40 L74,48 M102,40 L96,48" fill="none" stroke="__ACCENT__" stroke-width="3"/>'
+    b'<path d="M85,18 L85,60" fill="none" stroke="__ACCENT__" stroke-width="1.5"'
+    b' stroke-dasharray="4,3"/>'
+    b'<polygon points="85.0,64.0 82.0,58.0 88.0,58.0" fill="__ACCENT__"/>'
+    b'</g>'
+    b'</svg>'
+)
+
+_BOSS_OD_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,125 L58,125 L58,45 L64,45 L64,125 L106,125 L106,45 L112,45 L112,125 L155,125'
+    b' L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<path d="M58,45 L64,45" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M106,45 L112,45" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<line x1="67" y1="85" x2="103" y2="85" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="64.0,85.0 70.0,82.0 70.0,88.0" fill="__ACCENT__"/>'
+    b'<polygon points="106.0,85.0 100.0,88.0 100.0,82.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="79.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'd'
+    b'</text>'
+    b'<line x1="61" y1="33" x2="109" y2="33" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="58.0,33.0 64.0,30.0 64.0,36.0" fill="__ACCENT__"/>'
+    b'<polygon points="112.0,33.0 106.0,36.0 106.0,30.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="27.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'D'
+    b'</text>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,125 L52,125 L52,45 L74,45 L74,125 L96,125 L96,45 L118,45 L118,125 L155,125'
+    b' L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<line x1="77" y1="85" x2="93" y2="85" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="74.0,85.0 80.0,82.0 80.0,88.0" fill="__ACCENT__"/>'
+    b'<polygon points="96.0,85.0 90.0,88.0 90.0,82.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="79.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'd'
+    b'</text>'
+    b'<line x1="55" y1="33" x2="115" y2="33" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="52.0,33.0 58.0,30.0 58.0,36.0" fill="__ACCENT__"/>'
+    b'<polygon points="118.0,33.0 112.0,36.0 112.0,30.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="27.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'D'
+    b'</text>'
+    b'</g>'
+    b'</svg>'
+)
+
+_CORNER_RADIUS_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M30,30 L50,30 L50,116 A4,4 0 0,0 54,120 L150,120 L150,140 L42,140 A12,12 0 0,1'
+    b' 30,128 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M50,116 A4,4 0 0,0 54,120" fill="none" stroke="__BAD__" stroke-width="3"/>'
+    b'<line x1="137" y1="123" x2="137" y2="137" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="137.0,120.0 140.0,126.0 134.0,126.0" fill="__ACCENT__"/>'
+    b'<polygon points="137.0,140.0 134.0,134.0 140.0,134.0" fill="__ACCENT__"/>'
+    b'<text x="144.0" y="136.0" text-anchor="start" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'T'
+    b'</text>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M30,30 L50,30 L50,110 A10,10 0 0,0 60,120 L150,120 L150,140 L60,140 A30,30 0 0,1'
+    b' 30,110 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M50,110 A10,10 0 0,0 60,120" fill="none" stroke="__ACCENT__" stroke-width="3"/>'
+    b'<text x="66.0" y="112.0" text-anchor="start" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'r'
+    b'</text>'
+    b'<line x1="137" y1="123" x2="137" y2="137" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="137.0,120.0 140.0,126.0 134.0,126.0" fill="__ACCENT__"/>'
+    b'<polygon points="137.0,140.0 134.0,134.0 140.0,134.0" fill="__ACCENT__"/>'
+    b'<text x="144.0" y="136.0" text-anchor="start" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'T'
+    b'</text>'
+    b'</g>'
+    b'</svg>'
+)
+
+_TEXT_STROKE_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,100 L52,100 L52,108 L55,108 L55,100 L80,100 L80,108 L83,108 L83,100 L108,100'
+    b' L108,108 L111,108 L111,100 L155,100 L155,135 L15,135 Z" fill="__BODY__"'
+    b' stroke="__STROKE__" stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M52,100 L55,100 L55,108 L52,108 Z M80,100 L83,100 L83,108 L80,108 Z M108,100'
+    b' L111,100 L111,108 L108,108 Z" fill="__BAD__" fill-opacity="0.18" stroke="none"/>'
+    b'<path d="M52,108 L55,108" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M80,108 L83,108" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M108,108 L111,108" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<line x1="38" y1="84" x2="52" y2="84" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<line x1="55" y1="84" x2="69" y2="84" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="52.0,84.0 46.0,87.0 46.0,81.0" fill="__ACCENT__"/>'
+    b'<polygon points="55.0,84.0 61.0,81.0 61.0,87.0" fill="__ACCENT__"/>'
+    b'<text x="53.5" y="78.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'w'
+    b'</text>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,100 L44,100 L44,92 L56,92 L56,100 L76,100 L76,92 L88,92 L88,100 L108,100'
+    b' L108,92 L120,92 L120,100 L155,100 L155,135 L15,135 Z" fill="__BODY__" stroke="__STROKE__"'
+    b' stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<line x1="79" y1="80" x2="85" y2="80" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="76.0,80.0 82.0,77.0 82.0,83.0" fill="__ACCENT__"/>'
+    b'<polygon points="88.0,80.0 82.0,83.0 82.0,77.0" fill="__ACCENT__"/>'
+    b'<text x="82.0" y="74.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'w'
+    b'</text>'
+    b'</g>'
+    b'</svg>'
+)
+
+
+# 3D printing: small holes, horizontal holes, pins and text
+
+_PRINTED_HOLE_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M25,40 L145,40 L145,130 L25,130 Z M82,85 A3,3 0 1,0 88,85 A3,3 0 1,0 82,85 Z"'
+    b' fill="__BODY__" fill-rule="evenodd" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<circle cx="85" cy="85" r="7" fill="none" stroke="__BAD__" stroke-width="1.5"'
+    b' stroke-dasharray="3,2"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M25,40 L145,40 L145,130 L25,130 Z M71,85 A14,14 0 1,0 99,85 A14,14 0 1,0 71,85 Z"'
+    b' fill="__BODY__" fill-rule="evenodd" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<line x1="74" y1="62" x2="96" y2="62" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="71.0,62.0 77.0,59.0 77.0,65.0" fill="__ACCENT__"/>'
+    b'<polygon points="99.0,62.0 93.0,65.0 93.0,59.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="56.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'd'
+    b'</text>'
+    b'<path d="M71,62 L71,85 M99,62 L99,85" fill="none" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="4,3" opacity="0.5"/>'
+    b'</g>'
+    b'</svg>'
+)
+
+_TEARDROP_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M25,40 L135,40 L135,135 L25,135 Z M58,90 A22,22 0 1,0 102,90 A22,22 0 1,0 58,90 Z"'
+    b' fill="__BODY__" fill-rule="evenodd" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<path d="M58,90 A22,22 0 0,1 102,90" fill="none" stroke="__BAD__" stroke-width="3"/>'
+    b'<path d="M64,78 Q80,75 96,78" fill="none" stroke="__BAD__" stroke-width="1.5"'
+    b' stroke-dasharray="3,2"/>'
+    b'<line x1="150" y1="60" x2="150" y2="22" stroke="__STROKE__" stroke-width="1" opacity="0.4"/>'
+    b'<polygon points="150.0,16.0 153.5,23.0 146.5,23.0" fill="__STROKE__" opacity="0.4"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M25,40 L135,40 L135,135 L25,135 Z M64.4,74.4 A22,22 0 1,0 95.6,74.4 L80,58.8 Z"'
+    b' fill="__BODY__" fill-rule="evenodd" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<path d="M64.4,74.4 L80,58.8 L95.6,74.4" fill="none" stroke="__ACCENT__" stroke-width="3"/>'
+    b'<line x1="150" y1="60" x2="150" y2="22" stroke="__STROKE__" stroke-width="1" opacity="0.4"/>'
+    b'<polygon points="150.0,16.0 153.5,23.0 146.5,23.0" fill="__STROKE__" opacity="0.4"/>'
+    b'</g>'
+    b'</svg>'
+)
+
+_PIN_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,125 L82,125 L82,35 L88,35 L88,125 L155,125 L155,140 L15,140 Z" fill="__BODY__"'
+    b' stroke="__STROKE__" stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M82,35 L88,35 L88,125 L82,125 Z" fill="__BAD__" fill-opacity="0.18" stroke="none"/>'
+    b'<path d="M82,82 L86,78 L84,86 L88,82" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<line x1="68" y1="25" x2="82" y2="25" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<line x1="88" y1="25" x2="102" y2="25" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="82.0,25.0 76.0,28.0 76.0,22.0" fill="__ACCENT__"/>'
+    b'<polygon points="88.0,25.0 94.0,22.0 94.0,28.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="19.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'd'
+    b'</text>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,125 L69,125 A6,6 0 0,0 75,119 L75,35 L95,35 L95,119 A6,6 0 0,0 101,125'
+    b' L155,125 L155,140 L15,140 Z" fill="__BODY__" stroke="__STROKE__" stroke-width="1.5"'
+    b' stroke-linejoin="round"/>'
+    b'<line x1="78" y1="25" x2="92" y2="25" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="75.0,25.0 81.0,22.0 81.0,28.0" fill="__ACCENT__"/>'
+    b'<polygon points="95.0,25.0 89.0,28.0 89.0,22.0" fill="__ACCENT__"/>'
+    b'<text x="85.0" y="19.0" text-anchor="middle" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'd'
+    b'</text>'
+    b'</g>'
+    b'</svg>'
+)
+
+_PRINTED_TEXT_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 165">'
+    b'<line x1="170" y1="10" x2="170" y2="155" stroke="__STROKE__" stroke-width="1"'
+    b' stroke-dasharray="3,3" opacity="0.25"/>'
+    b'<g>'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__BAD__" stroke-width="1.5"/>'
+    b'<path d="M9.5,9.5 L16.5,16.5 M16.5,9.5 L9.5,16.5" stroke="__BAD__" stroke-width="1.8"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M15,100 L45,100 L45,98 L58,98 L58,100 L78,100 L78,98 L91,98 L91,100 L111,100'
+    b' L111,98 L124,98 L124,100 L155,100 L155,135 L15,135 Z" fill="__BODY__" stroke="__STROKE__"'
+    b' stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<path d="M45,98 L58,98" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M78,98 L91,98" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'<path d="M111,98 L124,98" fill="none" stroke="__BAD__" stroke-width="3"'
+    b' stroke-linecap="round"/>'
+    b'</g>'
+    b'<g transform="translate(170,0)">'
+    b'<circle cx="13" cy="13" r="8" fill="none" stroke="__GOOD__" stroke-width="1.5"/>'
+    b'<path d="M9,13.5 L12,16.5 L17,10" fill="none" stroke="__GOOD__" stroke-width="1.8"'
+    b' stroke-linecap="round" stroke-linejoin="round"/>'
+    b'<path d="M15,100 L45,100 L45,88 L58,88 L58,100 L78,100 L78,88 L91,88 L91,100 L111,100'
+    b' L111,88 L124,88 L124,100 L155,100 L155,135 L15,135 Z" fill="__BODY__" stroke="__STROKE__"'
+    b' stroke-width="1.5" stroke-linejoin="round"/>'
+    b'<line x1="135" y1="74" x2="135" y2="88" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<line x1="135" y1="100" x2="135" y2="114" stroke="__ACCENT__" stroke-width="1.5"/>'
+    b'<polygon points="135.0,88.0 132.0,82.0 138.0,82.0" fill="__ACCENT__"/>'
+    b'<polygon points="135.0,100.0 138.0,106.0 132.0,106.0" fill="__ACCENT__"/>'
+    b'<text x="141.0" y="98.0" text-anchor="start" fill="__ACCENT__" font-size="15"'
+    b' font-family="sans-serif" font-style="italic">'
+    b'h'
+    b'</text>'
+    b'</g>'
+    b'</svg>'
+)
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -1577,5 +2004,49 @@ DIAGRAMS: dict[Rulebook, RuleDiagram] = {
     Rulebook.MAX_SNAP_FIT_STRAIN: RuleDiagram(
         svg=_SNAP_FIT_SVG,
         brief="Bending strain at a snap-fit's root as it clears its catch, against the material's permissible strain.",
+    ),
+    Rulebook.MIN_RIB_DRAFT: RuleDiagram(
+        svg=_RIB_DRAFT_SVG,
+        brief="Draft on each side of a rib, against the pull; replaces the general draft rule on rib sides.",
+    ),
+    Rulebook.MIN_BOSS_DRAFT: RuleDiagram(
+        svg=_BOSS_DRAFT_SVG,
+        brief="Draft on boss walls and, at half the limits, on the holes in them; replaces the general draft rule there.",
+    ),
+    Rulebook.MIN_BOSS_HOLE_BASE_RADIUS: RuleDiagram(
+        svg=_BOSS_HOLE_RADIUS_SVG,
+        brief="Fillet radius at the bottom of the hole in a screw boss, against the nominal wall.",
+    ),
+    Rulebook.BOSS_HOLE_LEAD_IN: RuleDiagram(
+        svg=_BOSS_LEAD_IN_SVG,
+        brief="A chamfer or countersink at the top of a screw boss's hole, to start the screw straight.",
+    ),
+    Rulebook.MIN_BOSS_OD_RATIO: RuleDiagram(
+        svg=_BOSS_OD_SVG,
+        brief="Screw boss outer diameter against its hole diameter; a slim boss splits as the screw goes in.",
+    ),
+    Rulebook.MIN_INTERNAL_CORNER_RADIUS: RuleDiagram(
+        svg=_CORNER_RADIUS_SVG,
+        brief="Radius of filleted inside corners against the nominal wall.",
+    ),
+    Rulebook.MIN_TEXT_STROKE: RuleDiagram(
+        svg=_TEXT_STROKE_SVG,
+        brief="Stroke width of moulded lettering; raised text lasts better than text cut into the part.",
+    ),
+    Rulebook.MIN_PRINTED_HOLE_DIAMETER: RuleDiagram(
+        svg=_PRINTED_HOLE_SVG,
+        brief="Diameter of printed holes; small ones come out undersized or close up.",
+    ),
+    Rulebook.HORIZONTAL_HOLE_TEARDROP: RuleDiagram(
+        svg=_TEARDROP_SVG,
+        brief="Round holes across the print direction, which need a teardrop top to print without sagging.",
+    ),
+    Rulebook.MIN_PIN_DIAMETER: RuleDiagram(
+        svg=_PIN_SVG,
+        brief="Diameter of slender printed pins and posts.",
+    ),
+    Rulebook.MIN_PRINTED_TEXT_DEPTH: RuleDiagram(
+        svg=_PRINTED_TEXT_SVG,
+        brief="How far printed lettering stands out from, or is cut into, the surface.",
     ),
 }
