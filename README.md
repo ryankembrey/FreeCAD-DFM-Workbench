@@ -15,47 +15,43 @@ The philosophy of this project is to give more power to hobbyists and small busi
 
 Another key point is customisability. Every rule is 100% customisable. The Process Library is the main way you can do this, but for experts, you can tweak the parameters for the geometric analyzers in the DFM Preferences page.
 
-<table>
-<tr>
-<th align="left">Currently supported rules</th>
-<th align="left">Supported manufacturing processes (currently)</th>
-<th align="left">Supported contours</th>
-<th align="left">Other features</th>
-</tr>
-<tr valign="top">
-<td>
+## Features
 
-- Maximum and minimum wall thickness
-- Minimum draft angle
-- Undercut detection
-- Sharp internal and external corners
-- Maximum support material
-- Maximum bridge span
-- Maximum bed contact area
-- Maximum overhang angle
-- Maximum cusp height
+### Manufacturing processes
 
-</td>
-<td>
+| Process | Rules | What it checks |
+|:--|:-:|:--|
+| **Plastic injection molding** | 29 | Wall thickness, draft, undercuts, ribs, bosses, cored holes, thin mold steel, snap fits, living hinges, molded text |
+| **FDM 3D printing** | 15 | Overhangs, bridges, support material, bed contact, layer stair-stepping, small holes and pins, narrow gaps, text, elephant's foot |
+| **Resin 3D printing** (SLA, DLP, MSLA) | 15 | Sealed hollows, drain holes, suction cups, overhangs, bridges, deep holes, narrow gaps, pins, text, peel forces |
+| **Powder bed fusion** (SLS, MJF) | 16 | Sealed hollows, escape holes, thick sections, wall transitions, warping, deep holes, narrow gaps, pins, text |
 
-- FDM 3D printing
-- Plastic injection molding
+Each process comes with material presets (ABS, PC, PP, PLA, PETG, PA12, TPU and more) whose limits follow published design guides.
 
-</td>
-<td>
+### 49 design rules
 
-- Thickness
-- Draft angle
+Every rule explains itself with a diagram of what to avoid and what to aim for, and every finding says why it matters and how to fix it.
 
-</td>
-<td>
+<p align="center">
+  <a href=".github/images/rules_poster.png">
+    <img src=".github/images/rules_poster.png" alt="Poster of all 49 DFM rules with their diagrams, grouped by process" width="100%">
+  </a>
+</p>
 
+- **Walls and corners:** minimum and maximum wall thickness, wall thickness transitions, sharp internal and external corners, internal corner radius
+- **Molding:** draft angle, undercuts; rib thickness, height, spacing, draft and root radius; boss wall, height, core depth, spacing, draft, root radius, hole base radius, lead-in and outer diameter; standalone bosses; cored hole depth and spacing; thin mold steel; living hinges; snap-fit strain; molded text
+- **3D printing:** overhang angle, bridge span, support material, bed contact area, cusp height; printed hole diameter, depth and teardrop shape; pin diameter, slenderness and root fillet; printed text depth and stroke; minimum gap; bed edge chamfer; sealed cavities, escape holes and cupping; large flat faces and long thin parts
+
+Rules about bosses, ribs, holes, snap fits, hinges, text and hollows find those features with a built-in feature recognition engine. Rules relative to the wall measure the part's nominal wall for you, or use one you enter.
+
+### Analysis and results
+
+- Findings grouped by rule and highlighted on the model, with the measured value against its limits
+- Analysis runs on all your CPU cores, with live progress and time remaining
+- Switch material and see the new results instantly, without measuring again
+- History: compare any two runs to see what regressed and what was fixed, with a trend chart
 - Generate professional PDF reports
 - Export to CSV
-
-</td>
-</tr>
-</table>
 
 <p align="center">
   <img src=".github/images/report_title.png" alt="PDF report cover page" width="49%">
@@ -66,11 +62,15 @@ Another key point is customisability. Every rule is 100% customisable. The Proce
 
 Analyse wall thickness or draft angles of your parts, and create nice graphics.
 
+Four contour tools color the whole model: **thickness**, **draft angle**, **undercut** (which way each face releases from the mold) and **curvature** (the tightest radius).
+
 <p align="center">
   <img src=".github/images/thickness_analysis.png" alt="Wall thickness contour on a part" width="100%">
 </p>
 
 ## Process Library
+
+Edit each rule's limits, severity, criticality and messages, for the process as a whole or for each material. Add your own processes and materials, or import them from a file.
 
 <p align="center">
   <img src=".github/images/process_library1.png" alt="Process Library in list layout" width="49%">
