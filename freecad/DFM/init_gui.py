@@ -16,6 +16,7 @@ from .gui.preferences import (
     DFMPreferencesMoldFlow,
 )
 from .gui.report.preferences_page import DFMPreferencesReports
+from .gui.recognition_bench.preferences_page import DFMPreferencesRecognition
 from .gui import tools as _dfm_contour_tools
 from .app.shape_observer import install_observer
 
@@ -42,6 +43,13 @@ class DFMWorkbench(Gui.Workbench):
         ]
         self.appendToolbar("DFM Analysis", self.list)
         self.appendMenu("DFM", self.list)
+
+        # Developer tools, only when switched on in the DFM preferences.
+        from .app.recognition_service import bench_enabled
+
+        if bench_enabled():
+            self.appendToolbar("DFM Developer", ["DFM_RecognitionBench"])
+            self.appendMenu(["DFM", "Developer"], ["DFM_RecognitionBench"])
 
         # Observer is installed at module level (bottom of this file)
         # so it works even before the workbench is first activated.
@@ -72,6 +80,7 @@ Gui.addPreferencePage(DFMPreferencesReports, "DFM")
 Gui.addPreferencePage(DFMPreferencesAnalyzers, "DFM")
 Gui.addPreferencePage(DFMPreferencesContour, "DFM")
 Gui.addPreferencePage(DFMPreferencesMoldFlow, "DFM")
+Gui.addPreferencePage(DFMPreferencesRecognition, "DFM")
 
 # Install the shape-change observer at module load so it fires for
 # documents opened before the DFM workbench is first activated.

@@ -29,6 +29,17 @@ def register_check(*rule_ids: Rulebook):
     return decorator
 
 
+def _load_checks() -> None:
+    """Import every check module once, so their @register_check runs.
+
+    ``core/__init__.py`` used to do this on import, which pulled FreeCAD into
+    anything that imported the core. Now it happens on the first lookup.
+    """
+    from ...core import checks  # noqa: F401
+
+
 def get_check_class(rule_id: Rulebook) -> Type[BaseCheck] | None:
     """Retrieves a Check class from the registry by its Rulebook ID."""
+    if rule_id not in _check_registry:
+        _load_checks()
     return _check_registry.get(rule_id)

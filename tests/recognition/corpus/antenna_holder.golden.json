@@ -1,0 +1,3289 @@
+{
+ "name": "antenna_holder",
+ "status": "approved",
+ "engine_version": "1.2.0",
+ "fingerprint": "53605063dc1c3abcb3e44321d6c48d2813cb6743",
+ "reviewed_by": "Ryan Kembrey (issues) / Claude (fixes)",
+ "reviewed_on": "2026-11-08",
+ "source": "antenna_holder.brep (user model)",
+ "notes": "Moulded holder with a round cradle for an antenna rod across four walls. Holes are counterbored at both ends with 0.25 mm lead-in chamfers on the bottom; bores drafted (cones). Inner walls are ribs whose tops are the cradle (curved tips); the rim top is not part of the ribs. Pockets own their whole wall loop.",
+ "options": {
+  "linear_tolerance": 0.001,
+  "smooth_angle": 0.5,
+  "parallel_angle": 1.0,
+  "canonical_tolerance": 0.001,
+  "edge_samples": 5,
+  "min_hole_span": 180.0,
+  "max_bore_taper": 10.0,
+  "max_hole_diameter": 0.0,
+  "drill_point_angle": 118.0,
+  "max_boss_taper": 10.0,
+  "max_boss_diameter": 0.0,
+  "max_rib_thickness": 6.0,
+  "min_rib_aspect": 1.5,
+  "min_rib_length_ratio": 2.0,
+  "max_rib_draft": 5.0,
+  "max_slot_width": 0.0,
+  "max_fillet_radius": 25.0,
+  "max_blend_span": 179.0,
+  "max_chamfer_width": 25.0,
+  "min_chamfer_angle": 10.0,
+  "min_draft": 0.25,
+  "max_draft": 15.0,
+  "undercut_samples": 3,
+  "fdm_min_hole_nozzles": 2.0,
+  "fdm_min_wall_nozzles": 2.0,
+  "fdm_teardrop_diameter": 5.0,
+  "use_history_hints": true,
+  "report_residuals": true,
+  "min_confidence": 0.5,
+  "disabled": []
+ },
+ "face_signatures": [
+  {
+   "index": 1,
+   "kind": "plane",
+   "area": 131.395196,
+   "centroid": [
+    14.643291,
+    0.0,
+    9.2
+   ]
+  },
+  {
+   "index": 2,
+   "kind": "plane",
+   "area": 28.087683,
+   "centroid": [
+    7.141535,
+    14.129659,
+    5.170173
+   ]
+  },
+  {
+   "index": 3,
+   "kind": "cylinder",
+   "area": 10.525763,
+   "centroid": [
+    10.177275,
+    13.778236,
+    5.85
+   ]
+  },
+  {
+   "index": 4,
+   "kind": "cylinder",
+   "area": 3.910888,
+   "centroid": [
+    7.316579,
+    14.920744,
+    8.653832
+   ]
+  },
+  {
+   "index": 5,
+   "kind": "plane",
+   "area": 0.779256,
+   "centroid": [
+    10.550057,
+    13.08833,
+    6.309412
+   ]
+  },
+  {
+   "index": 6,
+   "kind": "plane",
+   "area": 4.579044,
+   "centroid": [
+    11.733497,
+    15.906223,
+    8.950038
+   ]
+  },
+  {
+   "index": 7,
+   "kind": "cone",
+   "area": 27.985575,
+   "centroid": [
+    10.249294,
+    11.0,
+    5.857117
+   ]
+  },
+  {
+   "index": 8,
+   "kind": "cone",
+   "area": 5.401682,
+   "centroid": [
+    18.126009,
+    14.126009,
+    8.945867
+   ]
+  },
+  {
+   "index": 9,
+   "kind": "plane",
+   "area": 19.993965,
+   "centroid": [
+    10.540897,
+    7.482641,
+    5.865051
+   ]
+  },
+  {
+   "index": 10,
+   "kind": "plane",
+   "area": 15.420004,
+   "centroid": [
+    19.906223,
+    0.0,
+    8.950038
+   ]
+  },
+  {
+   "index": 11,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    10.177256,
+    5.354502,
+    5.85
+   ]
+  },
+  {
+   "index": 12,
+   "kind": "cone",
+   "area": 5.401682,
+   "centroid": [
+    18.126009,
+    -14.126009,
+    8.945867
+   ]
+  },
+  {
+   "index": 13,
+   "kind": "plane",
+   "area": 28.086263,
+   "centroid": [
+    7.141506,
+    5.001526,
+    5.17016
+   ]
+  },
+  {
+   "index": 14,
+   "kind": "plane",
+   "area": 4.579044,
+   "centroid": [
+    11.733497,
+    -15.906223,
+    8.950038
+   ]
+  },
+  {
+   "index": 15,
+   "kind": "cylinder",
+   "area": 2.188461,
+   "centroid": [
+    7.307002,
+    4.54,
+    8.645632
+   ]
+  },
+  {
+   "index": 16,
+   "kind": "cylinder",
+   "area": 3.910888,
+   "centroid": [
+    7.316579,
+    -14.920744,
+    8.653832
+   ]
+  },
+  {
+   "index": 17,
+   "kind": "plane",
+   "area": 28.086263,
+   "centroid": [
+    7.141506,
+    4.078474,
+    5.17016
+   ]
+  },
+  {
+   "index": 18,
+   "kind": "plane",
+   "area": 28.087683,
+   "centroid": [
+    7.141535,
+    -14.129659,
+    5.170173
+   ]
+  },
+  {
+   "index": 19,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    10.177256,
+    3.725498,
+    5.85
+   ]
+  },
+  {
+   "index": 20,
+   "kind": "cylinder",
+   "area": 10.525763,
+   "centroid": [
+    10.177275,
+    -13.778236,
+    5.85
+   ]
+  },
+  {
+   "index": 21,
+   "kind": "plane",
+   "area": 41.401269,
+   "centroid": [
+    10.540966,
+    0.0,
+    5.868381
+   ]
+  },
+  {
+   "index": 22,
+   "kind": "plane",
+   "area": 0.779256,
+   "centroid": [
+    10.550057,
+    -13.08833,
+    6.309412
+   ]
+  },
+  {
+   "index": 23,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    10.177256,
+    -3.725498,
+    5.85
+   ]
+  },
+  {
+   "index": 24,
+   "kind": "cone",
+   "area": 27.985575,
+   "centroid": [
+    10.249294,
+    -11.0,
+    5.857117
+   ]
+  },
+  {
+   "index": 25,
+   "kind": "plane",
+   "area": 28.08632,
+   "centroid": [
+    7.141509,
+    -4.078474,
+    5.170165
+   ]
+  },
+  {
+   "index": 26,
+   "kind": "plane",
+   "area": 19.993965,
+   "centroid": [
+    10.540897,
+    -7.482641,
+    5.865051
+   ]
+  },
+  {
+   "index": 27,
+   "kind": "cylinder",
+   "area": 2.18846,
+   "centroid": [
+    7.307002,
+    -4.54,
+    8.645632
+   ]
+  },
+  {
+   "index": 28,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    10.177256,
+    -5.354502,
+    5.85
+   ]
+  },
+  {
+   "index": 29,
+   "kind": "plane",
+   "area": 28.08632,
+   "centroid": [
+    7.141509,
+    -5.001526,
+    5.170165
+   ]
+  },
+  {
+   "index": 30,
+   "kind": "cone",
+   "area": 86.746011,
+   "centroid": [
+    15.0,
+    11.0,
+    7.107807
+   ]
+  },
+  {
+   "index": 31,
+   "kind": "cone",
+   "area": 86.746011,
+   "centroid": [
+    15.0,
+    -11.0,
+    7.107807
+   ]
+  },
+  {
+   "index": 32,
+   "kind": "plane",
+   "area": 76.188755,
+   "centroid": [
+    11.442846,
+    -0.0,
+    5.865832
+   ]
+  },
+  {
+   "index": 33,
+   "kind": "bspline",
+   "area": 13.53174,
+   "centroid": [
+    11.99663,
+    6.395567,
+    5.856038
+   ]
+  },
+  {
+   "index": 34,
+   "kind": "cylinder",
+   "area": 13.53174,
+   "centroid": [
+    11.99663,
+    -6.395567,
+    5.856038
+   ]
+  },
+  {
+   "index": 35,
+   "kind": "cone",
+   "area": 26.915954,
+   "centroid": [
+    14.817199,
+    6.242183,
+    5.871277
+   ]
+  },
+  {
+   "index": 36,
+   "kind": "cone",
+   "area": 26.915954,
+   "centroid": [
+    14.817199,
+    -6.242183,
+    5.871277
+   ]
+  },
+  {
+   "index": 37,
+   "kind": "bspline",
+   "area": 13.017673,
+   "centroid": [
+    17.6214,
+    6.207041,
+    5.858346
+   ]
+  },
+  {
+   "index": 38,
+   "kind": "bspline",
+   "area": 13.017673,
+   "centroid": [
+    17.6214,
+    -6.207041,
+    5.858346
+   ]
+  },
+  {
+   "index": 39,
+   "kind": "plane",
+   "area": 73.780283,
+   "centroid": [
+    18.141828,
+    -0.0,
+    5.867356
+   ]
+  },
+  {
+   "index": 40,
+   "kind": "plane",
+   "area": 186.16881,
+   "centroid": [
+    -0.0,
+    9.544645,
+    2.5
+   ]
+  },
+  {
+   "index": 41,
+   "kind": "cylinder",
+   "area": 26.238746,
+   "centroid": [
+    0.0,
+    14.84629,
+    4.331139
+   ]
+  },
+  {
+   "index": 42,
+   "kind": "bspline",
+   "area": 1.669293,
+   "centroid": [
+    7.445291,
+    15.886946,
+    8.467585
+   ]
+  },
+  {
+   "index": 43,
+   "kind": "plane",
+   "area": 171.773499,
+   "centroid": [
+    -0.0,
+    16.070466,
+    4.037012
+   ]
+  },
+  {
+   "index": 44,
+   "kind": "cone",
+   "area": 65.448053,
+   "centroid": [
+    18.234429,
+    14.234429,
+    4.619253
+   ]
+  },
+  {
+   "index": 45,
+   "kind": "plane",
+   "area": 180.430831,
+   "centroid": [
+    20.080293,
+    -0.0,
+    4.6
+   ]
+  },
+  {
+   "index": 46,
+   "kind": "cone",
+   "area": 65.448053,
+   "centroid": [
+    18.234429,
+    -14.234429,
+    4.619253
+   ]
+  },
+  {
+   "index": 47,
+   "kind": "cylinder",
+   "area": 17.017654,
+   "centroid": [
+    0.0,
+    4.54,
+    4.250454
+   ]
+  },
+  {
+   "index": 48,
+   "kind": "plane",
+   "area": 171.773499,
+   "centroid": [
+    0.0,
+    -16.070466,
+    4.037012
+   ]
+  },
+  {
+   "index": 49,
+   "kind": "bspline",
+   "area": 1.669293,
+   "centroid": [
+    7.445291,
+    -15.886946,
+    8.467585
+   ]
+  },
+  {
+   "index": 50,
+   "kind": "cylinder",
+   "area": 26.238746,
+   "centroid": [
+    0.0,
+    -14.84629,
+    4.331139
+   ]
+  },
+  {
+   "index": 51,
+   "kind": "plane",
+   "area": 168.275863,
+   "centroid": [
+    0.0,
+    0.0,
+    2.5
+   ]
+  },
+  {
+   "index": 52,
+   "kind": "plane",
+   "area": 186.16881,
+   "centroid": [
+    0.0,
+    -9.544645,
+    2.5
+   ]
+  },
+  {
+   "index": 53,
+   "kind": "cylinder",
+   "area": 17.017655,
+   "centroid": [
+    -0.0,
+    -4.54,
+    4.250454
+   ]
+  },
+  {
+   "index": 54,
+   "kind": "plane",
+   "area": 23.147716,
+   "centroid": [
+    15.0,
+    11.0,
+    5.0
+   ]
+  },
+  {
+   "index": 55,
+   "kind": "plane",
+   "area": 23.147716,
+   "centroid": [
+    15.0,
+    -11.0,
+    5.0
+   ]
+  },
+  {
+   "index": 56,
+   "kind": "plane",
+   "area": 82.579499,
+   "centroid": [
+    14.757794,
+    0.0,
+    2.5
+   ]
+  },
+  {
+   "index": 57,
+   "kind": "plane",
+   "area": 19.993965,
+   "centroid": [
+    -10.540897,
+    7.482641,
+    5.865051
+   ]
+  },
+  {
+   "index": 58,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    -10.177256,
+    5.354502,
+    5.85
+   ]
+  },
+  {
+   "index": 59,
+   "kind": "cone",
+   "area": 13.992787,
+   "centroid": [
+    -10.249294,
+    9.971633,
+    5.857117
+   ]
+  },
+  {
+   "index": 60,
+   "kind": "plane",
+   "area": 28.08632,
+   "centroid": [
+    -7.141509,
+    5.001526,
+    5.170165
+   ]
+  },
+  {
+   "index": 61,
+   "kind": "cone",
+   "area": 13.992787,
+   "centroid": [
+    -10.249294,
+    12.028367,
+    5.857117
+   ]
+  },
+  {
+   "index": 62,
+   "kind": "plane",
+   "area": 0.779256,
+   "centroid": [
+    -10.550057,
+    13.08833,
+    6.309412
+   ]
+  },
+  {
+   "index": 63,
+   "kind": "cylinder",
+   "area": 10.525763,
+   "centroid": [
+    -10.177275,
+    13.778236,
+    5.85
+   ]
+  },
+  {
+   "index": 64,
+   "kind": "plane",
+   "area": 28.087683,
+   "centroid": [
+    -7.141535,
+    14.129659,
+    5.170173
+   ]
+  },
+  {
+   "index": 65,
+   "kind": "bspline",
+   "area": 12.574375,
+   "centroid": [
+    0.0,
+    15.825347,
+    4.114402
+   ]
+  },
+  {
+   "index": 66,
+   "kind": "cylinder",
+   "area": 3.910888,
+   "centroid": [
+    -7.316579,
+    14.920744,
+    8.653832
+   ]
+  },
+  {
+   "index": 67,
+   "kind": "cone",
+   "area": 65.448053,
+   "centroid": [
+    -18.234429,
+    14.234429,
+    4.619253
+   ]
+  },
+  {
+   "index": 68,
+   "kind": "plane",
+   "area": 21.397513,
+   "centroid": [
+    -0.0,
+    15.754363,
+    0.249962
+   ]
+  },
+  {
+   "index": 69,
+   "kind": "plane",
+   "area": 4.579044,
+   "centroid": [
+    -11.733497,
+    15.906223,
+    8.950038
+   ]
+  },
+  {
+   "index": 70,
+   "kind": "bspline",
+   "area": 1.669293,
+   "centroid": [
+    -7.445291,
+    15.886946,
+    8.467585
+   ]
+  },
+  {
+   "index": 71,
+   "kind": "cone",
+   "area": 5.326651,
+   "centroid": [
+    18.029609,
+    14.029609,
+    0.25442
+   ]
+  },
+  {
+   "index": 72,
+   "kind": "plane",
+   "area": 15.69151,
+   "centroid": [
+    19.754363,
+    -0.0,
+    0.249962
+   ]
+  },
+  {
+   "index": 73,
+   "kind": "cone",
+   "area": 5.326651,
+   "centroid": [
+    18.029609,
+    -14.029609,
+    0.25442
+   ]
+  },
+  {
+   "index": 74,
+   "kind": "plane",
+   "area": 28.08632,
+   "centroid": [
+    -7.141509,
+    4.078474,
+    5.170165
+   ]
+  },
+  {
+   "index": 75,
+   "kind": "cylinder",
+   "area": 2.18846,
+   "centroid": [
+    -7.307002,
+    4.54,
+    8.645632
+   ]
+  },
+  {
+   "index": 76,
+   "kind": "plane",
+   "area": 21.397513,
+   "centroid": [
+    0.0,
+    -15.754363,
+    0.249962
+   ]
+  },
+  {
+   "index": 77,
+   "kind": "cone",
+   "area": 65.448053,
+   "centroid": [
+    -18.234429,
+    -14.234429,
+    4.619253
+   ]
+  },
+  {
+   "index": 78,
+   "kind": "plane",
+   "area": 4.579044,
+   "centroid": [
+    -11.733497,
+    -15.906223,
+    8.950038
+   ]
+  },
+  {
+   "index": 79,
+   "kind": "bspline",
+   "area": 12.574375,
+   "centroid": [
+    -0.0,
+    -15.825347,
+    4.114402
+   ]
+  },
+  {
+   "index": 80,
+   "kind": "bspline",
+   "area": 1.669293,
+   "centroid": [
+    -7.445291,
+    -15.886946,
+    8.467585
+   ]
+  },
+  {
+   "index": 81,
+   "kind": "cylinder",
+   "area": 3.910888,
+   "centroid": [
+    -7.316579,
+    -14.920744,
+    8.653832
+   ]
+  },
+  {
+   "index": 82,
+   "kind": "plane",
+   "area": 28.087683,
+   "centroid": [
+    -7.141535,
+    -14.129659,
+    5.170173
+   ]
+  },
+  {
+   "index": 83,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    -10.177256,
+    3.725498,
+    5.85
+   ]
+  },
+  {
+   "index": 84,
+   "kind": "plane",
+   "area": 41.401269,
+   "centroid": [
+    -10.540966,
+    -0.0,
+    5.868381
+   ]
+  },
+  {
+   "index": 85,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    -10.177256,
+    -3.725498,
+    5.85
+   ]
+  },
+  {
+   "index": 86,
+   "kind": "plane",
+   "area": 28.086263,
+   "centroid": [
+    -7.141506,
+    -4.078474,
+    5.17016
+   ]
+  },
+  {
+   "index": 87,
+   "kind": "plane",
+   "area": 0.779256,
+   "centroid": [
+    -10.550057,
+    -13.08833,
+    6.309412
+   ]
+  },
+  {
+   "index": 88,
+   "kind": "cylinder",
+   "area": 10.525763,
+   "centroid": [
+    -10.177275,
+    -13.778236,
+    5.85
+   ]
+  },
+  {
+   "index": 89,
+   "kind": "cone",
+   "area": 13.992787,
+   "centroid": [
+    -10.249294,
+    -12.028367,
+    5.857117
+   ]
+  },
+  {
+   "index": 90,
+   "kind": "cone",
+   "area": 13.992787,
+   "centroid": [
+    -10.249294,
+    -9.971633,
+    5.857117
+   ]
+  },
+  {
+   "index": 91,
+   "kind": "plane",
+   "area": 19.993965,
+   "centroid": [
+    -10.540897,
+    -7.482641,
+    5.865051
+   ]
+  },
+  {
+   "index": 92,
+   "kind": "cylinder",
+   "area": 10.525687,
+   "centroid": [
+    -10.177256,
+    -5.354502,
+    5.85
+   ]
+  },
+  {
+   "index": 93,
+   "kind": "plane",
+   "area": 28.086263,
+   "centroid": [
+    -7.141506,
+    -5.001526,
+    5.17016
+   ]
+  },
+  {
+   "index": 94,
+   "kind": "cylinder",
+   "area": 2.18846,
+   "centroid": [
+    -7.307002,
+    -4.54,
+    8.645632
+   ]
+  },
+  {
+   "index": 95,
+   "kind": "cone",
+   "area": 27.73595,
+   "centroid": [
+    15.0,
+    11.0,
+    3.755149
+   ]
+  },
+  {
+   "index": 96,
+   "kind": "cone",
+   "area": 27.73595,
+   "centroid": [
+    15.0,
+    -11.0,
+    3.755149
+   ]
+  },
+  {
+   "index": 97,
+   "kind": "plane",
+   "area": 131.395196,
+   "centroid": [
+    -14.643291,
+    -0.0,
+    9.2
+   ]
+  },
+  {
+   "index": 98,
+   "kind": "cone",
+   "area": 5.326651,
+   "centroid": [
+    -18.029609,
+    14.029609,
+    0.25442
+   ]
+  },
+  {
+   "index": 99,
+   "kind": "cone",
+   "area": 5.401682,
+   "centroid": [
+    -18.126009,
+    14.126009,
+    8.945867
+   ]
+  },
+  {
+   "index": 100,
+   "kind": "plane",
+   "area": 180.430831,
+   "centroid": [
+    -20.080293,
+    -0.0,
+    4.6
+   ]
+  },
+  {
+   "index": 101,
+   "kind": "plane",
+   "area": 1025.938423,
+   "centroid": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "index": 102,
+   "kind": "cone",
+   "area": 5.326651,
+   "centroid": [
+    -18.029609,
+    -14.029609,
+    0.25442
+   ]
+  },
+  {
+   "index": 103,
+   "kind": "cone",
+   "area": 5.401682,
+   "centroid": [
+    -18.126009,
+    -14.126009,
+    8.945867
+   ]
+  },
+  {
+   "index": 104,
+   "kind": "plane",
+   "area": 23.631775,
+   "centroid": [
+    15.0,
+    11.0,
+    2.5
+   ]
+  },
+  {
+   "index": 105,
+   "kind": "plane",
+   "area": 23.631775,
+   "centroid": [
+    15.0,
+    -11.0,
+    2.5
+   ]
+  },
+  {
+   "index": 106,
+   "kind": "plane",
+   "area": 15.420004,
+   "centroid": [
+    -19.906223,
+    -0.0,
+    8.950038
+   ]
+  },
+  {
+   "index": 107,
+   "kind": "cone",
+   "area": 86.746011,
+   "centroid": [
+    -15.0,
+    11.0,
+    7.107807
+   ]
+  },
+  {
+   "index": 108,
+   "kind": "cone",
+   "area": 86.746011,
+   "centroid": [
+    -15.0,
+    -11.0,
+    7.107807
+   ]
+  },
+  {
+   "index": 109,
+   "kind": "plane",
+   "area": 76.188755,
+   "centroid": [
+    -11.442846,
+    0.0,
+    5.865832
+   ]
+  },
+  {
+   "index": 110,
+   "kind": "bspline",
+   "area": 13.53174,
+   "centroid": [
+    -11.99663,
+    -6.395567,
+    5.856038
+   ]
+  },
+  {
+   "index": 111,
+   "kind": "cylinder",
+   "area": 13.53174,
+   "centroid": [
+    -11.99663,
+    6.395567,
+    5.856038
+   ]
+  },
+  {
+   "index": 112,
+   "kind": "cone",
+   "area": 26.915954,
+   "centroid": [
+    -14.817199,
+    -6.242183,
+    5.871277
+   ]
+  },
+  {
+   "index": 113,
+   "kind": "cone",
+   "area": 26.915954,
+   "centroid": [
+    -14.817199,
+    6.242183,
+    5.871277
+   ]
+  },
+  {
+   "index": 114,
+   "kind": "bspline",
+   "area": 13.017673,
+   "centroid": [
+    -17.6214,
+    -6.207041,
+    5.858346
+   ]
+  },
+  {
+   "index": 115,
+   "kind": "bspline",
+   "area": 13.017673,
+   "centroid": [
+    -17.6214,
+    6.207041,
+    5.858346
+   ]
+  },
+  {
+   "index": 116,
+   "kind": "plane",
+   "area": 73.780283,
+   "centroid": [
+    -18.141828,
+    0.0,
+    5.867356
+   ]
+  },
+  {
+   "index": 117,
+   "kind": "plane",
+   "area": 15.69151,
+   "centroid": [
+    -19.754363,
+    0.0,
+    0.249962
+   ]
+  },
+  {
+   "index": 118,
+   "kind": "cone",
+   "area": 7.974717,
+   "centroid": [
+    -15.0,
+    -11.0,
+    0.123265
+   ]
+  },
+  {
+   "index": 119,
+   "kind": "cone",
+   "area": 7.974717,
+   "centroid": [
+    15.0,
+    -11.0,
+    0.123265
+   ]
+  },
+  {
+   "index": 120,
+   "kind": "cone",
+   "area": 7.974717,
+   "centroid": [
+    15.0,
+    11.0,
+    0.123265
+   ]
+  },
+  {
+   "index": 121,
+   "kind": "cone",
+   "area": 7.974717,
+   "centroid": [
+    -15.0,
+    11.0,
+    0.123265
+   ]
+  },
+  {
+   "index": 122,
+   "kind": "cone",
+   "area": 46.85076,
+   "centroid": [
+    15.0,
+    11.0,
+    1.368145
+   ]
+  },
+  {
+   "index": 123,
+   "kind": "cone",
+   "area": 46.85076,
+   "centroid": [
+    15.0,
+    -11.0,
+    1.368145
+   ]
+  },
+  {
+   "index": 124,
+   "kind": "plane",
+   "area": 23.147716,
+   "centroid": [
+    -15.0,
+    11.0,
+    5.0
+   ]
+  },
+  {
+   "index": 125,
+   "kind": "plane",
+   "area": 23.147716,
+   "centroid": [
+    -15.0,
+    -11.0,
+    5.0
+   ]
+  },
+  {
+   "index": 126,
+   "kind": "plane",
+   "area": 82.579498,
+   "centroid": [
+    -14.757794,
+    0.0,
+    2.5
+   ]
+  },
+  {
+   "index": 127,
+   "kind": "cone",
+   "area": 46.85076,
+   "centroid": [
+    -15.0,
+    -11.0,
+    1.368145
+   ]
+  },
+  {
+   "index": 128,
+   "kind": "cone",
+   "area": 46.85076,
+   "centroid": [
+    -15.0,
+    11.0,
+    1.368145
+   ]
+  },
+  {
+   "index": 129,
+   "kind": "cone",
+   "area": 27.73595,
+   "centroid": [
+    -15.0,
+    11.0,
+    3.755149
+   ]
+  },
+  {
+   "index": 130,
+   "kind": "cone",
+   "area": 27.73595,
+   "centroid": [
+    -15.0,
+    -11.0,
+    3.755149
+   ]
+  },
+  {
+   "index": 131,
+   "kind": "plane",
+   "area": 23.631775,
+   "centroid": [
+    -15.0,
+    -11.0,
+    2.5
+   ]
+  },
+  {
+   "index": 132,
+   "kind": "plane",
+   "area": 23.631775,
+   "centroid": [
+    -15.0,
+    11.0,
+    2.5
+   ]
+  }
+ ],
+ "features": [
+  {
+   "id": 1,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    3
+   ],
+   "support_faces": [
+    2,
+    5
+   ],
+   "edges": [
+    42,
+    43
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.979
+   },
+   "frame": {
+    "origin": [
+     9.618305098,
+     13.207364674,
+     9.630648768
+    ],
+    "axis": [
+     -0.020605585,
+     -0.017448701,
+     -0.99963541
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 2,
+   "kind": "fillet",
+   "subtype": "convex",
+   "faces": [
+    4,
+    15,
+    16,
+    27
+   ],
+   "support_faces": [
+    1
+   ],
+   "edges": [
+    2,
+    8,
+    16,
+    22
+   ],
+   "params": {
+    "radius": 2.0,
+    "radius_min": 2.0,
+    "radius_max": 2.0,
+    "face_count": 4,
+    "span_deg": 76.71
+   },
+   "frame": {
+    "origin": [
+     8.466994744,
+     -53.013891188,
+     7.2
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.95,
+   "evidence": [
+    "+ 4 face(s) tangent to their neighbours, radius 2"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 3,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    11
+   ],
+   "support_faces": [
+    9,
+    13
+   ],
+   "edges": [
+    57,
+    60
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     9.618305097,
+     5.933938142,
+     9.630648722
+    ],
+    "axis": [
+     -0.02060635,
+     0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 33,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 4,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    19
+   ],
+   "support_faces": [
+    17,
+    21
+   ],
+   "edges": [
+    75,
+    80
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     9.618305097,
+     3.146061858,
+     9.630648722
+    ],
+    "axis": [
+     -0.02060635,
+     -0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 34,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 5,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    20
+   ],
+   "support_faces": [
+    18,
+    22
+   ],
+   "edges": [
+    78,
+    82
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.979
+   },
+   "frame": {
+    "origin": [
+     9.618305098,
+     -13.207364674,
+     9.630648768
+    ],
+    "axis": [
+     -0.020605585,
+     0.017448701,
+     -0.99963541
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 6,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    23
+   ],
+   "support_faces": [
+    21,
+    25
+   ],
+   "edges": [
+    85,
+    88
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     9.618305097,
+     -3.146061858,
+     9.630648722
+    ],
+    "axis": [
+     -0.02060635,
+     0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 34,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 7,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    28
+   ],
+   "support_faces": [
+    26,
+    29
+   ],
+   "edges": [
+    96,
+    99
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     9.618305097,
+     -5.933938142,
+     9.630648722
+    ],
+    "axis": [
+     -0.02060635,
+     -0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 35,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 8,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    33
+   ],
+   "support_faces": [
+    32,
+    35
+   ],
+   "edges": [
+    108,
+    111
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 0.0
+   },
+   "frame": null,
+   "confidence": 0.95,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1"
+   ],
+   "parent": 38,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 9,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    34
+   ],
+   "support_faces": [
+    32,
+    36
+   ],
+   "edges": [
+    109,
+    112
+   ],
+   "params": {
+    "radius": 0.9997,
+    "radius_min": 0.9997,
+    "radius_max": 0.9997,
+    "face_count": 1,
+    "span_deg": 116.381
+   },
+   "frame": {
+    "origin": [
+     12.405803916,
+     -5.777279372,
+     9.638768973
+    ],
+    "axis": [
+     0.009824712,
+     0.024189113,
+     -0.999659123
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 38,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 10,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    37
+   ],
+   "support_faces": [
+    35,
+    39
+   ],
+   "edges": [
+    115,
+    119
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 0.0
+   },
+   "frame": null,
+   "confidence": 0.95,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1"
+   ],
+   "parent": 38,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 11,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    38
+   ],
+   "support_faces": [
+    36,
+    39
+   ],
+   "edges": [
+    116,
+    120
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 0.0
+   },
+   "frame": null,
+   "confidence": 0.95,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1"
+   ],
+   "parent": 38,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 12,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    58
+   ],
+   "support_faces": [
+    57,
+    60
+   ],
+   "edges": [
+    179,
+    183
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     -9.618305097,
+     5.933938142,
+     9.630648722
+    ],
+    "axis": [
+     0.02060635,
+     0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 33,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 13,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    63
+   ],
+   "support_faces": [
+    62,
+    64
+   ],
+   "edges": [
+    191,
+    193
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.979
+   },
+   "frame": {
+    "origin": [
+     -9.618305098,
+     13.207364674,
+     9.630648768
+    ],
+    "axis": [
+     0.020605585,
+     -0.017448701,
+     -0.99963541
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 14,
+   "kind": "fillet",
+   "subtype": "convex",
+   "faces": [
+    66,
+    75,
+    81,
+    94
+   ],
+   "support_faces": [
+    97
+   ],
+   "edges": [
+    197,
+    217,
+    228,
+    254
+   ],
+   "params": {
+    "radius": 2.0,
+    "radius_min": 2.0,
+    "radius_max": 2.0,
+    "face_count": 4,
+    "span_deg": 76.71
+   },
+   "frame": {
+    "origin": [
+     -8.466994744,
+     -53.013891188,
+     7.2
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.95,
+   "evidence": [
+    "+ 4 face(s) tangent to their neighbours, radius 2"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 15,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    83
+   ],
+   "support_faces": [
+    74,
+    84
+   ],
+   "edges": [
+    216,
+    233
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     -9.618305097,
+     3.146061858,
+     9.630648722
+    ],
+    "axis": [
+     0.02060635,
+     -0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 36,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 16,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    85
+   ],
+   "support_faces": [
+    84,
+    86
+   ],
+   "edges": [
+    235,
+    237
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     -9.618305097,
+     -3.146061858,
+     9.630648722
+    ],
+    "axis": [
+     0.02060635,
+     0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 36,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 17,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    88
+   ],
+   "support_faces": [
+    82,
+    87
+   ],
+   "edges": [
+    231,
+    240
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.979
+   },
+   "frame": {
+    "origin": [
+     -9.618305098,
+     -13.207364674,
+     9.630648768
+    ],
+    "axis": [
+     0.020605585,
+     0.017448701,
+     -0.99963541
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 18,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    92
+   ],
+   "support_faces": [
+    91,
+    93
+   ],
+   "edges": [
+    249,
+    251
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 89.982
+   },
+   "frame": {
+    "origin": [
+     -9.618305097,
+     -5.933938142,
+     9.630648722
+    ],
+    "axis": [
+     0.02060635,
+     -0.015173347,
+     -0.99967252
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 35,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 19,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    110
+   ],
+   "support_faces": [
+    109,
+    112
+   ],
+   "edges": [
+    292,
+    295
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 0.0
+   },
+   "frame": null,
+   "confidence": 0.95,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1"
+   ],
+   "parent": 39,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 20,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    111
+   ],
+   "support_faces": [
+    109,
+    113
+   ],
+   "edges": [
+    293,
+    296
+   ],
+   "params": {
+    "radius": 0.9997,
+    "radius_min": 0.9997,
+    "radius_max": 0.9997,
+    "face_count": 1,
+    "span_deg": 116.381
+   },
+   "frame": {
+    "origin": [
+     -12.405803916,
+     5.777279372,
+     9.638768973
+    ],
+    "axis": [
+     -0.009824712,
+     -0.024189113,
+     -0.999659123
+    ],
+    "ref": null
+   },
+   "confidence": 0.9025,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1",
+    "- B-spline surface fitted to a canonical one (x0.95)"
+   ],
+   "parent": 39,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 21,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    114
+   ],
+   "support_faces": [
+    112,
+    116
+   ],
+   "edges": [
+    298,
+    303
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 0.0
+   },
+   "frame": null,
+   "confidence": 0.95,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1"
+   ],
+   "parent": 39,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 22,
+   "kind": "fillet",
+   "subtype": "concave",
+   "faces": [
+    115
+   ],
+   "support_faces": [
+    113,
+    116
+   ],
+   "edges": [
+    300,
+    304
+   ],
+   "params": {
+    "radius": 1.0,
+    "radius_min": 1.0,
+    "radius_max": 1.0,
+    "face_count": 1,
+    "span_deg": 0.0
+   },
+   "frame": null,
+   "confidence": 0.95,
+   "evidence": [
+    "+ 1 face(s) tangent to their neighbours, radius 1"
+   ],
+   "parent": 39,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 23,
+   "kind": "chamfer",
+   "subtype": "convex",
+   "faces": [
+    6,
+    8,
+    10,
+    12,
+    14,
+    42,
+    49,
+    65,
+    69,
+    70,
+    78,
+    79,
+    80,
+    99,
+    103,
+    106
+   ],
+   "support_faces": [
+    1,
+    4,
+    16,
+    41,
+    43,
+    44,
+    45,
+    46,
+    48,
+    50,
+    66,
+    67,
+    77,
+    81,
+    97,
+    100
+   ],
+   "edges": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    46,
+    50,
+    55,
+    58,
+    63,
+    67,
+    72,
+    133,
+    135,
+    139,
+    140,
+    141,
+    153,
+    154,
+    155,
+    156,
+    158,
+    198,
+    201,
+    207,
+    221,
+    225,
+    227,
+    259,
+    260,
+    261,
+    275
+   ],
+   "params": {
+    "width": 0.6779,
+    "width_max": 0.7009,
+    "distance1": 0.5,
+    "distance2": 0.5,
+    "angle": 45.5,
+    "face_count": 16
+   },
+   "frame": null,
+   "confidence": 0.9,
+   "evidence": [
+    "+ narrow face (0.701 wide) at 46\u00b0 / 45\u00b0 to its neighbours"
+   ],
+   "parent": 37,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 24,
+   "kind": "chamfer",
+   "subtype": "convex",
+   "faces": [
+    68,
+    71,
+    72,
+    73,
+    76,
+    98,
+    102,
+    117
+   ],
+   "support_faces": [
+    43,
+    44,
+    45,
+    46,
+    48,
+    67,
+    77,
+    100,
+    101
+   ],
+   "edges": [
+    137,
+    142,
+    145,
+    146,
+    151,
+    199,
+    203,
+    209,
+    210,
+    213,
+    218,
+    220,
+    272,
+    276,
+    278,
+    279
+   ],
+   "params": {
+    "width": 0.7133,
+    "width_max": 0.7133,
+    "distance1": 0.5,
+    "distance2": 0.5,
+    "angle": 44.5,
+    "face_count": 8
+   },
+   "frame": null,
+   "confidence": 0.9,
+   "evidence": [
+    "+ narrow face (0.713 wide) at 45\u00b0 / 44\u00b0 to its neighbours"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 25,
+   "kind": "chamfer",
+   "subtype": "convex",
+   "faces": [
+    118
+   ],
+   "support_faces": [
+    101,
+    127
+   ],
+   "edges": [
+    277,
+    307
+   ],
+   "params": {
+    "width": 0.3627,
+    "width_max": 0.3627,
+    "distance1": 0.2497,
+    "distance2": 0.2631,
+    "angle": 43.5,
+    "face_count": 1
+   },
+   "frame": null,
+   "confidence": 0.9,
+   "evidence": [
+    "+ narrow face (0.363 wide) at 43\u00b0 / 44\u00b0 to its neighbours"
+   ],
+   "parent": 32,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 26,
+   "kind": "chamfer",
+   "subtype": "convex",
+   "faces": [
+    119
+   ],
+   "support_faces": [
+    101,
+    123
+   ],
+   "edges": [
+    280,
+    309
+   ],
+   "params": {
+    "width": 0.3627,
+    "width_max": 0.3627,
+    "distance1": 0.2497,
+    "distance2": 0.2631,
+    "angle": 43.5,
+    "face_count": 1
+   },
+   "frame": null,
+   "confidence": 0.9,
+   "evidence": [
+    "+ narrow face (0.363 wide) at 43\u00b0 / 44\u00b0 to its neighbours"
+   ],
+   "parent": 30,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 27,
+   "kind": "chamfer",
+   "subtype": "convex",
+   "faces": [
+    120
+   ],
+   "support_faces": [
+    101,
+    122
+   ],
+   "edges": [
+    281,
+    311
+   ],
+   "params": {
+    "width": 0.3627,
+    "width_max": 0.3627,
+    "distance1": 0.2497,
+    "distance2": 0.2631,
+    "angle": 43.5,
+    "face_count": 1
+   },
+   "frame": null,
+   "confidence": 0.9,
+   "evidence": [
+    "+ narrow face (0.363 wide) at 43\u00b0 / 44\u00b0 to its neighbours"
+   ],
+   "parent": 29,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 28,
+   "kind": "chamfer",
+   "subtype": "convex",
+   "faces": [
+    121
+   ],
+   "support_faces": [
+    101,
+    128
+   ],
+   "edges": [
+    282,
+    313
+   ],
+   "params": {
+    "width": 0.3627,
+    "width_max": 0.3627,
+    "distance1": 0.2497,
+    "distance2": 0.2631,
+    "angle": 43.5,
+    "face_count": 1
+   },
+   "frame": null,
+   "confidence": 0.9,
+   "evidence": [
+    "+ narrow face (0.363 wide) at 43\u00b0 / 44\u00b0 to its neighbours"
+   ],
+   "parent": 31,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 29,
+   "kind": "hole",
+   "subtype": "counterbored",
+   "faces": [
+    30,
+    54,
+    95,
+    104,
+    122
+   ],
+   "support_faces": [
+    1,
+    101
+   ],
+   "edges": [
+    29,
+    177,
+    256,
+    311
+   ],
+   "params": {
+    "cb_diameter": 6.6179,
+    "cb_depth": 2.2503,
+    "cb2_diameter": 6.5733,
+    "cb2_depth": 4.2,
+    "step_diameters": [
+     6.6179,
+     3.5309,
+     6.5733
+    ],
+    "wall_taper_deg": 3.0,
+    "diameter": 3.5309,
+    "depth": 8.9503,
+    "through": true,
+    "bottom": "none",
+    "span_deg": 360.0,
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "partial": false
+   },
+   "frame": {
+    "origin": [
+     15.0,
+     11.0,
+     0.2497
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.95,
+   "evidence": [
+    "+ counterbored at both ends: 6.62 deep 2.25, 6.57 deep 4.2",
+    "+ bore drafted 3\u00b0",
+    "+ internal cone \u00d83.53, through"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 30,
+   "kind": "hole",
+   "subtype": "counterbored",
+   "faces": [
+    31,
+    55,
+    96,
+    105,
+    123
+   ],
+   "support_faces": [
+    1,
+    101
+   ],
+   "edges": [
+    30,
+    178,
+    258,
+    309
+   ],
+   "params": {
+    "cb_diameter": 6.6179,
+    "cb_depth": 2.2503,
+    "cb2_diameter": 6.5733,
+    "cb2_depth": 4.2,
+    "step_diameters": [
+     6.6179,
+     3.5309,
+     6.5733
+    ],
+    "wall_taper_deg": 3.0,
+    "diameter": 3.5309,
+    "depth": 8.9503,
+    "through": true,
+    "bottom": "none",
+    "span_deg": 360.0,
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "partial": false
+   },
+   "frame": {
+    "origin": [
+     15.0,
+     -11.0,
+     0.2497
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.95,
+   "evidence": [
+    "+ counterbored at both ends: 6.62 deep 2.25, 6.57 deep 4.2",
+    "+ bore drafted 3\u00b0",
+    "+ internal cone \u00d83.53, through"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 31,
+   "kind": "hole",
+   "subtype": "counterbored",
+   "faces": [
+    107,
+    124,
+    128,
+    129,
+    132
+   ],
+   "support_faces": [
+    97,
+    101
+   ],
+   "edges": [
+    262,
+    313,
+    317,
+    324
+   ],
+   "params": {
+    "cb_diameter": 6.6179,
+    "cb_depth": 2.2503,
+    "cb2_diameter": 6.5733,
+    "cb2_depth": 4.2,
+    "step_diameters": [
+     6.6179,
+     3.5309,
+     6.5733
+    ],
+    "wall_taper_deg": 3.0,
+    "diameter": 3.5309,
+    "depth": 8.9503,
+    "through": true,
+    "bottom": "none",
+    "span_deg": 360.0,
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "partial": false
+   },
+   "frame": {
+    "origin": [
+     -15.0,
+     11.0,
+     0.2497
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.95,
+   "evidence": [
+    "+ counterbored at both ends: 6.62 deep 2.25, 6.57 deep 4.2",
+    "+ bore drafted 3\u00b0",
+    "+ internal cone \u00d83.53, through"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 32,
+   "kind": "hole",
+   "subtype": "counterbored",
+   "faces": [
+    108,
+    125,
+    127,
+    130,
+    131
+   ],
+   "support_faces": [
+    97,
+    101
+   ],
+   "edges": [
+    263,
+    307,
+    318,
+    326
+   ],
+   "params": {
+    "cb_diameter": 6.6179,
+    "cb_depth": 2.2503,
+    "cb2_diameter": 6.5733,
+    "cb2_depth": 4.2,
+    "step_diameters": [
+     6.6179,
+     3.5309,
+     6.5733
+    ],
+    "wall_taper_deg": 3.0,
+    "diameter": 3.5309,
+    "depth": 8.9503,
+    "through": true,
+    "bottom": "none",
+    "span_deg": 360.0,
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "partial": false
+   },
+   "frame": {
+    "origin": [
+     -15.0,
+     -11.0,
+     0.2497
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.95,
+   "evidence": [
+    "+ counterbored at both ends: 6.62 deep 2.25, 6.57 deep 4.2",
+    "+ bore drafted 3\u00b0",
+    "+ internal cone \u00d83.53, through"
+   ],
+   "parent": null,
+   "interacts_with": [],
+   "verdict": "correct"
+  },
+  {
+   "id": 33,
+   "kind": "rib",
+   "subtype": "network",
+   "faces": [
+    13,
+    17,
+    47,
+    60,
+    74
+   ],
+   "support_faces": [
+    1,
+    40,
+    51,
+    52,
+    56,
+    97,
+    126
+   ],
+   "edges": [
+    66,
+    74,
+    125,
+    161
+   ],
+   "params": {
+    "thickness": 1.0029,
+    "thickness_root": 1.0029,
+    "thickness_tip": 0.801,
+    "height": 6.7,
+    "length": 19.2195,
+    "draft_deg_side1": 0.87,
+    "draft_deg_side2": 0.87,
+    "height_to_thickness": 6.6808,
+    "tip": "flush",
+    "base_faces": [
+     40,
+     51,
+     52,
+     56,
+     126
+    ],
+    "ends": [
+     "rib",
+     "wall"
+    ]
+   },
+   "frame": {
+    "origin": [
+     7.1415,
+     4.54,
+     5.1702
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "ref": [
+     1.0,
+     0.0,
+     0.0
+    ]
+   },
+   "confidence": 0.9,
+   "evidence": [
+    "+ parallel side faces 1 apart on 5 base face(s)",
+    "+ height 6.7 (6.7 x thickness), length 19.2",
+    "+ drafted sides 0.87\u00b0 / 0.87\u00b0",
+    "+ side faces split by crossing features",
+    "+ its top is flush with the surrounding surface (not part of the rib)"
+   ],
+   "parent": null,
+   "interacts_with": [
+    34,
+    36,
+    37,
+    38,
+    39
+   ],
+   "verdict": "correct"
+  },
+  {
+   "id": 34,
+   "kind": "rib",
+   "subtype": "network",
+   "faces": [
+    21
+   ],
+   "support_faces": [
+    1,
+    32,
+    40,
+    51,
+    52,
+    56,
+    126
+   ],
+   "edges": [
+    84,
+    107
+   ],
+   "params": {
+    "thickness": 1.0041,
+    "thickness_root": 1.0041,
+    "thickness_tip": 0.8007,
+    "height": 6.8067,
+    "length": 11.5327,
+    "draft_deg_side1": 0.87,
+    "draft_deg_side2": 0.87,
+    "height_to_thickness": 6.7792,
+    "tip": "flush",
+    "base_faces": [
+     40,
+     51,
+     52,
+     56,
+     126
+    ],
+    "ends": [
+     "rib"
+    ]
+   },
+   "frame": {
+    "origin": [
+     10.9919,
+     -0.0,
+     5.8671
+    ],
+    "axis": [
+     0.0054,
+     0.0,
+     1.0
+    ],
+    "ref": [
+     0.0,
+     -1.0,
+     0.0
+    ]
+   },
+   "confidence": 0.9,
+   "evidence": [
+    "+ parallel side faces 1 apart on 5 base face(s)",
+    "+ height 6.81 (6.8 x thickness), length 11.5",
+    "+ drafted sides 0.87\u00b0 / 0.87\u00b0",
+    "+ its top is flush with the surrounding surface (not part of the rib)"
+   ],
+   "parent": null,
+   "interacts_with": [
+    33,
+    35,
+    38,
+    39
+   ],
+   "verdict": "correct"
+  },
+  {
+   "id": 35,
+   "kind": "rib",
+   "subtype": "network",
+   "faces": [
+    25,
+    29,
+    53,
+    86,
+    93
+   ],
+   "support_faces": [
+    1,
+    40,
+    51,
+    52,
+    56,
+    97,
+    126
+   ],
+   "edges": [
+    92,
+    101,
+    162,
+    169
+   ],
+   "params": {
+    "thickness": 1.0029,
+    "thickness_root": 1.0029,
+    "thickness_tip": 0.801,
+    "height": 6.7,
+    "length": 19.2195,
+    "draft_deg_side1": 0.87,
+    "draft_deg_side2": 0.87,
+    "height_to_thickness": 6.6808,
+    "tip": "flush",
+    "base_faces": [
+     40,
+     51,
+     52,
+     56,
+     126
+    ],
+    "ends": [
+     "rib",
+     "wall"
+    ]
+   },
+   "frame": {
+    "origin": [
+     7.1415,
+     -4.54,
+     5.1702
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "ref": [
+     -1.0,
+     0.0,
+     0.0
+    ]
+   },
+   "confidence": 0.9,
+   "evidence": [
+    "+ parallel side faces 1 apart on 5 base face(s)",
+    "+ height 6.7 (6.7 x thickness), length 19.2",
+    "+ drafted sides 0.87\u00b0 / 0.87\u00b0",
+    "+ side faces split by crossing features",
+    "+ its top is flush with the surrounding surface (not part of the rib)"
+   ],
+   "parent": null,
+   "interacts_with": [
+    34,
+    36,
+    37,
+    38,
+    39
+   ],
+   "verdict": "correct"
+  },
+  {
+   "id": 36,
+   "kind": "rib",
+   "subtype": "network",
+   "faces": [
+    84
+   ],
+   "support_faces": [
+    40,
+    51,
+    52,
+    56,
+    97,
+    109,
+    126
+   ],
+   "edges": [
+    164,
+    291
+   ],
+   "params": {
+    "thickness": 1.0039,
+    "thickness_root": 1.0039,
+    "thickness_tip": 0.8005,
+    "height": 6.8067,
+    "length": 11.5327,
+    "draft_deg_side1": 0.87,
+    "draft_deg_side2": 0.87,
+    "height_to_thickness": 6.7803,
+    "tip": "flush",
+    "base_faces": [
+     40,
+     51,
+     52,
+     56,
+     126
+    ],
+    "ends": [
+     "rib"
+    ]
+   },
+   "frame": {
+    "origin": [
+     -10.9919,
+     0.0,
+     5.8671
+    ],
+    "axis": [
+     -0.0054,
+     0.0,
+     1.0
+    ],
+    "ref": [
+     0.0,
+     1.0,
+     -0.0
+    ]
+   },
+   "confidence": 0.9,
+   "evidence": [
+    "+ parallel side faces 1 apart on 5 base face(s)",
+    "+ height 6.81 (6.8 x thickness), length 11.5",
+    "+ drafted sides 0.87\u00b0 / 0.87\u00b0",
+    "+ its top is flush with the surrounding surface (not part of the rib)"
+   ],
+   "parent": null,
+   "interacts_with": [
+    33,
+    35,
+    38,
+    39
+   ],
+   "verdict": "correct"
+  },
+  {
+   "id": 37,
+   "kind": "slot",
+   "subtype": "saddle",
+   "faces": [
+    41,
+    50
+   ],
+   "support_faces": [
+    47,
+    53
+   ],
+   "edges": [],
+   "params": {
+    "diameter": 13.4,
+    "span_deg": 154.0,
+    "length": 31.2673,
+    "walls": 4,
+    "rib_tips": 2,
+    "profile": "round"
+   },
+   "frame": {
+    "origin": [
+     0.0,
+     -53.0139,
+     9.2
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.8,
+   "evidence": [
+    "+ part-cylinders \u00d813.4 over 154\u00b0 on one axis, across 4 wall(s)",
+    "+ 2 of them the curved tips of ribs"
+   ],
+   "parent": null,
+   "interacts_with": [
+    33,
+    35
+   ],
+   "verdict": "correct"
+  },
+  {
+   "id": 38,
+   "kind": "pocket",
+   "subtype": "flat",
+   "faces": [
+    32,
+    35,
+    36,
+    39,
+    56
+   ],
+   "support_faces": [
+    1
+   ],
+   "edges": [
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38
+   ],
+   "params": {
+    "depth": 6.7,
+    "shape": "general",
+    "wall_count": 9,
+    "min_corner_radius": 1.0,
+    "wall_taper_deg": 1.0,
+    "floor_area": 82.5795
+   },
+   "frame": {
+    "origin": [
+     16.8622,
+     7.8303,
+     9.2
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.88,
+   "evidence": [
+    "+ closed ring of 9 wall(s) behind a loop of convex edges",
+    "+ flat floor",
+    "+ Face32 is also the side of a rib"
+   ],
+   "parent": null,
+   "interacts_with": [
+    33,
+    34,
+    35,
+    36
+   ],
+   "verdict": "correct"
+  },
+  {
+   "id": 39,
+   "kind": "pocket",
+   "subtype": "flat",
+   "faces": [
+    109,
+    112,
+    113,
+    116,
+    126
+   ],
+   "support_faces": [
+    97
+   ],
+   "edges": [
+    264,
+    265,
+    266,
+    267,
+    268,
+    269,
+    270,
+    271
+   ],
+   "params": {
+    "depth": 6.7,
+    "shape": "general",
+    "wall_count": 9,
+    "min_corner_radius": 1.0,
+    "wall_taper_deg": 1.0,
+    "floor_area": 82.5795
+   },
+   "frame": {
+    "origin": [
+     -11.2654,
+     7.8303,
+     9.2
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "ref": null
+   },
+   "confidence": 0.88,
+   "evidence": [
+    "+ closed ring of 9 wall(s) behind a loop of convex edges",
+    "+ flat floor",
+    "+ Face109 is also the side of a rib"
+   ],
+   "parent": null,
+   "interacts_with": [
+    33,
+    34,
+    35,
+    36
+   ],
+   "verdict": "correct"
+  }
+ ]
+}

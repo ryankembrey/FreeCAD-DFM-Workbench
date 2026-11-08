@@ -8,3 +8,7 @@ pyrightconfig.json
 *.stp
 docs/build/
 docs/build/
+
+# Approved feature recognition cases keep a STEP copy beside their BREP,
+# so they open in any CAD system.
+!tests/recognition/corpus/*.step

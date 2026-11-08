@@ -1187,10 +1187,21 @@ class DFMPreferencesGeneral:
             "The report includes run-time for Analyzers, Checks, and total analysis run-time."
         )
 
+        self.recognition_bench = _pref(
+            QtWidgets.QCheckBox("Feature recognition test bench"), "DeveloperRecognitionBench"
+        )
+        self.recognition_bench.setToolTip(
+            "Adds the Feature Recognition Bench to a DFM Developer toolbar and menu:\n"
+            "inspect what the recognition finds, run its test suite and approve results.\n"
+            "The toolbar appears the next time the workbench is loaded."
+        )
+
         layout = QtWidgets.QVBoxLayout(self.form)
         layout.addWidget(self._build_parallel_group())
         group = QtWidgets.QGroupBox("Developer Options")
-        QtWidgets.QVBoxLayout(group).addWidget(self.print_timing_report)
+        dev = QtWidgets.QVBoxLayout(group)
+        dev.addWidget(self.print_timing_report)
+        dev.addWidget(self.recognition_bench)
         layout.addWidget(group)
         layout.addStretch()
 
@@ -1272,6 +1283,7 @@ class DFMPreferencesGeneral:
         self.print_timing_report.setChecked(
             params.GetBool("GeneralPrintTimingReport", self.DEFAULT_PRINT_TIMING_REPORT)
         )
+        self.recognition_bench.setChecked(params.GetBool("DeveloperRecognitionBench", False))
         self.parallel_enabled.setChecked(params.GetBool("ParallelEnabled", True))
         self.parallel_workers.setValue(params.GetInt("ParallelWorkers", 0))
         self.parallel_min_faces.setValue(params.GetInt("ParallelMinFaces", 24))
@@ -1280,6 +1292,7 @@ class DFMPreferencesGeneral:
     def saveSettings(self):
         params = dfm_params()
         params.SetBool("GeneralPrintTimingReport", self.print_timing_report.isChecked())
+        params.SetBool("DeveloperRecognitionBench", self.recognition_bench.isChecked())
         params.SetBool("ParallelEnabled", self.parallel_enabled.isChecked())
         params.SetInt("ParallelWorkers", self.parallel_workers.value())
         params.SetInt("ParallelMinFaces", self.parallel_min_faces.value())

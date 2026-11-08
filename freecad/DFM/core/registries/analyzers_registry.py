@@ -21,6 +21,17 @@ def register_analyzer(analyzer_id: str) -> Callable[[Type[TAnalyzer]], Type[TAna
     return decorator
 
 
+def _load_analyzers() -> None:
+    """Import every analyzer module once, so their @register_analyzer runs.
+
+    ``core/__init__.py`` used to do this on import, which pulled FreeCAD into
+    anything that imported the core. Now it happens on the first lookup.
+    """
+    from ...core import analyzers  # noqa: F401
+
+
 def get_analyzer_class(analyzer_id: str) -> Type[BaseAnalyzer] | None:
     """Retrieves an Analyzer class from the registry by its ID."""
+    if analyzer_id not in _analyzer_registry:
+        _load_analyzers()
     return _analyzer_registry.get(analyzer_id)
