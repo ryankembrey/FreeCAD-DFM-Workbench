@@ -12,6 +12,7 @@ wall.
 
 import dataclasses
 import math
+import os
 import unittest
 
 import dfm_test_support as S
@@ -422,6 +423,29 @@ class TestWallTransition(unittest.TestCase):
         found = run_analyzed(self.rule, stepped_plate(6, 3, ramp=4))
         self.assertEqual([f.severity for f in found], [Severity.ERROR])
         self.assertRegex(found[0].message, r"over (3\.9\d|4\.0\d) mm")
+
+    def test_pad_on_a_floor(self):
+        # A 4 mm pad on a 2.4 mm floor is recognised only as a protrusion (an
+        # unclaimed region): it thickens the wall to 6.4 mm, a 62.5% step.
+        shape = B.fuse(S.shelled_box(2.4, 80, 50, 25), B.box(40, 25, 2.4, 65, 42, 6.4))
+        found = run_analyzed(self.rule, shape, material="PLA")
+        self.assertEqual([f.severity for f in found], [Severity.ERROR])
+        self.assertAlmostEqual(found[0].value, 62.5, delta=0.1)
+        self.assertIn("from 6.40 mm to 2.40 mm sharply", found[0].message)
+        self.assertAlmostEqual(S.part_features(shape).nominal_wall, 2.4, delta=0.05)
+
+    def test_corner_pad_in_a_housing(self):
+        # A real part: a 4 mm pad in the corner of a 2.4 mm housing, merged
+        # into two walls and claimed by no feature, with a snap fit standing
+        # on the same floor (which must still count as a wall).
+        from freecad.DFM.core.recognition.testing.shapes import read_brep
+
+        shape = read_brep(os.path.join(S.ROOT, "tests", "parts", "corner_pad_housing.brep"))
+        found = run_analyzed(self.rule, shape, material="ABS")
+        self.assertEqual([f.severity for f in found], [Severity.ERROR], [f.overview for f in found])
+        self.assertAlmostEqual(found[0].value, 62.5, delta=0.1)
+        # The pad's top, both its open sides, and the floor.
+        self.assertEqual(sorted(n for _k, n in found[0].failing_geometry), [15, 19, 20, 21])
 
     def test_uniform_parts_pass(self):
         for shape in (S.shelled_box(), FX.by_name("groove_housing_rim").build(),

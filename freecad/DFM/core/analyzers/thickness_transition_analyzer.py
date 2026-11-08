@@ -41,8 +41,14 @@ from ...core.base.base_analyzer import BaseAnalyzer
 from ...core.recognition import options_from_prefs
 from ...core.recognition.model import FeatureKind
 from ...core.registries import register_analyzer
-from ...core.utils.geometry import EdgeIndex, FaceIndex, get_face_uv_center, get_face_uv_normal
-from ...core.utils.nominal_wall import crossings, not_wall_faces
+from ...core.utils.geometry import (
+    EdgeIndex,
+    FaceIndex,
+    get_extent_along,
+    get_face_uv_center,
+    get_face_uv_normal,
+)
+from ...core.utils.nominal_wall import WALL_OWNERS, crossings, not_wall_faces
 from ...core.utils.part_features import recognize_cached
 
 #: Faces whose rays differ by more than this share of their median span a step.
@@ -59,8 +65,7 @@ MIN_STEP = 0.01
 MIN_WIDTH_RATIO = 0.5
 
 #: Faces of these may sit between two walls of a step.
-_CONNECTOR_OWNERS = frozenset({FeatureKind.FILLET, FeatureKind.CHAMFER, FeatureKind.POCKET,
-                               FeatureKind.CUTOUT, FeatureKind.STEP, FeatureKind.SLOT})
+_CONNECTOR_OWNERS = WALL_OWNERS | {FeatureKind.FILLET, FeatureKind.CHAMFER}
 
 
 @dataclass(frozen=True)
@@ -174,8 +179,25 @@ class ThicknessTransitionAnalyzer(BaseAnalyzer):
                 if across > 1.05 * max(ta, tb):
                     continue  # not two levels of one wall: they are too far apart across it
                 thick, thin = (a, b) if ta > tb else (b, a)
-                out.append(Transition(thick, thin, max(ta, tb), min(ta, tb), run, tuple(sorted(between))))
+                between = _between_levels(between, face_index, face_index.face_at(a),
+                                          face_index.face_at(b), normals[a])
+                out.append(Transition(thick, thin, max(ta, tb), min(ta, tb), run, between))
         return out
+
+
+def _between_levels(faces, face_index: FaceIndex, a, b, normal) -> tuple[int, ...]:
+    """Of the faces joining two levels, those lying between them (a step's
+    riser, a pad's sides), not ones running past them (a plate's end face):
+    the faces to show. All of them when none lies between."""
+    tol = 1e-3
+    levels = [*get_extent_along(a, normal), *get_extent_along(b, normal)]
+    lo, hi = min(levels) - tol, max(levels) + tol
+    inside = []
+    for f in sorted(faces):
+        f_lo, f_hi = get_extent_along(face_index.face_at(f), normal)
+        if f_lo >= lo and f_hi <= hi:
+            inside.append(f)
+    return tuple(inside or sorted(faces))
 
 
 def _width(face) -> float:
@@ -201,16 +223,20 @@ def _adjacency(shape: TopoDS_Shape, face_index: FaceIndex) -> dict[int, set[int]
 
 def _reachable(start: int, neighbours: dict, walls: dict, connector) -> list[tuple[int, set[int]]]:
     """Wall faces reached from *start* through at most MAX_CONNECTORS
-    connector faces, each with the connectors on the way."""
+    connector faces, each with the connectors on its shortest routes (all of
+    them: a pad's every side joins it to the floor)."""
     found: dict[int, set[int]] = {}
+    shortest: dict[int, int] = {}
     queue = collections.deque([(start, frozenset())])
     seen = {start}
     while queue:
         face, path = queue.popleft()
         for nxt in neighbours.get(face, ()):
             if nxt in walls:
-                if nxt != start and nxt not in found:
-                    found[nxt] = set(path)
+                if nxt == start or len(path) > shortest.get(nxt, len(path)):
+                    continue
+                shortest[nxt] = len(path)
+                found.setdefault(nxt, set()).update(path)
                 continue
             if nxt in seen or len(path) >= MAX_CONNECTORS or not connector(nxt):
                 continue

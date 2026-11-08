@@ -14,7 +14,7 @@ JSON-safe data, so it can be kept with a run's settings::
 
 Measuring (``measure_nominal_wall``): rays are cast inward from a few points
 on every plain wall face (faces no feature owns, or owned only by a pocket,
-cutout, step or slot). A ray that leaves the part through a face turned the
+cutout, step, slot or an unrecognised protrusion or depression). A ray that leaves the part through a face turned the
 opposite way has crossed a wall. The nominal wall is the area-weighted
 median of those crossings, so a few thick bosses or thin ribs don't move it.
 
@@ -50,9 +50,13 @@ SOURCE_MANUAL = "manual"
 SOURCE_NONE = "none"
 
 #: Features whose faces are walls of the part: their floors and side walls
-#: are the part's own walls. Faces of every other feature (bosses, ribs,
-#: holes, blends, snap fits...) are not used.
-_WALL_OWNERS = frozenset({FeatureKind.POCKET, FeatureKind.CUTOUT, FeatureKind.STEP, FeatureKind.SLOT})
+#: are the part's own walls. So are the regions no recognizer claimed
+#: (protrusions and depressions, such as a pad thickening a floor): they
+#: are material added to or taken from a wall, not a feature with rules of
+#: its own. Faces of every other feature (bosses, ribs, holes, blends,
+#: snap fits...) are not used.
+WALL_OWNERS = frozenset({FeatureKind.POCKET, FeatureKind.CUTOUT, FeatureKind.STEP, FeatureKind.SLOT,
+                         FeatureKind.PROTRUSION, FeatureKind.DEPRESSION})
 #: Features standing up from a wall: their caps and tips are not walls
 #: either, though some (a flush rib top) are only their support faces.
 _STANDING = frozenset({FeatureKind.BOSS, FeatureKind.RIB, FeatureKind.SNAP_FIT, FeatureKind.LIP})
@@ -161,15 +165,18 @@ def measure_nominal_wall(
 
 def not_wall_faces(result: RecognitionResult) -> set[int]:
     """Faces that are not plain walls: owned by a feature other than a pocket,
-    cutout, step or slot, or the cap or tip a boss, rib, snap fit or lip
-    stands up to (its supports other than the faces it stands on)."""
+    cutout, step, slot or unclaimed region, or the cap or tip a boss or rib
+    stands up to (its supports other than the base faces it names)."""
     out: set[int] = set()
     for feature in result.features:
-        if feature.kind not in _WALL_OWNERS:
+        if feature.kind not in WALL_OWNERS:
             out.update(feature.faces)
-        if feature.kind in _STANDING:
-            bases = set(feature.params.get("base_faces") or ())
-            out.update(f for f in feature.support_faces if f not in bases)
+        bases = feature.params.get("base_faces")
+        if feature.kind in _STANDING and bases:
+            # Its supports besides its base are what it stands up to (a cap, a
+            # flush top). A feature that doesn't name its base (a snap fit, a
+            # lip) only stands on its supports: they are walls.
+            out.update(f for f in feature.support_faces if f not in set(bases))
     return out
 
 
