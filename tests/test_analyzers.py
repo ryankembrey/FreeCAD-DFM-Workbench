@@ -4,6 +4,10 @@
 
 import unittest
 
+# Before the workbench: puts the repository on sys.path and FreeCAD (or its
+# stand-ins, where FreeCAD isn't installed) in place.
+import dfm_test_support  # noqa: F401
+
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeCylinder
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
 from OCP.gp import gp_Pnt, gp_Ax2, gp_Dir, gp_Vec

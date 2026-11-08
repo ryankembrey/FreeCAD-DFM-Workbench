@@ -5,7 +5,9 @@
 import sys
 import os
 
-WORKBENCH = os.path.expanduser("~/documents/git/dfm")
+# The repository this script is in (so a second checkout tests its own code).
+WORKBENCH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# A FreeCAD build, if there is one; the tests use FreeCAD stand-ins without it.
 FC_LIB = os.path.expanduser("~/documents/git/FreeCAD/build/debug/lib")
 
 for p in [WORKBENCH, FC_LIB]:

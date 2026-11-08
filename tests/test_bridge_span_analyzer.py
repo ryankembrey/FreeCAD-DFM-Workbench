@@ -4,6 +4,10 @@
 
 import unittest
 
+# Before the workbench: puts the repository on sys.path and FreeCAD (or its
+# stand-ins, where FreeCAD isn't installed) in place.
+import dfm_test_support  # noqa: F401
+
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepClass3d import BRepClass3d_SolidClassifier
