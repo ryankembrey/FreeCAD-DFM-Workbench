@@ -266,14 +266,20 @@ class FindingCard(QtWidgets.QFrame):
 
         self.adjustSize()
 
+    def _accent_hex(self) -> Optional[str]:
+        """The border and separator color; None while there is nothing to show."""
+        finding = getattr(self, "_finding", None)
+        if finding is None:
+            return None
+        return _SEVERITY_BG.get(finding.severity, "#444444")
+
     def _apply_theme(self):
         """Apply colours from the current FreeCAD theme palette."""
-        if not hasattr(self, "_finding") or self._finding is None:
+        sev_hex = self._accent_hex()
+        if sev_hex is None:
             return
 
         self._applying_theme = True
-
-        sev_hex = _SEVERITY_BG.get(self._finding.severity, "#444444")
 
         # Use the main window palette so we pick up FreeCAD stylesheet themes
         mw = Gui.getMainWindow()

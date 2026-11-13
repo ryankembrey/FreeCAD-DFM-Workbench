@@ -74,6 +74,10 @@ class ResultsCamera:
     def whole_model(self) -> None:
         self._move([], face=False, zoom=True)
 
+    def zoom_to_points(self, points: list[Vec]) -> None:
+        """Fit *points* (world coordinates, such as a box's corners) in view."""
+        self._move([], face=False, zoom=True, points=points)
+
     def standard_view(self, name: str) -> None:
         eye = VIEWS.get(name)
         if eye is not None:
@@ -121,7 +125,8 @@ class ResultsCamera:
 
     # -- Placing the camera -----------------------------------------------
 
-    def _move(self, refs: list[Ref], face: bool, zoom: bool, direction: Optional[Vec] = None) -> None:
+    def _move(self, refs: list[Ref], face: bool, zoom: bool, direction: Optional[Vec] = None,
+              points: Optional[list[Vec]] = None) -> None:
         view = get_active_view()
         shape = getattr(self.target_object, "Shape", None)
         if view is None or shape is None:
@@ -144,6 +149,8 @@ class ResultsCamera:
 
         model = bound_box_corners(shape.BoundBox)
         target = [c for sub in self._subshapes(refs) for c in bound_box_corners(sub.BoundBox)]
+        if points:
+            target = [tuple(p) for p in points]
         if target:
             padding = max(dfm_params().GetFloat("ResultsCameraPadding", 1.7), 1.2)
             # Edges are thin, so frame more of the part around them than around faces.

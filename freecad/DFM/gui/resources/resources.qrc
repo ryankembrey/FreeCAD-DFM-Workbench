@@ -18,5 +18,7 @@
     <file>icons/dfm_curvature.svg</file>
     <file>icons/direction.svg</file>
     <file>icons/legend.svg</file>
+    <file>icons/dfm_symmetry.svg</file>
+    <file>icons/dfm_compare.svg</file>
 </qresource>
 </RCC>

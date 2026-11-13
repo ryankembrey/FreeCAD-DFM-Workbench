@@ -37,6 +37,9 @@ class DFMWorkbench(Gui.Workbench):
             "DFM_ThicknessAnalysis",
             "DFM_UndercutAnalysis",
             "DFM_CurvatureAnalysis",
+            "Separator",
+            "DFM_SymmetryCheck",
+            "DFM_CompareBodies",
         ]
         self.appendToolbar("DFM Analysis", self.list)
         self.appendMenu("DFM", self.list)
