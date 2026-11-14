@@ -5,9 +5,11 @@
 """Taking the screenshots: when, and how.
 
 Shots are re-taken only when something they could show has changed: the
-workbench's code and resources, the example parts, the shot code itself or
-the pinned environment (pixi.lock). A fingerprint of all of that is kept in
-docs/_data/shots.json. When it matches and every image is there, nothing runs.
+workbench's code and resources, the parts in docs/models (and models.yaml),
+the shot code itself or the pinned environment (pixi.lock). A fingerprint of
+all of that is kept in docs/_data/shots.json. When it matches and every image
+is there, nothing runs. Only files git would commit count, so a machine with
+extra untracked files gets the same fingerprint as CI.
 
 They are taken in FreeCAD from the pixi environment, under Xvfb, with a
 throwaway FreeCAD user folder (nobody's own settings or saved processes) and
@@ -15,7 +17,8 @@ a private font configuration (the environment's fonts only). So the same
 code gives the same pictures on any machine.
 
 A new image replaces the old one only if it visibly differs, so rendering
-noise doesn't turn into commits.
+noise doesn't turn into commits. A new PDF replaces the old one only if it
+differs in more than its creation time and random document id.
 """
 
 from __future__ import annotations
@@ -23,13 +26,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 from .. import env
-from . import REGISTRY, path
+from . import REGISTRY, files, path
 
 MANIFEST = "_data/shots.json"  # relative to docs/
 #: A pixel counts as changed past this difference (0-255) in any channel...
@@ -39,22 +43,30 @@ PIXEL_TOLERANCE = 40
 #: the renderer is deterministic, so real noise is rare.
 CHANGED_PIXELS = 50
 
-_FINGERPRINT_DIRS = ("freecad/DFM", "resources", "docs/_pipeline/shots")
-_FINGERPRINT_SUFFIXES = {".py", ".yaml", ".ui", ".svg", ".qrc", ".stp", ".step", ".STEP", ".FCStd", ".png"}
+_FINGERPRINT_PATHS = ("freecad/DFM", "resources", "docs/models", "docs/_pipeline/shots",
+                      "docs/_pipeline/models.py", "pixi.lock")
+_FINGERPRINT_SUFFIXES = {".py", ".yaml", ".ui", ".svg", ".qrc", ".stp", ".step", ".fcstd", ".png", ".lock"}
+
+
+def _visible(paths) -> list[Path]:
+    """Files under *paths* that git would commit (tracked, or new and not
+    ignored). Without git, every file."""
+    try:
+        r = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *paths],
+                           cwd=env.REPO, capture_output=True, timeout=60, check=True)
+        found = [env.REPO / p for p in r.stdout.decode("utf-8").split("\0") if p]
+    except (OSError, subprocess.SubprocessError):
+        found = [p for rel in paths for p in ([env.REPO / rel] if (env.REPO / rel).is_file()
+                                              else (env.REPO / rel).rglob("*"))]
+    return sorted({p for p in found if p.is_file()})
 
 
 def fingerprint() -> str:
     h = hashlib.sha256()
-    files = []
-    for rel in _FINGERPRINT_DIRS:
-        for p in sorted((env.REPO / rel).rglob("*")):
-            if p.is_file() and p.suffix in _FINGERPRINT_SUFFIXES and "__pycache__" not in p.parts:
-                files.append(p)
-    lock = env.REPO / "pixi.lock"
-    if lock.exists():
-        files.append(lock)
-    for p in files:
-        h.update(str(p.relative_to(env.REPO)).encode())
+    for p in _visible(_FINGERPRINT_PATHS):
+        if p.suffix.lower() not in _FINGERPRINT_SUFFIXES or "__pycache__" in p.parts:
+            continue
+        h.update(p.relative_to(env.REPO).as_posix().encode())
         h.update(p.read_bytes())
     return h.hexdigest()
 
@@ -86,6 +98,34 @@ def _images_differ(old: bytes, new: bytes) -> bool:
     return changed > CHANGED_PIXELS
 
 
+#: What differs between two writes of the same PDF: Qt's dates and random ids,
+#: and what FreeCAD stamps into each viewport image (when, the capture's
+#: temporary folder, and its camera in a MIBA block, whose clipping planes
+#: wobble). None of it shows on the page.
+_PDF_VOLATILE = re.compile(
+    rb"/(?:CreationDate|ModDate) ?\(D:[^)]*\)"
+    rb"|Creation Time: [^\xff]*"
+    rb"|dfm_report_\w+"
+    rb"|(?s:<MIBA.*?</MIBA>)"
+    rb"|xmp:(?:CreateDate|ModifyDate|MetadataDate)(?:=\"[^\"]*\"|>[^<]*<)"
+    rb"|xmpMM:(?:DocumentID|InstanceID)(?:=\"[^\"]*\"|>[^<]*<)"
+    rb"|/ID ?\[[^\]]*\]"
+    rb"|uuid:[0-9a-fA-F-]{36}")
+
+
+def _pdf_content(data: bytes) -> bytes:
+    """A PDF without what changes on every write, and without its table of byte
+    offsets (which moves when a removed date has another length)."""
+    end = data.rfind(b"\nxref")
+    return _PDF_VOLATILE.sub(b"", data[:end] if end > 0 else data)
+
+
+def _files_differ(rel: str, old: bytes, new: bytes) -> bool:
+    if rel.endswith(".pdf"):
+        return _pdf_content(old) != _pdf_content(new)
+    return old != new
+
+
 def _fonts_conf(tmp: Path) -> Path | None:
     """A fontconfig file that sees only the environment's fonts."""
     prefix = os.environ.get("CONDA_PREFIX")
@@ -115,8 +155,8 @@ def _missing_tools() -> list[str]:
     return missing
 
 
-def take(ids: list[str], timeout: int = 3600) -> tuple[dict[str, bytes], dict[str, str]]:
-    """Run FreeCAD and take *ids*; returns ({id: png bytes}, {id: error})."""
+def take(ids: list[str], timeout: int = 3600) -> tuple[dict[str, bytes], dict[str, bytes], dict[str, str]]:
+    """Run FreeCAD and take *ids*; returns ({id: png bytes}, {file: bytes}, {id: error})."""
     with tempfile.TemporaryDirectory(prefix="dfm-shots-") as tmp:
         tmp = Path(tmp)
         out = tmp / "out"
@@ -130,11 +170,15 @@ def take(ids: list[str], timeout: int = 3600) -> tuple[dict[str, bytes], dict[st
             "DFM_SHOTS_IDS": ",".join(ids),
             "FREECAD_USER_HOME": str(home),
             "LC_ALL": "C.UTF-8",
+            "TZ": "UTC",
             "PYTHONPATH": "",
             "PYTHONNOUSERSITE": "1",
             # One meshing thread: gmsh's parallel meshing isn't repeatable, and the
             # contour pictures would differ by a few pixels on every run.
             "OMP_NUM_THREADS": "1",
+            # Qt's hashes are seeded at random per process, and the PDF writer
+            # puts the report's fonts in hash order: fix the seed.
+            "QT_HASH_SEED": "0",
         })
         # FreeCAD draws on Xvfb's X display, never on your desktop: on a Wayland
         # session (Sway, GNOME...) Qt would otherwise pick Wayland and open the
@@ -155,32 +199,35 @@ def take(ids: list[str], timeout: int = 3600) -> tuple[dict[str, bytes], dict[st
             results = json.loads((out / "results.json").read_text(encoding="utf-8"))
         except FileNotFoundError:
             tail = (proc.stdout + proc.stderr)[-3000:]
-            return {}, {i: "FreeCAD stopped before writing results:\n" + tail for i in ids}
-        images, errors = {}, {}
+            return {}, {}, {i: "FreeCAD stopped before writing results:\n" + tail for i in ids}
+        images, made, errors = {}, {}, {}
         for i in ids:
             status = results.get(i, "not taken")
             if status == "ok":
                 images[i] = (out / f"{i}.png").read_bytes()
+                for rel in REGISTRY[i].files:
+                    made[rel] = (out / "files" / rel).read_bytes()
             else:
                 errors[i] = status
         if "_runner" in results:
             errors["_runner"] = results["_runner"]
-        return images, errors
+        return images, made, errors
 
 
 def run(out, check: bool, force: bool = False) -> list[str]:
     """Bring the screenshots up to date (or, with *check*, only say whether they are).
     Returns notes to print."""
     ids = sorted(REGISTRY)
+    outputs = [path(i) for i in ids] + files()  # under docs/content
     current = fingerprint()
     manifest = _load_manifest()
-    present = all((env.CONTENT / path(i)).exists() for i in ids)
+    present = all((env.CONTENT / rel).exists() for rel in outputs)
     fresh = manifest.get("fingerprint") == current and manifest.get("shots") == ids and present
 
     def keep_all():
-        for i in ids:
-            if (env.CONTENT / path(i)).exists():
-                out.keep("content/" + path(i))
+        for rel in outputs:
+            if (env.CONTENT / rel).exists():
+                out.keep("content/" + rel)
         out.keep(MANIFEST)
 
     if (fresh and not force) or check:
@@ -196,7 +243,7 @@ def run(out, check: bool, force: bool = False) -> list[str]:
         return ["Screenshots not retaken: this needs " + " and ".join(missing) + "."]
 
     print(f"Taking {len(ids)} screenshots in FreeCAD (a few minutes)...", flush=True)
-    images, errors = take(ids)
+    images, made, errors = take(ids)
     notes = []
     for i in ids:
         rel = "content/" + path(i)
@@ -210,6 +257,12 @@ def run(out, check: bool, force: bool = False) -> list[str]:
             if (env.CONTENT / path(i)).exists():
                 out.keep(rel)  # keep the last good one
             notes.append(f"Screenshot {i} failed:\n{errors.get(i, '')}")
+        for f in REGISTRY[i].files:
+            old = env.CONTENT / f
+            if f in made and (not old.exists() or _files_differ(f, old.read_bytes(), made[f])):
+                out.write("content/" + f, made[f])
+            elif old.exists():
+                out.keep("content/" + f)
     if "_runner" in errors:
         notes.append("The screenshot runner failed:\n" + errors["_runner"])
     if not errors:

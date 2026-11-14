@@ -1,0 +1,56 @@
+# The parts the documentation shows.
+#
+# Every screenshot of a part in the 3D view, and the sample PDF report on the
+# site, is made from the two parts below. To change a part:
+#
+#   1. Put its file in this folder (docs/models/): STEP (.step, .stp) or a
+#      FreeCAD document (.FCStd, then also say which `object` in it).
+#   2. Change `part:` below, and the settings that go with it.
+#   3. Run `pixi run docs` and commit docs/.
+#
+# Every screenshot and the report are then retaken with the new part. The
+# build checks this file first (that the part exists, is committed, and that
+# the material is one the process has) and stops with a message if not.
+#
+# Directions are [x, y, z] in the part's own coordinates.
+
+
+# Injection molding: the setup panel, the results, History, the Thickness,
+# Draft and Undercut analyses, Symmetry Check and Compare Bodies.
+molded:
+  part: enclosure.step
+  label: Enclosure            # its name in FreeCAD's tree and the results panel
+  material: ABS
+  pull_direction: [0, 0, 1]   # the direction the mold opens
+  # The color scale of the Thickness Analysis picture, in mm ([low, high]).
+  # Leave it out for the tool's automatic range.
+  thickness_range: [0, 4]
+  # The History picture compares two saved runs: the first with this
+  # material, the second with `material`. Pick one with stricter walls, so the
+  # second run shows findings resolved.
+  history_first_material: Long-Fiber Reinforced Plastics
+
+
+# FDM 3D printing: the 3D printing results and the Curvature Analysis.
+printed:
+  part: holder.step
+  label: Holder
+  material: PLA
+  print_direction: [0, 1, 0]  # build direction: up from the bed
+  nozzle_diameter: 0.4        # mm
+  layer_height: 0.2           # mm
+
+
+# The sample PDF report on the site, written by the workbench's own Export PDF
+# report from an analysis of one of the parts above.
+report:
+  part: molded                # molded or printed
+  # Printed on the report. Fixed, so the PDF only changes when what it
+  # reports changes.
+  date: 2026-11-14
+  # Report options, as in Edit > Preferences > DFM > Reports. Anything left
+  # out keeps the workbench's default. Field names are those of
+  # ReportSettings in freecad/DFM/gui/report/settings.py.
+  settings:
+    project: Sample report
+    prepared_by: DFM Workbench documentation

@@ -154,8 +154,10 @@ def _neutral_paths(widget) -> None:
 
     home = os.environ.get("FREECAD_USER_HOME", "").rstrip("/")
     for label in widget.findChildren(QtWidgets.QLabel):
-        if "Workers run on" in label.text() and "/" in label.text():
-            label.setText("Workers run on /usr/bin/python3.")
+        # Names the worker Python once a worker has started, which depends on
+        # the machine and on what ran before: always show the text before.
+        if label.text().startswith(("Workers run on", "Workers start")):
+            label.setText("Workers start with the first analysis.")
     for kind in (QtWidgets.QLabel, QtWidgets.QLineEdit):
         for w in widget.findChildren(kind):
             if home and home in w.text():

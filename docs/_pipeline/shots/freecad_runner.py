@@ -7,7 +7,7 @@
 Started by engine.py with:
 
     DFM_REPO        the repository
-    DFM_SHOTS_OUT   folder to write <id>.png and results.json into
+    DFM_SHOTS_OUT   folder to write <id>.png, results.json and files/<path> into
     DFM_SHOTS_IDS   comma-separated shot ids to take
 
 and a throwaway FreeCAD user folder, so nothing of anyone's own FreeCAD
@@ -51,6 +51,26 @@ def prepare() -> None:
     import freecad.DFM.init_gui  # noqa: F401  registers the workbench and its commands
 
     Gui.activateWorkbench("DFMWorkbench")
+    _no_message_boxes()
+
+
+def _no_message_boxes() -> None:
+    """Nobody is there to click OK: a message box would wait until the timeout.
+    Print it instead and answer with the box's default."""
+    from PySide6 import QtWidgets
+
+    box = QtWidgets.QMessageBox
+
+    def make(kind, answer):
+        def show(_parent, title, text, *args, **kwargs):
+            print(f"[{kind}] {title}: {text}", file=sys.stderr, flush=True)
+            return answer
+        return staticmethod(show)
+
+    box.information = make("information", box.StandardButton.Ok)
+    box.warning = make("warning", box.StandardButton.Ok)
+    box.critical = make("critical", box.StandardButton.Ok)
+    box.question = make("question", box.StandardButton.No)
 
 
 def main() -> None:
@@ -59,7 +79,7 @@ def main() -> None:
         prepare()
         from _pipeline.shots import REGISTRY, panels, scenes  # noqa: F401  (registers the shots)
 
-        ctx = scenes.Context(Gui.getMainWindow())
+        ctx = scenes.Context(Gui.getMainWindow(), os.path.join(OUT, "files"))
         for shot_id in IDS:
             shot = REGISTRY.get(shot_id)
             if shot is None:
@@ -67,6 +87,9 @@ def main() -> None:
                 continue
             try:
                 image = shot.fn(ctx) if shot.engine == "scene" else shot.fn()
+                for rel in shot.files:
+                    if not os.path.isfile(ctx.file(rel)):
+                        raise RuntimeError(f"the shot didn't write {rel}")
                 if image is None or image.isNull():
                     raise RuntimeError("the shot returned no image")
                 if not image.save(os.path.join(OUT, f"{shot_id}.png")):

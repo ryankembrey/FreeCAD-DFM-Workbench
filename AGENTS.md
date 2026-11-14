@@ -26,7 +26,8 @@ included.
 
 **Screenshots** are taken by code, in a real FreeCAD from the pixi environment on a virtual display
 (needs `xvfb-run` from the system). `pixi run docs` retakes them only when the workbench's code,
-resources, example parts or the shot code changed (about 6 minutes); otherwise it skips them.
+resources, the parts in `docs/models/` or the shot code changed (about 10 minutes); otherwise it
+skips them.
 `python docs/build.py --shots` retakes all of them; `--no-shots` leaves them alone.
 
 | You changed | Also do |
@@ -37,6 +38,7 @@ resources, example parts or the shot code changed (about 6 minutes); otherwise i
 | A new built-in process | Run `pixi run docs`; it gets its own pages. Add its file name to `PROCESS_ORDER` in `docs/_pipeline/model.py` to place it in the list. Add claims for its values. |
 | A tool, panel, command, preference or anything a user sees | Update or add a hand-written page in `docs/content/` and add new pages to the `nav` in `docs/zensical.toml` (outside the `BEGIN GENERATED` blocks). Add a screenshot of it (below). |
 | A panel's layout or what it shows | Nothing by hand: its screenshots are retaken. Look at them (`docs/content/assets/shots/`) and fix any page whose text no longer matches the picture. |
+| The PDF report (`gui/report/`) | Nothing by hand: the sample report (`docs/content/assets/reports/sample-dfm-report.pdf`) and its picture are made again. Look at both. If you added a report option, it can be set for the sample in `docs/models/models.yaml` under `report: settings:`. |
 | Something that changes what an existing guide or concept page says | Fix that page in the same change. Search `docs/content` for the feature's name. |
 
 ### Screenshots
@@ -45,13 +47,20 @@ Every picture of the workbench on the site is made by a shot in `docs/_pipeline/
 
 - `panels.py`: windows and panels that need no model (Process Library, dialogs, preference pages).
 - `scenes.py`: anything with a part in the 3D view. Shots drive the real panels the way a user
-  does (the methods their buttons call) on the example parts in `resources/examples`.
+  does (the methods their buttons call) on the parts named in `docs/models/models.yaml`:
+  `MOLDED` (injection molding) and `PRINTED` (FDM). Open them with `ctx.open(MOLDED)` or
+  `analyse(ctx, MOLDED)`; never name a part file, material or direction in a shot. The owner
+  changes the parts by editing that file.
 
 A shot is a function decorated with `@shot("<id>", "panel" | "scene", "<what it shows>")` that
 returns a `QImage`. Its image is `docs/content/assets/shots/<id>.png`; use it in a page as
 `[![<what it shows>](../assets/shots/<id>.png)](../assets/shots/<id>.png)` (adjust the `../`): the
 link lets readers open it full size. The build fails if a page uses a
 shot that doesn't exist, or a shot isn't used by any page.
+
+A scene shot can also make a file for the site, such as the sample PDF report: list it in
+`@shot(..., files=("assets/reports/<name>",))`, write it to `ctx.file("assets/reports/<name>")`, and
+link it from a page. The same checks apply.
 
 - Never hand-make or edit a screenshot, and never put one in `docs/content` yourself.
 - Take a shot after the thing it shows has finished drawing (`ctx.pump()`), and crop to what the
@@ -64,7 +73,8 @@ shot that doesn't exist, or a shot isn't used by any page.
 `docs/build.py` overwrites these, and deletes anything there it didn't write:
 
 - `docs/content/reference/` (rule and process pages)
-- `docs/content/assets/diagrams/`, `docs/content/assets/shots/`, `docs/content/assets/logo.svg`
+- `docs/content/assets/diagrams/`, `docs/content/assets/shots/`, `docs/content/assets/reports/`,
+  `docs/content/assets/logo.svg`
 - `docs/content/reference/preferences.md`, `docs/content/reference/features.md`
 - `docs/content/changelog.md` (rebuilt from git tags each build, not committed)
 - `docs/_data/shots.json` (the screenshots' fingerprint)

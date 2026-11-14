@@ -23,3 +23,13 @@ The **Export** tab writes the results to a file.
   page size, images and what to include, with a live preview. Images are taken from the 3D view as
   the report is written. Defaults for new reports are in **Edit → Preferences → DFM → Reports**.
 - **CSV**: the findings as a table, for a spreadsheet or your own tools.
+
+## A sample report
+
+This report was written by **Export PDF report**, with the default report options, from an
+analysis of one of the parts shown in these guides. It is made again whenever the workbench
+changes, so it always shows what the current version writes.
+
+[![Two pages of the sample DFM report: the summary, and the findings of a rule](../assets/shots/report-pages.png)](../assets/reports/sample-dfm-report.pdf)
+
+[Open the sample report (PDF)](../assets/reports/sample-dfm-report.pdf){ .md-button }

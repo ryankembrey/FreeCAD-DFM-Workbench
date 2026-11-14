@@ -8,36 +8,45 @@ Run inside FreeCAD by freecad_runner.py. Each function gets a Context and
 returns a QImage. The tools are driven the way a user drives them (the same
 panels and methods their buttons call), so the pictures show the real thing.
 
-Demo parts come from resources/examples. The enclosure is the injection
-molding example; the holder is the 3D printing one.
+The parts, and the process settings they are analysed with, come from
+docs/models/models.yaml: ``MODELS.molded`` (injection molding) and
+``MODELS.printed`` (FDM). Nothing here names a part.
 """
 
 from __future__ import annotations
 
-import math
+import datetime as _dt
 import os
+import re
 import time
 
 import FreeCAD as App  # type: ignore
 import FreeCADGui as Gui  # type: ignore
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .. import models
 from . import shot
 
-REPO = os.environ.get("DFM_REPO", "")
-ENCLOSURE = "resources/examples/lastic enclosure 2.STEP"
-HOLDER = "resources/examples/Holder.stp"
-LEGO = "resources/examples/LEGO Brick v1.step"
-
-PIM = "Plastic Injection Molding"
+MODELS, _problems = models.load()
+if MODELS is None:  # the build checks the file first, so this is only a safety net
+    raise RuntimeError("docs/models/models.yaml: " + "; ".join(_problems))
+MOLDED, PRINTED = MODELS.molded, MODELS.printed
+PIM = MOLDED.process
 
 
 class Context:
     """What the shots share: the main window, parts, the view and grabbing."""
 
-    def __init__(self, mw):
+    def __init__(self, mw, files_dir: str = ""):
         self.mw = mw
+        self.files_dir = files_dir
         self.presenter = None
+
+    def file(self, rel: str) -> str:
+        """Where a shot writes its file *rel* (a path under docs/content; see ``shot(files=...)``)."""
+        path = os.path.join(self.files_dir, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
 
     # -- set-up ---------------------------------------------------------------
 
@@ -47,15 +56,26 @@ class Context:
             QtWidgets.QApplication.processEvents()
             time.sleep(0.01)
 
-    def open(self, rel_path: str, label: str):
-        """A new document holding the part at *rel_path*, named *label*."""
-        import Import  # type: ignore
+    def open(self, part: models.Part):
+        """A document holding *part* (from models.yaml), named as it says."""
+        if part.path.suffix.lower() == ".fcstd":
+            doc = App.openDocument(str(part.path))
+            matches = [o for o in doc.Objects if part.object in (o.Name, o.Label)]
+            if not matches:
+                raise RuntimeError(f"{part.path.name} has no object {part.object!r}")
+            obj = matches[0]
+            for o in doc.Objects:  # only the part shows
+                if o is not obj and getattr(o, "ViewObject", None) is not None:
+                    o.ViewObject.Visibility = False
+            obj.ViewObject.Visibility = True
+        else:
+            import Import  # type: ignore
 
-        doc = App.newDocument("Demo")
-        Import.insert(os.path.join(REPO, rel_path), doc.Name)
-        doc.recompute()
-        obj = next(o for o in doc.Objects if getattr(o, "Shape", None) and o.Shape.Solids)
-        obj.Label = label
+            doc = App.newDocument(re.sub(r"\W", "_", part.label) or "Part")
+            Import.insert(str(part.path), doc.Name)
+            doc.recompute()
+            obj = next(o for o in doc.Objects if getattr(o, "Shape", None) and o.Shape.Solids)
+        obj.Label = part.label
         Gui.Selection.clearSelection()
         self.iso()
         return obj
@@ -172,14 +192,26 @@ class Context:
         raise RuntimeError(f"no toolbar {title!r}")
 
 
-def _pull_up():
+def _dir(xyz):
     from OCP.gp import gp_Dir
 
-    return gp_Dir(0, 0, 1)
+    return gp_Dir(*xyz)
 
 
-def _pim_requirements():
-    return {"PULL_DIRECTION": _pull_up(), "SIDE_ACTIONS": [], "NOMINAL_WALL_THICKNESS": {"mode": "auto"}}
+def requirements(part: models.Part) -> dict:
+    """What the setup panel would pass to the analysis for *part*."""
+    if part.key == "molded":
+        return {"PULL_DIRECTION": _dir(part.direction("pull_direction")), "SIDE_ACTIONS": [],
+                "NOMINAL_WALL_THICKNESS": {"mode": "auto"}}
+    return {"PRINT_ORIENTATION": _dir(part.direction("print_direction")),
+            "NOZZLE_DIAMETER": float(part.options["nozzle_diameter"]),
+            "LAYER_HEIGHT": float(part.options["layer_height"])}
+
+
+def analyse(ctx: Context, part: models.Part, material: str | None = None):
+    """Open *part* and analyse it with its process, as Run does. Returns (object, results)."""
+    obj = ctx.open(part)
+    return obj, ctx.analyse(obj, part.process, material or part.material, **requirements(part))
 
 
 # -- getting started ------------------------------------------------------------
@@ -187,7 +219,7 @@ def _pim_requirements():
 
 @shot("toolbar", "scene", "The DFM Analysis toolbar")
 def toolbar(ctx: Context):
-    ctx.open(ENCLOSURE, "Enclosure")
+    ctx.open(MOLDED)
     bar = ctx.toolbar("DFM Analysis")
     ctx.pump(0.3)
     image = bar.grab().toImage()
@@ -198,7 +230,7 @@ def toolbar(ctx: Context):
 @shot("setup-panel", "scene",
       "The DFM Analysis setup: the part, the process and material, and the pull direction arrow on the model")
 def setup_panel(ctx: Context):
-    obj = ctx.open(ENCLOSURE, "Enclosure")
+    obj = ctx.open(MOLDED)
     from freecad.DFM.gui.task_setup import TaskSetup
 
     ctx.select(obj)
@@ -207,7 +239,7 @@ def setup_panel(ctx: Context):
     ctx.pump(1.0)
     _choose(panel.form.cbManProcess, PIM)
     ctx.pump(0.5)
-    _choose(panel.form.cbMaterial, "ABS")
+    _choose(panel.form.cbMaterial, MOLDED.material)
     ctx.pump(0.5)
     ctx.iso()
     return ctx.view_and_task()
@@ -216,16 +248,14 @@ def setup_panel(ctx: Context):
 @shot("results-window", "scene",
       "Results of an injection molding analysis: findings highlighted on the model, and listed in the results panel")
 def results_window(ctx: Context):
-    obj = ctx.open(ENCLOSURE, "Enclosure")
-    ctx.analyse(obj, PIM, "ABS", **_pim_requirements())
+    analyse(ctx, MOLDED)
     ctx.iso()
     return ctx.window()
 
 
 @shot("results-panel", "scene", "The results panel: findings grouped by criticality, with filters above them")
 def results_panel(ctx: Context):
-    obj = ctx.open(ENCLOSURE, "Enclosure")
-    ctx.analyse(obj, PIM, "ABS", **_pim_requirements())
+    analyse(ctx, MOLDED)
     panel = ctx.results_panel()
     panel._expand_all()
     ctx.pump(0.3)
@@ -235,8 +265,7 @@ def results_panel(ctx: Context):
 @shot("results-finding", "scene",
       "A finding selected in the results panel: its faces highlighted and the camera turned to face them")
 def results_finding(ctx: Context):
-    obj = ctx.open(ENCLOSURE, "Enclosure")
-    results = ctx.analyse(obj, PIM, "ABS", **_pim_requirements())
+    _obj, results = analyse(ctx, MOLDED)
     panel = ctx.results_panel()
     panel._expand_all()
     finding = _first(results, ("MIN_DRAFT_ANGLE", "MAX_WALL_THICKNESS", "SHARP_INTERNAL_CORNERS"))
@@ -248,8 +277,7 @@ def results_finding(ctx: Context):
 
 @shot("results-export", "scene", "The Export tab: a PDF report from a preset, or the findings as a CSV file")
 def results_export(ctx: Context):
-    obj = ctx.open(ENCLOSURE, "Enclosure")
-    ctx.analyse(obj, PIM, "ABS", **_pim_requirements())
+    analyse(ctx, MOLDED)
     panel = ctx.results_panel()
     panel.form.tabWidget.setCurrentIndex(2)
     return ctx.crop(ctx.task_dock())
@@ -271,14 +299,15 @@ def results_history(ctx: Context):
 
     history.datetime = _Clock
     try:
-        obj = ctx.open(ENCLOSURE, "Enclosure")
+        obj = ctx.open(MOLDED)
         # Each run is saved, as the panel's Save button does; the History tab reads
         # the saved runs when the panel opens, so the last run is opened after them.
         # Run 1 asks for thicker walls than run 2, so run 2 shows findings resolved.
-        for material, save in (("Long-Fiber Reinforced Plastics", True), ("ABS", True), ("ABS", False)):
+        first = MOLDED.options.get("history_first_material") or MOLDED.material
+        for material, save in ((first, True), (MOLDED.material, True), (MOLDED.material, False)):
             Gui.Control.closeDialog()
             ctx.pump(0.3)
-            ctx.analyse(obj, PIM, material, **_pim_requirements())
+            ctx.analyse(obj, PIM, material, **requirements(MOLDED))
             if save:
                 _save_run(ctx)
     finally:
@@ -292,12 +321,9 @@ def results_history(ctx: Context):
 # -- 3D printing -------------------------------------------------------------------
 
 
-@shot("fdm-results", "scene", "Results of an FDM analysis of a printed holder, printed upright")
+@shot("fdm-results", "scene", "Results of an FDM analysis of a 3D printed part")
 def fdm_results(ctx: Context):
-    from OCP.gp import gp_Dir
-
-    obj = ctx.open(HOLDER, "Holder")
-    ctx.analyse(obj, "FDM", "PLA", PRINT_ORIENTATION=gp_Dir(0, 1, 0), NOZZLE_DIAMETER=0.4, LAYER_HEIGHT=0.2)
+    analyse(ctx, PRINTED)
     ctx.iso()
     return ctx.view_and_task()
 
@@ -305,11 +331,11 @@ def fdm_results(ctx: Context):
 # -- contours and inspection ----------------------------------------------------------
 
 
-def _contour(ctx: Context, measure_name: str, title: str, part=ENCLOSURE, label="Enclosure", value_range=None):
+def _contour(ctx: Context, measure_name: str, title: str, part: models.Part = MOLDED, value_range=None):
     from freecad.DFM.app.contour import measures
     from freecad.DFM.gui.contour.panel import ContourTaskPanel
 
-    obj = ctx.open(part, label)
+    obj = ctx.open(part)
     panel = ContourTaskPanel(getattr(measures, measure_name)(), title)
     Gui.Control.showDialog(panel)
     ctx.pump(0.5)
@@ -326,7 +352,8 @@ def _contour(ctx: Context, measure_name: str, title: str, part=ENCLOSURE, label=
 
 @shot("contour-thickness", "scene", "Thickness Analysis: the model colored by wall thickness")
 def contour_thickness(ctx: Context):
-    return _contour(ctx, "ThicknessMeasure", "Thickness Analysis", value_range=(0.0, 4.0))
+    return _contour(ctx, "ThicknessMeasure", "Thickness Analysis",
+                    value_range=MOLDED.options.get("thickness_range"))
 
 
 @shot("contour-draft", "scene", "Draft Analysis: the model colored by draft angle to the pull direction")
@@ -342,14 +369,14 @@ def contour_undercut(ctx: Context):
 
 @shot("contour-curvature", "scene", "Curvature Analysis: the model colored by its tightest radius")
 def contour_curvature(ctx: Context):
-    return _contour(ctx, "CurvatureMeasure", "Curvature Analysis", HOLDER, "Holder")
+    return _contour(ctx, "CurvatureMeasure", "Curvature Analysis", PRINTED)
 
 
 @shot("symmetry-check", "scene", "Symmetry Check: whether the part is symmetric, and what isn't")
 def symmetry_check(ctx: Context):
     from freecad.DFM.gui.inspection.symmetry_panel import SymmetryPanel
 
-    obj = ctx.open(ENCLOSURE, "Enclosure")
+    obj = ctx.open(MOLDED)
     ctx.select(obj)
     panel = SymmetryPanel()
     Gui.Control.showDialog(panel)
@@ -368,13 +395,13 @@ def compare_bodies(ctx: Context):
     import Part  # type: ignore
     from freecad.DFM.gui.inspection.compare_panel import ComparePanel
 
-    a = ctx.open(ENCLOSURE, "Enclosure")
+    a = ctx.open(MOLDED)
     bb = a.Shape.BoundBox
     hole = Part.makeCylinder(4.0, bb.ZLength * 3, App.Vector(bb.Center.x + bb.XLength * 0.2,
                                                               bb.Center.y, bb.ZMin - bb.ZLength))
-    b = a.Document.addObject("Part::Feature", "EnclosureB")
+    b = a.Document.addObject("Part::Feature", "PartB")
     b.Shape = a.Shape.cut(hole)
-    b.Label = "Enclosure (new)"
+    b.Label = f"{MOLDED.label} (new)"
     a.Document.recompute()
     a.ViewObject.Visibility = False
     ctx.pump(0.2)
@@ -390,6 +417,81 @@ def compare_bodies(ctx: Context):
     ctx.pump(1.0)
     ctx.iso()
     return ctx.view_and_task()
+
+
+# -- the sample report -----------------------------------------------------------------
+
+REPORT = "assets/reports/sample-dfm-report.pdf"
+
+
+@shot("report-pages", "scene", "Two pages of the sample DFM report: the summary, and the findings of a rule",
+      files=(REPORT,))
+def report_pages(ctx: Context):
+    """Writes the sample report with Export PDF report, as the results panel's
+    Export button does (with the report settings in models.yaml), and returns
+    its first pages, painted the way the report dialog previews them."""
+    from freecad.DFM.gui.report.exporter import export_pdf
+    from freecad.DFM.gui.report.layout import ReportLayout, page_thumbnail
+    from freecad.DFM.gui.report.template import get_template
+
+    report = MODELS.report
+    analyse(ctx, MODELS.parts[report.part])
+    presenter = ctx.presenter
+    data = presenter._report_data()
+    data.created = _dt.datetime.combine(report.date, _dt.time(9, 0))
+    settings = presenter._report_settings().copy(**report.settings, open_after=False)
+    template = get_template(settings.template)
+    capture = _KeepImages(presenter._report_capture(settings))
+    if not export_pdf(None, ctx.file(REPORT), data, settings, template, capture):
+        raise RuntimeError("Export PDF report didn't write the report")
+    layout = ReportLayout(data, settings, template)
+    pages = layout.build()
+    # The cover, and the first page of a rule with findings (the summary can run on).
+    flagged = {rule.label for rule, found in data.grouped.items() if found}
+    first_rule = next((p for p in pages[1:] if p.label in flagged), pages[min(1, len(pages) - 1)])
+    return _side_by_side([page_thumbnail(p, template, layout.ts, 700, images=capture.images)
+                          for p in (pages[0], first_rule)])
+
+
+class _KeepImages:
+    """A report capture that keeps the images it takes, for painting the pages again."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.images: dict = {}
+
+    @property
+    def available(self) -> bool:
+        return getattr(self._inner, "available", True)
+
+    def begin(self) -> None:
+        self._inner.begin()
+
+    def end(self) -> None:
+        self._inner.end()
+
+    def capture(self, job, w, h):
+        image = self._inner.capture(job, w, h)
+        if image is not None:
+            self.images[job.key] = image
+        return image
+
+
+def _side_by_side(pages: list[QtGui.QImage], gap: int = 32, pad: int = 24) -> QtGui.QImage:
+    """Pages next to each other on a light grey desk, with a thin edge."""
+    w = sum(p.width() for p in pages) + gap * (len(pages) - 1) + 2 * pad
+    h = max(p.height() for p in pages) + 2 * pad
+    out = QtGui.QImage(w, h, QtGui.QImage.Format.Format_RGB32)
+    out.fill(QtGui.QColor("#e4e6ea"))
+    painter = QtGui.QPainter(out)
+    x = pad
+    for page in pages:
+        painter.drawImage(x, pad, page)
+        painter.setPen(QtGui.QColor("#c3c7ce"))
+        painter.drawRect(x, pad, page.width() - 1, page.height() - 1)
+        x += page.width() + gap
+    painter.end()
+    return out
 
 
 # -- helpers ----------------------------------------------------------------------

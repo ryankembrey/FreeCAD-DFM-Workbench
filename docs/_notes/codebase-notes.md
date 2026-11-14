@@ -262,6 +262,27 @@ Lessons, each paid for:
   "190, 667, 333, 0"; its Compare said 0 resolved though errors fell between runs; the results
   header truncates the model name to "E…".
 
+### Parts and the sample report (added 2026-11-14, second round)
+
+* `.gitignore` ignores every `*.step/*.stp/*.STEP/*.FCStd`, so `resources/examples/` was never on
+  GitHub. CI's fingerprint therefore never matched (it hashed the examples), CI retook every shot
+  without the parts and kept the old images: the "Generated docs were out of date" warning. Fix:
+  the docs' parts live in `docs/models/` (gitignore exception `!docs/models/*`), and the
+  fingerprint hashes only files git would commit (`git ls-files --cached --others
+  --exclude-standard`).
+* `docs/models/models.yaml` names the parts (`molded` = PIM, `printed` = FDM) with material,
+  directions and a `report:` section. `_pipeline/models.py` loads it (stdlib + yaml, so it loads
+  in FreeCAD too); `main._check_models` validates against the built-in processes and
+  `ReportSettings` before any shot runs.
+* The sample report shot (`report-pages`, `files=(REPORT,)`) calls the workbench's own
+  `exporter.export_pdf` with `presenter._report_data()` / `_report_settings()` /
+  `_report_capture()`; a wrapper keeps the captured images so `layout.page_thumbnail` can paint
+  the cover and first rule page. `data.created` pinned from models.yaml. Qt's PDF writer puts a
+  creation date and random uuids in every file, so PDFs are compared without them and without
+  the xref table. QtPdf isn't in conda-forge's Qt, so pages are painted, not rendered from the PDF.
+* The runner replaces QMessageBox.information/warning/critical/question with stderr prints: a
+  box under Xvfb would wait until the one-hour timeout.
+
 ### Real FreeCAD GUI under Xvfb (for 3D viewport shots)
 
 What worked in the cloud sandbox (GitHub release downloads were blocked; conda-forge worked):

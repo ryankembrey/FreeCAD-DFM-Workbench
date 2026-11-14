@@ -10,6 +10,9 @@ docs/build/
 docs/build/
 
 !tests/recognition/corpus/*.step
+# The parts the documentation's screenshots and sample report are made from
+# (docs/models/models.yaml): committed, so CI can open them.
+!docs/models/*
 
 .pixi/
 docs/content/changelog.md

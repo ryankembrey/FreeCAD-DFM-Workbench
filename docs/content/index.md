@@ -45,7 +45,7 @@ what to aim for.
   Process Library, and you can add your own processes and materials.
 - **Colors the whole model** by wall thickness, draft angle, undercut direction or curvature.
 - **Tracks your progress**: compare any two runs to see what was fixed and what regressed, and export
-  a PDF report or a CSV file.
+  a PDF report ([see a sample](assets/reports/sample-dfm-report.pdf)) or a CSV file.
 
 ## Where to start
 

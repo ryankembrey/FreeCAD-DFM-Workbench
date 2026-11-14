@@ -23,6 +23,8 @@ exactly what it pins.
 | `content/assets/diagrams/` | Rule diagrams, light and dark | `build.py` |
 | `content/citations/coverage.md`, `bibliography.md` | Where each value comes from | `build.py` |
 | `content/assets/shots/` | Screenshots of the workbench | `build.py`, in FreeCAD |
+| `content/assets/reports/` | The sample PDF report | `build.py`, in FreeCAD |
+| `models/` | The parts the screenshots and sample report use, and `models.yaml` saying which | Hand |
 | `content/reference/preferences.md`, `features.md` | Preference pages, recognized features | `build.py` |
 | `content/changelog.md` | Changes per version, from git tags (not committed) | `build.py` |
 | everything else in `content/` | Guides, concepts, the landing page | AI agents, by hand |
@@ -51,6 +53,17 @@ FreeCAD settings or saved processes affects it. It reads:
 It writes a file only when its content changed, so a rebuild with nothing new leaves git clean,
 and it deletes generated files it no longer writes. The output is the same on every machine.
 
+## The parts shown
+
+Every screenshot with a part in it, and the sample PDF report, is made from the two parts named in
+`models/models.yaml`: one for injection molding, one for FDM printing, each with its material and
+directions. To show a different part, put its STEP (or FCStd) file in `models/`, point
+`models.yaml` at it and run `pixi run docs`. The build checks the file first: that the part
+exists and git will commit it (CI needs it), and that the material is one the process has.
+
+The `report:` section says which part the sample report analyses, the date printed on it, and any
+report options to change from the workbench's defaults.
+
 ## Screenshots
 
 Every screenshot is made by a shot in `_pipeline/shots/` (`panels.py`, `scenes.py`), run inside a
@@ -61,9 +74,12 @@ real FreeCAD from the pixi environment on a virtual display. You need Xvfb from 
 - It uses a private font configuration with only the environment's fonts, so text renders the
   same on every machine.
 - `_data/shots.json` holds a fingerprint of everything a shot could show (the workbench's code and
-  resources, the example parts, the shot code, `pixi.lock`). When it matches, no FreeCAD runs.
+  resources, `models/`, the shot code, `pixi.lock`). Only files git would commit count, so your
+  machine and CI agree. When it matches, no FreeCAD runs.
 - A retaken image replaces the old one only if it visibly differs, so rendering noise doesn't
-  become commits.
+  become commits. The sample report is written by the workbench's own Export PDF report in the
+  same FreeCAD run; a new PDF replaces the old one only if it differs in more than its creation
+  time and random document id.
 
 `python docs/build.py --shots` retakes everything; `--no-shots` leaves the screenshots alone.
 CI retakes them for the published site either way.
