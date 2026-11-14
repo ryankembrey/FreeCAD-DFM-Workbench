@@ -11,6 +11,12 @@ and the material switcher::
     | x Failed   1 error, 2 warnings                |
     Model Body   Process FDM     Material [PLA   v]
 
+When that line doesn't fit (a long process name in a narrow task panel),
+the model moves to a line of its own above, instead of shrinking to "B…"::
+
+    Model Enclosure
+    Process Plastic Injection Molding   Material [ABS v]
+
 It replaces the four labelled rows of the .ui file, which takes about
 90 px less height and leaves more room for the findings tree.
 """
@@ -30,6 +36,7 @@ _STATUS_ICONS = {
 }
 
 _VERDICT = re.compile(r"^\s*([^(]+?)\s*\((.*)\)\s*$")
+_FIXED = (QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Minimum)
 
 
 class ElidedLabel(QtWidgets.QLabel):
@@ -98,16 +105,31 @@ class ResultsHeader(QtWidgets.QWidget):
         root.addWidget(self.banner)
 
         # -- Model · process · material ------------------------------------
+        # The model pair lives in its own widget, so it can sit at the start of
+        # the meta line or on a line of its own above it (see _fit_meta).
+        self._model_label = MutedLabel("Model")
+        self._model = ElidedLabel()
+        self._model_box = QtWidgets.QWidget()
+        model_row = QtWidgets.QHBoxLayout(self._model_box)
+        model_row.setContentsMargins(0, 0, 0, 0)
+        model_row.setSpacing(6)
+        model_row.addWidget(self._model_label)
+        model_row.addWidget(self._model, 1)
+
+        self._model_line = QtWidgets.QHBoxLayout()  # used when the meta line is too narrow
+        self._model_line.setContentsMargins(0, 0, 0, 0)
+        root.addLayout(self._model_line)
+
         meta = QtWidgets.QHBoxLayout()
         meta.setContentsMargins(0, 0, 0, 0)
         meta.setSpacing(6)
-        self._model = ElidedLabel()
+        self._process_label = MutedLabel("Process")
         self._process = ElidedLabel()
         self._material_label = MutedLabel("Material")
-        meta.addWidget(MutedLabel("Model"))
-        meta.addWidget(self._model)
-        meta.addSpacing(8)
-        meta.addWidget(MutedLabel("Process"))
+        meta.addWidget(self._model_box)
+        self._model_gap = 8
+        meta.addSpacing(self._model_gap)
+        meta.addWidget(self._process_label)
         meta.addWidget(self._process)
         meta.addStretch(1)
         meta.addSpacing(8)
@@ -116,6 +138,8 @@ class ResultsHeader(QtWidgets.QWidget):
         self._material_slot.setContentsMargins(0, 0, 0, 0)
         meta.addLayout(self._material_slot)
         self._meta = meta
+        self._combo: Optional[QtWidgets.QComboBox] = None
+        self._model_on_own_line = False
         root.addLayout(meta)
 
         self.set_verdict("", "#639922")
@@ -129,16 +153,85 @@ class ResultsHeader(QtWidgets.QWidget):
         combo.setMinimumWidth(100)
         self._material_label.setToolTip(combo.toolTip())
         self._material_slot.addWidget(combo)
+        self._combo = combo
+        combo.currentIndexChanged.connect(lambda _i: self._fit_meta())
+        self._fit_meta()
 
     def set_model(self, name: str) -> None:
         self._model.setText(name)
         self._model.setToolTip(f"Target model: {name}")
+        self._fit_meta()
 
     def set_process(self, name: str) -> None:
         self._process.setText(name)
         self._process.setToolTip(f"Manufacturing process: {name}")
-        # The model name gives way first; the process keeps up to 160 px.
+        # When even the line without the model is too narrow, the process
+        # keeps up to 160 px and the material switcher the rest.
         self._process.setMinimumWidth(min(self._process.fontMetrics().horizontalAdvance(name) + 2, 160))
+        self._fit_meta()
+
+    def model_on_own_line(self) -> bool:
+        """True when the model is shown on a line of its own (the meta line was too narrow)."""
+        return self._model_on_own_line
+
+    # ------------------------------------------------------------------
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._fit_meta()
+
+    def _meta_width(self) -> int:
+        """Width the meta line needs to show everything on it in full."""
+        spacing = self._meta.spacing()
+        widgets = [self._model_label, self._model, self._process_label, self._process, self._material_label]
+        width = sum(w.sizeHint().width() for w in widgets)
+        if self._combo is not None:
+            # The switcher's own size hint fits its longest material; it only
+            # needs to show the current one in full.
+            width += self._combo_width()
+        # Gaps between the items, and the two fixed 8 px spacings.
+        return width + spacing * (len(widgets) + 1) + self._model_gap + 8
+
+    def _combo_width(self) -> int:
+        """Width of the material switcher showing its current material in full."""
+        combo = self._combo
+        option = QtWidgets.QStyleOptionComboBox()
+        combo.initStyleOption(option)
+        text = QtCore.QSize(combo.fontMetrics().horizontalAdvance(combo.currentText()) + 4,
+                            combo.fontMetrics().height())
+        size = combo.style().sizeFromContents(QtWidgets.QStyle.ContentsType.CT_ComboBox, option, text, combo)
+        return max(size.width(), combo.minimumWidth())
+
+    def _fit_meta(self) -> None:
+        """Put the model on a line of its own when the meta line can't show it in full.
+
+        The width needed doesn't depend on where the model is, so moving it
+        can't make the header flip back and forth.
+        """
+        own_line = self.width() < self._meta_width()
+        # On the meta line the model keeps its full width (the line fits, so
+        # the material switcher gives way); on its own line it may shorten.
+        self._model.setMinimumWidth(0 if own_line else self._model.sizeHint().width())
+        if own_line == self._model_on_own_line:
+            return
+        self._model_on_own_line = own_line
+        if own_line:
+            self._meta.removeWidget(self._model_box)
+            self._gap().changeSize(0, 0, *_FIXED)  # the gap after the model
+            self._model_line.addWidget(self._model_box)
+        else:
+            self._model_line.removeWidget(self._model_box)
+            self._meta.insertWidget(0, self._model_box)
+            self._gap().changeSize(self._model_gap, 0, *_FIXED)
+        self._meta.invalidate()
+
+    def _gap(self) -> QtWidgets.QSpacerItem:
+        """The spacing after the model pair (the first spacer of the meta line)."""
+        for i in range(self._meta.count()):
+            spacer = self._meta.itemAt(i).spacerItem()
+            if spacer is not None:
+                return spacer
+        raise RuntimeError("the meta line has no spacer")
 
     def set_verdict(self, text: str, color: str) -> None:
         """Show a verdict such as "Failed (1 error, 2 warnings)" in *color*."""

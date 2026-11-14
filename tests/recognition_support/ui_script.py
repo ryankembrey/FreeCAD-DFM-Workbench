@@ -13,6 +13,8 @@ with FreeCAD stand-ins. Run by tests/test_ui.py in a fresh interpreter.
   accepts those and rejects others.
 * Progress panel: every rule line has the same height whatever it shows,
   percentages without bars, and no core counts.
+* Results header: in a narrow panel the model gets a line of its own instead
+  of shrinking to "E…"; in a wide one everything stays on one line.
 """
 
 import os
@@ -171,4 +173,61 @@ assert details[1] == "40%", details
 assert not any("core" in text.lower() for text in details + [panel.phase_label.text()]), details
 assert not panel.form.findChildren(QtWidgets.QProgressBar)[1:], "one bar: the overall one"
 panel.form.close()
+# -- Results header: the model name is never cut to "E…" ------------------------------------------
+from freecad.DFM.gui.results.header import ResultsHeader  # noqa: E402
+
+header = ResultsHeader()
+combo = QtWidgets.QComboBox()
+combo.addItems(["ABS", "Long-Fiber Reinforced Plastics"])
+header.set_material_combo(combo)
+header.set_model("Enclosure")
+header.set_process("Plastic Injection Molding")
+header.set_verdict("Failed (162 errors, 175 warnings)", "#e24b4a")
+
+
+def settle(width):
+    header.resize(width, header.heightForWidth(width) if header.hasHeightForWidth() else 120)
+    header.show()
+    for _ in range(5):
+        app.processEvents()
+    header.layout().activate()
+    app.processEvents()
+
+
+settle(440)  # a task panel's width
+assert header._model.text() == "Enclosure", f"model name cut to {header._model.text()!r}"
+assert header.model_on_own_line(), "a narrow header should give the model its own line"
+assert header._process.text() == "Plastic Injection Molding", header._process.text()
+assert header._model.mapTo(header, QtCore.QPoint(0, 0)).y() < header._process.mapTo(header, QtCore.QPoint(0, 0)).y()
+
+settle(1000)
+assert not header.model_on_own_line(), "a wide header should keep one line"
+assert header._model.text() == "Enclosure", header._model.text()
+y_model = header._model.mapTo(header, QtCore.QPoint(0, 0)).y()
+y_process = header._process.mapTo(header, QtCore.QPoint(0, 0)).y()
+assert abs(y_model - y_process) <= 2, (y_model, y_process)
+
+need = header._meta_width()
+for width in (need - 1, need, need + 1, need - 1):  # no flipping at the boundary
+    settle(width)
+    assert header.model_on_own_line() == (width < need), (width, need, header.model_on_own_line())
+
+settle(440)  # and back: the model returns to its own line, in full
+assert header.model_on_own_line() and header._model.text() == "Enclosure"
+header.close()
+
+# Short names fit on one line in a task panel, even when the material list has
+# long names (the switcher only needs room for the current one).
+short = ResultsHeader()
+materials = QtWidgets.QComboBox()
+materials.addItems(["PLA", "PETG", "Nylon (PA12) Carbon Fiber Reinforced"])
+short.set_material_combo(materials)
+short.set_model("Holder")
+short.set_process("FDM")
+header = short
+settle(440)
+assert not short.model_on_own_line(), (short._meta_width(), short.width())
+assert short._model.text() == "Holder", short._model.text()
+short.close()
+
 print("ui: ok")
