@@ -1,0 +1,175 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SPDX-FileNotice: Part of the DFM addon.
+#
+# Site configuration for the DFM Workbench documentation (Zensical).
+# Build: `pixi run docs` from the repository root. See docs/README.md.
+#
+# The nav is written by hand, except the blocks between "BEGIN GENERATED" and
+# "END GENERATED" markers: docs/build.py rewrites those. Edit around them.
+
+[project]
+site_name = "DFM Workbench"
+site_description = "Design for manufacturing checks in FreeCAD: how to use the workbench, every rule it checks, and where its numbers come from."
+site_url = "https://ryankembrey.github.io/FreeCAD-DFM-Workbench/"
+repo_url = "https://github.com/ryankembrey/FreeCAD-DFM-Workbench"
+repo_name = "FreeCAD-DFM-Workbench"
+copyright = "DFM Workbench by Ryan Kembrey, LGPL-2.1-or-later. This site is generated from the latest main branch."
+docs_dir = "content"
+site_dir = "build/site"
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+  { "Home" = [
+    "index.md",
+    { "Why trust it" = "why-trust-it.md" },
+    { "Changelog" = "changelog.md" },
+  ] },
+  { "Getting started" = [
+    { "Install" = "getting-started/install.md" },
+    { "Your first analysis" = "getting-started/first-analysis.md" },
+    { "Reading the results" = "getting-started/reading-results.md" },
+    { "Fixing a finding" = "getting-started/fixing-a-finding.md" },
+  ] },
+  { "Guides" = [
+    "guides/index.md",
+    { "Injection molding" = "guides/injection-molding.md" },
+    { "3D printing" = "guides/3d-printing.md" },
+    { "Process Library" = "guides/process-library.md" },
+    { "History and reports" = "guides/history-and-reports.md" },
+    { "Contours and inspection" = "guides/contours-and-inspection.md" },
+  ] },
+  { "Concepts" = [
+    "concepts/index.md",
+    { "Aim for and limits" = "concepts/aim-for-and-limits.md" },
+    { "Criticality" = "concepts/criticality.md" },
+    { "Nominal wall" = "concepts/nominal-wall.md" },
+    { "Feature recognition" = "concepts/feature-recognition.md" },
+    { "Pull and print directions" = "concepts/directions.md" },
+  ] },
+  { "Reference" = [
+    "reference/index.md",
+    { "Rules" = [
+      "reference/rules/index.md",
+      # BEGIN GENERATED rules
+      { "Bed Edge Chamfer" = "reference/rules/bed-edge-chamfer.md" },
+      { "Boss Core Depth" = "reference/rules/min-boss-core-depth.md" },
+      { "Boss Draft" = "reference/rules/min-boss-draft.md" },
+      { "Boss Height" = "reference/rules/max-boss-height-ratio.md" },
+      { "Boss Hole Base Radius" = "reference/rules/min-boss-hole-base-radius.md" },
+      { "Boss Outer Diameter" = "reference/rules/min-boss-od-ratio.md" },
+      { "Boss Root Radius" = "reference/rules/min-boss-root-radius.md" },
+      { "Boss Spacing" = "reference/rules/min-boss-spacing.md" },
+      { "Boss Wall Thickness" = "reference/rules/max-boss-wall-ratio.md" },
+      { "Cored Hole Depth" = "reference/rules/max-hole-depth-ratio.md" },
+      { "Cupping" = "reference/rules/max-cup-area.md" },
+      { "Escape Holes" = "reference/rules/min-escape-hole-diameter.md" },
+      { "Hole Spacing" = "reference/rules/min-hole-edge-distance.md" },
+      { "Horizontal Hole Shape" = "reference/rules/horizontal-hole-teardrop.md" },
+      { "Internal Corner Radius" = "reference/rules/min-internal-corner-radius.md" },
+      { "Large Flat Face" = "reference/rules/max-flat-face-area.md" },
+      { "Living Hinge" = "reference/rules/max-living-hinge-web.md" },
+      { "Long Thin Part" = "reference/rules/max-part-aspect-ratio.md" },
+      { "Maximum Bed Contact Area" = "reference/rules/max-bed-contact-area.md" },
+      { "Maximum Bridge Span" = "reference/rules/max-bridge-span.md" },
+      { "Maximum Cusp Height" = "reference/rules/max-cusp-height.md" },
+      { "Maximum Overhang Angle" = "reference/rules/max-overhang-angle.md" },
+      { "Maximum Support Material" = "reference/rules/max-support-material.md" },
+      { "Maximum Wall Thickness" = "reference/rules/max-wall-thickness.md" },
+      { "Minimum Draft Angle" = "reference/rules/min-draft-angle.md" },
+      { "Minimum Gap" = "reference/rules/min-print-gap.md" },
+      { "Minimum Wall Thickness" = "reference/rules/min-wall-thickness.md" },
+      { "Moulded Text" = "reference/rules/min-text-stroke.md" },
+      { "Pin Diameter" = "reference/rules/min-pin-diameter.md" },
+      { "Pin Root Fillet" = "reference/rules/pin-root-fillet.md" },
+      { "Pin Slenderness" = "reference/rules/max-pin-slenderness.md" },
+      { "Printed Hole Depth" = "reference/rules/max-printed-hole-depth.md" },
+      { "Printed Hole Diameter" = "reference/rules/min-printed-hole-diameter.md" },
+      { "Printed Text" = "reference/rules/min-printed-text-depth.md" },
+      { "Printed Text Stroke" = "reference/rules/min-printed-text-stroke.md" },
+      { "Rib Draft" = "reference/rules/min-rib-draft.md" },
+      { "Rib Height" = "reference/rules/max-rib-height-ratio.md" },
+      { "Rib Root Radius" = "reference/rules/min-rib-root-radius.md" },
+      { "Rib Spacing" = "reference/rules/min-rib-spacing.md" },
+      { "Rib Thickness" = "reference/rules/max-rib-thickness-ratio.md" },
+      { "Screw Boss Lead-In" = "reference/rules/boss-hole-lead-in.md" },
+      { "Sealed Cavity" = "reference/rules/sealed-cavity.md" },
+      { "Sharp External Corners" = "reference/rules/sharp-external-corners.md" },
+      { "Sharp Internal Corners" = "reference/rules/sharp-internal-corners.md" },
+      { "Snap-Fit Strain" = "reference/rules/max-snap-fit-strain.md" },
+      { "Standalone Boss" = "reference/rules/standalone-boss.md" },
+      { "Thin Steel" = "reference/rules/min-mold-steel-thickness.md" },
+      { "Undercut" = "reference/rules/no-undercuts.md" },
+      { "Wall Thickness Transition" = "reference/rules/max-wall-thickness-variation.md" },
+      # END GENERATED rules
+    ] },
+    { "Processes" = [
+      "reference/processes/index.md",
+      # BEGIN GENERATED processes
+      { "Plastic Injection Molding" = "reference/processes/plastic-injection-molding.md" },
+      { "FDM" = "reference/processes/fdm-3d-printing.md" },
+      { "Resin 3D Printing (SLA)" = "reference/processes/resin-3d-printing.md" },
+      { "Powder Bed Fusion (SLS)" = "reference/processes/powder-bed-fusion.md" },
+      # END GENERATED processes
+    ] },
+    { "Preferences" = "reference/preferences.md" },
+    { "Recognized features" = "reference/features.md" },
+  ] },
+  { "Citations" = [
+    "citations/index.md",
+    { "Coverage" = "citations/coverage.md" },
+    { "Bibliography" = "citations/bibliography.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+logo = "assets/logo.svg"
+favicon = "assets/logo.svg"
+features = [
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "blue"
+accent = "blue"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "blue"
+accent = "blue"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.betterem = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
+pymdownx.tasklist.custom_checkbox = true

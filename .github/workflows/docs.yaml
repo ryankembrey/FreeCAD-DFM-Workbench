@@ -1,39 +1,73 @@
-name: Build and Deploy Docs
+name: Docs
+
+# Builds the documentation site from the latest code and publishes it to
+# GitHub Pages. Everything generated is rebuilt here from the code, so the
+# site always matches main, even if someone forgot to run `pixi run docs`
+# before pushing (the job then warns which generated files were stale).
+#
+# One-time setup: Settings > Pages > Build and deployment > Source:
+# "GitHub Actions".
+
 on:
   push:
     branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v5
         with:
-          python-version: '3.11'
+          fetch-depth: 0  # the whole history and its tags, for the changelog
 
-      - name: Install Dependencies
+      - name: Install Xvfb (for screenshots of the 3D view)
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.9.6
+        with:
+          cache: true
+          locked: true
+
+      - name: Regenerate docs/ from the code
+        run: pixi run docs-gen
+
+      - name: Warn if the committed docs were stale
         run: |
-          pip install sphinx furo pyyaml
+          if ! git diff --quiet -- docs || [ -n "$(git ls-files --others --exclude-standard docs)" ]; then
+            echo "::warning title=Generated docs were out of date::Run 'pixi run docs' and commit docs/. Changed files:"
+            git status --short -- docs
+          fi
 
-      - name: Build HTML
-        run: |
-          touch docs/source/.nojekyll 
-          sphinx-apidoc -f -o  docs/source/ . freecad/DFM/gui/DFM_rc.py freecad/DFM/__init__.py freecad/DFM/init_gui.py
-          cd docs
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/..
-          make clean
-          make html
+      - name: Build the site
+        run: pixi run zensical build --clean --strict -f docs/zensical.toml
 
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/build/site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/build/html
-          force_orphan: true
+        id: deployment
+        uses: actions/deploy-pages@v4

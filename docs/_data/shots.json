@@ -1,0 +1,30 @@
+{
+ "fingerprint": "04c84e917690c303d9439af2a97b91368c77eb2e453ce811a8f704d9ae9237fd",
+ "shots": [
+  "compare-bodies",
+  "contour-curvature",
+  "contour-draft",
+  "contour-thickness",
+  "contour-undercut",
+  "edit-feedback",
+  "fdm-results",
+  "prefs-analyzers",
+  "prefs-contour",
+  "prefs-general",
+  "prefs-recognition",
+  "prefs-reports",
+  "prefs-results",
+  "process-library",
+  "process-library-fdm",
+  "process-library-grid",
+  "progress-panel",
+  "results-export",
+  "results-finding",
+  "results-history",
+  "results-panel",
+  "results-window",
+  "setup-panel",
+  "symmetry-check",
+  "toolbar"
+ ]
+}

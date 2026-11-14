@@ -1,0 +1,374 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SPDX-FileNotice: Part of the DFM addon.
+#
+# Where the numbers in the built-in processes come from. Used only by the
+# documentation site (docs/build.py); the workbench never reads this file.
+#
+# sources: one entry per document cited.
+#   <id>:                 lowercase-with-dashes, stable: pages link to it
+#     publisher:          who published it
+#     title:              its title (or a plain description until checked)
+#     url:                link, or null until someone finds it
+#     archive:            a web.archive.org copy, or null
+#     accessed:           YYYY-MM-DD the figures were read, or null
+#     note:               optional, one line
+#
+# values: claims about threshold values, by process file (its name without
+# .yaml), material (as in the YAML, including "Default"), rule and field
+# (target, limit, binary_severity...).
+#   <process>:
+#     <material>:
+#       <RULE>:
+#         <field>: {kind, cite: [source ids], note}
+#       <RULE>: {kind, cite, note}     # one claim for every field of the rule
+#
+# kind is one of:
+#   published   the source gives this figure (unit conversion and rounding
+#               allowed; say the original in the note)
+#   derived     worked out from a source's figures (say how in the note)
+#   judgement   engineering judgement, no published figure. cite may name
+#               sources that give the advice without a number
+#
+# A value with no claim is shown on the site as "Not yet sourced". A material
+# that inherits a value from Default inherits its claim too.
+#
+# tests/test_docs.py checks that every claim points at a value that exists and
+# every cite at a source here.
+
+sources:
+  protolabs-wall-thickness:
+    publisher: Protolabs
+    title: Injection Molding Wall Thickness Guidelines
+    url: https://www.protolabs.com/resources/design-tips/improving-part-design-with-uniform-wall-thickness/
+    archive: null
+    accessed: 2026-11-14
+    note: Recommended wall thickness by material (chart, in inches).
+  covestro-snap-fit:
+    publisher: Covestro (formerly Bayer MaterialScience)
+    title: Snap-Fit Joints for Plastics, a design guide
+    url: null
+    archive: null
+    accessed: null
+    note: Table 2, permissible short-term strain.
+  bayer-part-mold-design:
+    publisher: Bayer MaterialScience
+    title: Part and Mold Design, a design guide
+    url: null
+    archive: null
+    accessed: null
+    note: Table 4-1.
+  formlabs-sla:
+    publisher: Formlabs
+    title: SLA design guides (Form 2, Form 3 and Form 4)
+    url: null
+    archive: null
+    accessed: null
+  formlabs-fuse:
+    publisher: Formlabs
+    title: SLS design guide (Fuse series)
+    url: null
+    archive: null
+    accessed: null
+  xometry-sla:
+    publisher: Xometry
+    title: SLA design guide
+    url: null
+    archive: null
+    accessed: null
+  xometry-lspc:
+    publisher: Xometry
+    title: LSPc (masked SLA) design guide
+    url: null
+    archive: null
+    accessed: null
+  xometry-mjf:
+    publisher: Xometry
+    title: HP Multi Jet Fusion design guide
+    url: null
+    archive: null
+    accessed: null
+  hlh-sla:
+    publisher: HLH Prototypes
+    title: SLA design guide
+    url: null
+    archive: null
+    accessed: null
+  hlh-sls:
+    publisher: HLH Prototypes
+    title: SLS design guide
+    url: null
+    archive: null
+    accessed: null
+  hlh-fdm:
+    publisher: HLH Prototypes
+    title: FDM design guide
+    url: null
+    archive: null
+    accessed: null
+  prototek-sla:
+    publisher: Prototek
+    title: SLA design guide
+    url: null
+    archive: null
+    accessed: null
+  hp-mjf:
+    publisher: HP
+    title: Multi Jet Fusion design handbook
+    url: null
+    archive: null
+    accessed: null
+  threedprintuk-sls:
+    publisher: 3DPrintUK
+    title: SLS design guide
+    url: null
+    archive: null
+    accessed: null
+  fast-radius-mjf:
+    publisher: Fast Radius
+    title: MJF design guide
+    url: null
+    archive: null
+    accessed: null
+  raise3d-sls:
+    publisher: Raise3D
+    title: SLS design guide
+    url: null
+    archive: null
+    accessed: null
+  creabis-mjf:
+    publisher: Creabis
+    title: MJF design guide
+    url: null
+    archive: null
+    accessed: null
+  materialise-tpu:
+    publisher: Materialise
+    title: TPU design guidelines (SLS)
+    url: null
+    archive: null
+    accessed: null
+  stratasys-sls:
+    publisher: Stratasys
+    title: SLS design guide
+    url: null
+    archive: null
+    accessed: null
+  hubs-sls:
+    publisher: Hubs
+    title: SLS design guide
+    url: null
+    archive: null
+    accessed: null
+  hubs-fdm:
+    publisher: Hubs
+    title: FDM design guide
+    url: null
+    archive: null
+    accessed: null
+  facfox-fdm:
+    publisher: FacFox
+    title: FDM design guide
+    url: null
+    archive: null
+    accessed: null
+  amf-uzh:
+    publisher: AMF (University of Zurich)
+    title: FDM design guidelines
+    url: null
+    archive: null
+    accessed: null
+  sovol-fdm:
+    publisher: Sovol
+    title: Print-in-place clearances
+    url: null
+    archive: null
+    accessed: null
+  ultimaker-fdm:
+    publisher: UltiMaker
+    title: Elephant's foot and first-layer guidance
+    url: null
+    archive: null
+    accessed: null
+
+values:
+
+  plastic_injection_molding:
+    Default:
+      MAX_SNAP_FIT_STRAIN:
+        target: {kind: judgement, cite: [covestro-snap-fit], note: "About 60% of the limit, for snaps opened often"}
+        limit: {kind: judgement, note: "A conservative placeholder: set each material from its supplier's data"}
+    ABS:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "ABS: 0.045 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "ABS: 0.140 in"}
+    Acetal / POM:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Acetal: 0.030 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Acetal: 0.120 in"}
+    PMMA:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Acrylic: 0.025 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Acrylic: 0.500 in"}
+    LCP:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Liquid crystal polymer: 0.030 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Liquid crystal polymer: 0.120 in"}
+    Long-Fiber Reinforced Plastics:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Long-fiber reinforced plastics: 0.075 in"}
+    PA:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Nylon: 0.030 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Nylon: 0.115 in"}
+      MAX_SNAP_FIT_STRAIN:
+        target: {kind: derived, cite: [covestro-snap-fit], note: "About 60% of the limit, for snaps opened often"}
+        limit: {kind: published, cite: [bayer-part-mold-design], note: "Durethan PA, dry: 4% (6% conditioned)"}
+    PC:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polycarbonate: 0.040 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polycarbonate: 0.150 in"}
+      MAX_SNAP_FIT_STRAIN:
+        target: {kind: derived, cite: [covestro-snap-fit], note: "About 60% of the limit, for snaps opened often"}
+        limit: {kind: published, cite: [covestro-snap-fit], note: "Makrolon PC: 4%"}
+    PET / PBT:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polyester: 0.025 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polyester: 0.125 in"}
+    PE:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polyethylene: 0.030 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polyethylene: 0.200 in"}
+    PP:
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polypropylene: 0.150 in"}
+    PS:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polystyrene: 0.035 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polystyrene: 0.150 in"}
+    PUR:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polyurethane: 0.080 in"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [protolabs-wall-thickness], note: "Polyurethane: 0.750 in"}
+
+  fdm_3d_printing:
+    Default:
+      MAX_PIN_SLENDERNESS:
+        {kind: judgement, cite: [formlabs-sla], note: "No source gives an FDM figure; resin prints about 20 diameters (Formlabs)"}
+      PIN_ROOT_FILLET:
+        {kind: published, cite: [hubs-fdm, facfox-fdm], note: "Pins under 5 mm need a small fillet at the base"}
+      MIN_PRINT_GAP:
+        target: {kind: published, cite: [amf-uzh, hlh-fdm], note: "0.5 mm clearance"}
+        limit: {kind: judgement, cite: [sovol-fdm], note: "About the tightest print-in-place gap: 0.2 to 0.3 mm a side (Sovol)"}
+      BED_EDGE_CHAMFER:
+        {kind: published, cite: [ultimaker-fdm, hubs-fdm], note: "Chamfer edges on the bed for elephant's foot"}
+
+  resin_3d_printing:
+    Default:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [xometry-sla], note: "0.6 mm unsupported walls"}
+        limit: {kind: published, cite: [xometry-sla], note: "0.4 mm supported walls"}
+      MAX_OVERHANG_ANGLE:
+        target: {kind: derived, cite: [formlabs-sla], note: "Form 2: overhangs flatter than 19° from level need support, about 71° from vertical"}
+        limit: {kind: derived, cite: [formlabs-sla], note: "Form 3 and 4: 10° from level, 80° from vertical"}
+      MAX_BRIDGE_SPAN:
+        target: {kind: published, cite: [formlabs-sla], note: "Form 2 and 3: 21 mm for a 5 mm wide beam"}
+        limit: {kind: published, cite: [formlabs-sla], note: "Form 4: 29 mm for a 5 mm wide beam"}
+      SEALED_CAVITY:
+        {kind: published, cite: [formlabs-sla], note: "A sealed hollow traps resin and can blow out"}
+      MIN_ESCAPE_HOLE_DIAMETER:
+        target: {kind: published, cite: [formlabs-sla], note: "Form 2: 3.5 mm drain holes"}
+        limit: {kind: published, cite: [formlabs-sla], note: "Form 3: 2.5 mm drain holes"}
+      MAX_CUP_AREA:
+        {kind: judgement, cite: [formlabs-sla], note: "Formlabs says small cups usually print and large ones blow out, without a figure. 100 mm² is about an 11 mm hole; 900 mm² a 30 mm square"}
+      MIN_PRINTED_HOLE_DIAMETER:
+        target: {kind: published, cite: [formlabs-sla], note: "Form 2: 0.8 mm"}
+        limit: {kind: published, cite: [formlabs-sla], note: "Form 3 and 4: 0.5 mm"}
+      MAX_PRINTED_HOLE_DEPTH:
+        target: {kind: published, cite: [xometry-lspc], note: "Blind holes under 3 times their diameter (recommended); through holes get 8/3 of this"}
+        limit: {kind: published, cite: [xometry-lspc], note: "Blind holes under 8 times their diameter (achievable); through holes get 8/3 of this"}
+      MIN_PRINT_GAP:
+        target: {kind: published, cite: [formlabs-sla], note: "Form 2 and 3: 0.5 mm clearance"}
+        limit: {kind: published, cite: [formlabs-sla], note: "Form 4: 0.4 mm clearance"}
+      MIN_PIN_DIAMETER:
+        target: {kind: published, cite: [xometry-sla, hlh-sla], note: "1 mm pins"}
+        limit: {kind: published, cite: [formlabs-sla], note: "0.4 mm wires print 7 mm tall"}
+      MAX_PIN_SLENDERNESS:
+        target: {kind: judgement}
+        limit: {kind: derived, cite: [formlabs-sla], note: "0.3 mm wires print 7 mm tall, 1.5 mm ones 30 mm: about 20 diameters"}
+      PIN_ROOT_FILLET:
+        {kind: published, cite: [prototek-sla], note: "Thin walls should have filleted bases"}
+      MIN_PRINTED_TEXT_DEPTH:
+        target: {kind: published, cite: [hlh-sla], note: "0.5 mm deep engraving"}
+        limit: {kind: published, cite: [formlabs-sla], note: "Form 4: 0.15 mm engraved detail (0.1 mm embossed)"}
+      MIN_PRINTED_TEXT_STROKE:
+        target: {kind: published, cite: [xometry-sla], note: "0.5 mm wide engraving"}
+        limit: {kind: published, cite: [formlabs-sla], note: "Form 4: 0.15 mm"}
+      MAX_FLAT_FACE_AREA:
+        {kind: judgement, cite: [xometry-sla], note: "Xometry advises against large flat faces parallel to the platform, without a figure. 2,500 mm² is a 50 mm square"}
+
+  powder_bed_fusion:
+    Default:
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [hlh-sls], note: "1 mm recommended"}
+        limit: {kind: published, cite: [formlabs-fuse], note: "0.6 mm vertical walls"}
+      MAX_WALL_THICKNESS:
+        target: {kind: published, cite: [threedprintuk-sls], note: "5 mm recommended maximum"}
+        limit: {kind: published, cite: [xometry-mjf], note: "Hollow walls over 7 mm"}
+      MAX_WALL_THICKNESS_VARIATION:
+        {kind: judgement, cite: [formlabs-fuse, hp-mjf], note: "Both advise even walls and smooth transitions, without a figure. Looser than molding's 15% / 25%"}
+      SHARP_INTERNAL_CORNERS:
+        {kind: published, cite: [fast-radius-mjf], note: "Powder cakes in sharp internal corners"}
+      SEALED_CAVITY:
+        {kind: published, cite: [raise3d-sls], note: "A warning, not an error: powder can be left in a sealed hollow on purpose"}
+      MIN_ESCAPE_HOLE_DIAMETER:
+        target: {kind: published, cite: [xometry-mjf], note: "5 mm"}
+        limit: {kind: published, cite: [formlabs-fuse, hlh-sls], note: "At least 3.5 mm"}
+      MIN_PRINTED_HOLE_DIAMETER:
+        target: {kind: published, cite: [hubs-sls, xometry-mjf], note: "1.5 mm"}
+        limit: {kind: published, cite: [formlabs-fuse, hlh-sls], note: "1 mm"}
+      MAX_PRINTED_HOLE_DEPTH:
+        {kind: judgement, cite: [xometry-lspc, hlh-sls, fast-radius-mjf], note: "Resin's Xometry figures. HLH and Fast Radius say deep and blind holes trap powder, without a figure"}
+      MIN_PRINT_GAP:
+        target: {kind: published, cite: [xometry-mjf], note: "1 mm recommended gap between walls"}
+        limit: {kind: published, cite: [xometry-mjf], note: "0.5 mm minimum gap between walls"}
+      MIN_PIN_DIAMETER:
+        target: {kind: published, cite: [xometry-mjf], note: "1.5 mm"}
+        limit: {kind: published, cite: [formlabs-fuse, hlh-sls], note: "0.8 mm"}
+      MAX_PIN_SLENDERNESS:
+        {kind: judgement, cite: [formlabs-sla], note: "Formlabs' resin wire figures, about 20 diameters"}
+      PIN_ROOT_FILLET:
+        {kind: published, cite: [formlabs-fuse], note: "Fillet thin features where they meet the part"}
+      MIN_PRINTED_TEXT_DEPTH:
+        target: {kind: published, cite: [hp-mjf], note: "At least 1 mm deep or high"}
+        limit: {kind: published, cite: [formlabs-fuse], note: "0.3 mm font depth"}
+      MIN_PRINTED_TEXT_STROKE:
+        target: {kind: published, cite: [creabis-mjf], note: "0.5 mm strokes"}
+        limit: {kind: published, cite: [formlabs-fuse], note: "0.35 mm wide detail"}
+      MAX_FLAT_FACE_AREA:
+        {kind: judgement, cite: [xometry-mjf, stratasys-sls], note: "Both advise against large flat faces, without a figure. 10,000 mm² is a 100 mm square"}
+      MAX_PART_ASPECT_RATIO:
+        {kind: published, cite: [hp-mjf], note: "Avoid parts over 10 times longer than wide"}
+    PA12 (MJF):
+      MIN_WALL_THICKNESS:
+        target: {kind: published, cite: [xometry-mjf], note: "1.5 mm recommended"}
+        limit: {kind: published, cite: [xometry-mjf], note: "0.5 mm minimum"}
+    PA12 Carbon-filled:
+      MIN_WALL_THICKNESS:
+        target: {kind: judgement}
+        limit: {kind: published, cite: [hubs-sls], note: "2 mm minimum walls for carbon-filled polyamide"}
+    TPU:
+      MIN_ESCAPE_HOLE_DIAMETER:
+        {kind: published, cite: [materialise-tpu], note: "At least two escape holes of 10 mm"}
+      MAX_WALL_THICKNESS:
+        target: {kind: judgement}
+        limit: {kind: published, cite: [materialise-tpu], note: "Hollow parts with walls over 20 mm"}

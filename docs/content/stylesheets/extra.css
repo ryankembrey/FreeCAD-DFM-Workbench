@@ -1,0 +1,21 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+/* Small additions to the Zensical theme for the DFM Workbench docs. */
+
+/* Rule diagrams: never wider than the text, centred. */
+figure img[src*="assets/diagrams/"] {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Diagrams in the rules index cards fill the card's width. (No `display`
+   here: the theme hides the other colour scheme's copy with display: none.) */
+.grid.cards img[src*="assets/diagrams/"] {
+  width: 100%;
+  height: auto;
+  margin-bottom: 0.4rem;
+}
+
+/* Long value tables: keep the source column readable. */
+.md-typeset table:not([class]) td {
+  vertical-align: top;
+}
