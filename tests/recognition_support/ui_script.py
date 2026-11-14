@@ -15,6 +15,8 @@ with FreeCAD stand-ins. Run by tests/test_ui.py in a fresh interpreter.
   percentages without bars, and no core counts.
 * Results header: in a narrow panel the model gets a line of its own instead
   of shrinking to "E…"; in a wide one everything stays on one line.
+* Zebra Stripes panel: opens on the selected faces, in Follow the view; every
+  control reaches the overlay at once; Quality meshes again; Close clears it.
 """
 
 import os
@@ -229,5 +231,101 @@ settle(440)
 assert not short.model_on_own_line(), (short._meta_width(), short.width())
 assert short._model.text() == "Holder", short._model.text()
 short.close()
+
+# -- Zebra Stripes panel ------------------------------------------------------------
+from freecad.DFM.core.recognition.testing import shapes as _B  # noqa: E402
+from freecad.DFM.gui.contour import zebra_panel as ZP  # noqa: E402
+import freecad.DFM.core.utils.conversion as _conv  # noqa: E402
+
+
+class _FakeOverlay:
+    made = []
+
+    def __init__(self, mesh):
+        self.mesh, self.calls, self.attached, self.mode = mesh, [], False, None
+        _FakeOverlay.made.append(self)
+
+    def set_style(self, **kw):
+        self.calls.append(("style", kw))
+
+    def set_mode(self, mode, **kw):
+        self.mode = mode
+        self.calls.append(("mode", mode, kw))
+
+    def set_edges_visible(self, on):
+        self.calls.append(("edges", on))
+
+    def attach(self, view):
+        self.attached = True
+
+    def remove(self):
+        self.attached = False
+
+
+class _Shape:
+    Faces = [1, 2, 3]
+
+    def isNull(self):
+        return False
+
+
+class _Obj:
+    Label = "Block"
+    Shape = _Shape()
+
+
+class _Sel:
+    Object = _Obj()
+    SubElementNames = ("Face3", "Face1")
+
+
+ZP.ZebraOverlay = _FakeOverlay
+ZP.get_active_view = lambda: object()
+_conv.freecad_to_ocp = lambda shape: _B.box(0, 0, 0, 20, 10, 5)
+Gui.Selection.selection = [_Sel()]
+zp = ZP.ZebraTaskPanel()
+Gui.Selection.selection = []
+ov = _FakeOverlay.made[-1]
+assert zp.faces == [1, 3] and zp.le_object.text() == "Block, 2 faces", (zp.faces, zp.le_object.text())
+assert ov.attached and ov.mesh.triangle_count > 0
+assert zp.mode == "view" and not zp.direction_row.isVisibleTo(zp.form) and zp.sw_horizontal.isVisibleTo(zp.form)
+
+zp.sw_mode.buttons[1].click()  # Fixed to the part
+assert zp.mode == "fixed" and ov.mode == "fixed"
+assert zp.direction_row.isVisibleTo(zp.form) and not zp.sw_horizontal.isVisibleTo(zp.form)
+zp._on_axis((1.0, 0.0, 0.0))
+assert ov.calls[-1] == ("mode", "fixed", {"direction": (1.0, 0.0, 0.0)}), ov.calls[-1]
+zp._on_flip()
+assert ov.calls[-1][2]["direction"] == (-1.0, -0.0, -0.0) and zp.direction_flipped
+
+zp.sb_count.setValue(35)
+assert zp.sl_count.value() == 35 and ov.calls[-1] == ("style", {"count": 35, "width_share": 0.5}), ov.calls[-1]
+zp.sl_width.setValue(30)
+assert zp.lbl_width.text() == "30 %" and ov.calls[-1][1]["width_share"] == 0.3
+before = list(zp._colors)
+zp._on_swap()
+assert zp._colors == before[::-1] and ov.calls[-1] == ("style", {"colors": zp._colors})
+zp.cb_edges.setChecked(False)
+assert ov.calls[-1] == ("edges", False)
+
+zp.cb_quality.setCurrentText("Very fine")  # meshes again: a new overlay, the old one gone
+fine = _FakeOverlay.made[-1]
+assert fine is not ov and not ov.attached and fine.attached
+assert fine.mesh.triangle_count >= ov.mesh.triangle_count
+assert fine.mode == "fixed" and ("edges", False) in fine.calls
+
+assert ZP.dfm_params().GetInt("ZebraCount", 0) == 35 and ZP.dfm_params().GetString("ZebraMode", "") == "fixed"
+zp.tb_guide.setChecked(False)
+assert not zp.guide.isVisibleTo(zp.form)
+zp.reject()
+assert not fine.attached and zp not in Gui.Selection.observers
+
+# The next panel opens with the last settings.
+zp2 = ZP.ZebraTaskPanel()
+assert zp2.mode == "fixed" and zp2.sb_count.value() == 35 and zp2.sl_width.value() == 30
+zp2.reject()
+for key in list(ZP.dfm_params().store):
+    if key.startswith("Zebra"):
+        ZP.dfm_params().store.pop(key)
 
 print("ui: ok")

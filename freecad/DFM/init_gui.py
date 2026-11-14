@@ -37,6 +37,7 @@ class DFMWorkbench(Gui.Workbench):
             "DFM_ThicknessAnalysis",
             "DFM_UndercutAnalysis",
             "DFM_CurvatureAnalysis",
+            "DFM_ZebraStripes",
             "Separator",
             "DFM_SymmetryCheck",
             "DFM_CompareBodies",

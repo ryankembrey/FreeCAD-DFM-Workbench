@@ -1,11 +1,13 @@
 {
- "fingerprint": "ee4b3986fef72928447d5699ba3932907108b4dd436d0d94e5d2b868f2c3980f",
+ "fingerprint": "ab99e39c80d4924920b8107496cf7129fdf9341f5e5efc227100bbb04e4dfee1",
  "shots": [
   "compare-bodies",
   "contour-curvature",
   "contour-draft",
   "contour-thickness",
   "contour-undercut",
+  "contour-zebra",
+  "contour-zebra-fixed",
   "edit-feedback",
   "fdm-results",
   "prefs-analyzers",

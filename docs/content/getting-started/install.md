@@ -30,6 +30,7 @@ The **DFM Analysis** toolbar and the **DFM** menu hold every tool:
 | Thickness Analysis | Color the model by wall thickness |
 | Undercut Analysis | Color the model by the direction each face releases from the mold |
 | Curvature Analysis | Color the model by its tightest radius |
+| Zebra Stripes | Show reflection stripes to check how smoothly faces join |
 | Symmetry Check | See whether a part is symmetric about a plane or axis, and what isn't |
 | Compare Bodies | See what changed between two bodies, and where |
 

@@ -372,6 +372,35 @@ def contour_curvature(ctx: Context):
     return _contour(ctx, "CurvatureMeasure", "Curvature Analysis", PRINTED)
 
 
+def _zebra(ctx: Context, part: models.Part, fixed: bool):
+    """Zebra Stripes on *part*, as a user opens it: the part picked, then
+    Follow the view, or Fixed to the molded part's pull direction."""
+    from freecad.DFM.gui.contour.zebra_panel import ZebraTaskPanel
+
+    obj = ctx.open(part)
+    panel = ZebraTaskPanel()
+    Gui.Control.showDialog(panel)
+    ctx.pump(0.5)
+    if panel.target_object is not obj:
+        panel._apply_object(obj)
+    panel.sw_mode.buttons[1 if fixed else 0].click()
+    if fixed:
+        panel._on_axis(MOLDED.direction("pull_direction"))
+    ctx.iso()
+    ctx.pump(1.0)
+    return ctx.view_and_task()
+
+
+@shot("contour-zebra", "scene", "Zebra Stripes: reflection stripes that slide over the part as the view turns")
+def contour_zebra(ctx: Context):
+    return _zebra(ctx, PRINTED, fixed=False)
+
+
+@shot("contour-zebra-fixed", "scene", "Zebra Stripes fixed to the pull direction: they stay put as the view turns")
+def contour_zebra_fixed(ctx: Context):
+    return _zebra(ctx, MOLDED, fixed=True)
+
+
 @shot("symmetry-check", "scene", "Symmetry Check: whether the part is symmetric, and what isn't")
 def symmetry_check(ctx: Context):
     from freecad.DFM.gui.inspection.symmetry_panel import SymmetryPanel

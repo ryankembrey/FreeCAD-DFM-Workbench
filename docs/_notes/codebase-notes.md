@@ -103,6 +103,7 @@ docs/                Currently a stub Sphinx autodoc site (furo), deployed by
 | DFM_ThicknessAnalysis | Thickness Analysis | Contour by wall thickness |
 | DFM_UndercutAnalysis | Undercut Analysis | Categorical contour: release direction |
 | DFM_CurvatureAnalysis | Curvature Analysis | Contour by tightest radius |
+| DFM_ZebraStripes | Zebra Stripes | Reflection stripes (follow the view, or isophotes fixed to a direction); display only. `app/contour/zebra.py` (OCP mesh with per-face exact normals + stripe math), `gui/contour/zebra_scene.py` (textured overlay, camera sensor), `gui/contour/zebra_panel.py` |
 | (separator) | | |
 | DFM_SymmetryCheck | Symmetry Check | Plane/axis symmetry, what isn't |
 | DFM_CompareBodies | Compare Bodies | What changed between two bodies |
