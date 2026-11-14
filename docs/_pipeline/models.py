@@ -43,11 +43,16 @@ class Part:
         return float(x), float(y), float(z)
 
 
+#: What the sample report can add as saved analyses and checks.
+REPORT_VIEWS = ("thickness", "draft", "undercut", "curvature", "symmetry", "zebra")
+
+
 @dataclass
 class Report:
     part: str
     date: _dt.date
     settings: dict
+    views: list = field(default_factory=list)
 
 
 @dataclass
@@ -100,12 +105,16 @@ def load(path: Path = CONFIG) -> tuple[Models | None, list[str]]:
     if not isinstance(settings, dict):
         errors.append("report: `settings:` must be a list of `name: value` lines")
         settings = {}
+    views = rep.get("views") or []
+    if not isinstance(views, list) or any(v not in REPORT_VIEWS for v in views):
+        errors.append(f"report: `views:` must be a list of {', '.join(REPORT_VIEWS)}")
+        views = []
     unknown = sorted(set(raw) - set(PROCESS) - {"report"})
     if unknown:
         errors.append(f"unknown section(s): {', '.join(unknown)}")
     if errors:
         return None, errors
-    return Models(parts, Report(report_part, date, settings)), []
+    return Models(parts, Report(report_part, date, settings, list(views))), []
 
 
 def _part(key: str, entry: dict, folder: Path, errors: list[str]) -> Part | None:

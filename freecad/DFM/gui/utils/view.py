@@ -20,6 +20,65 @@ def get_active_view():
     return getattr(gui_doc, "ActiveView", None)
 
 
+def model_parent(view, obj):
+    """The scene node holding *obj*'s own node, for adding an overlay beside it.
+
+    FreeCAD's saveImage() renders only the document's part of the scene. Up
+    to FreeCAD 1.1 that is what ``view.getSceneGraph()`` returns, but newer
+    versions wrap it in an outer node with the lights, so an overlay added
+    to ``getSceneGraph()`` shows on screen but is missing from saved images
+    (and from report pictures). Beside the model's own node it is always
+    rendered, and inside a container (an App::Part, a Body) it also takes
+    the container's placement, which the model's ``Shape`` doesn't include.
+
+    Falls back to ``view.getSceneGraph()`` when *obj* isn't found.
+    """
+    root = view.getSceneGraph()
+    try:
+        target = obj.ViewObject.RootNode
+    except Exception:
+        target = None
+    if target is None:
+        return root
+    group_type = coin.SoGroup.getClassTypeId()
+    queue = [(root, 0)]
+    while queue:
+        node, depth = queue.pop(0)
+        try:
+            if not node.isOfType(group_type):
+                continue
+            group = coin.cast(node, "SoGroup")
+            if group.findChild(target) >= 0:
+                return group
+            if depth < 8:
+                queue.extend((group.getChild(i), depth + 1) for i in range(group.getNumChildren()))
+        except Exception:
+            continue
+    return root
+
+
+def add_overlay(parent, node):
+    """Add *node* to *parent* and hold *parent*: closing a document frees its
+    scene, and an overlay still listed somewhere would then remove itself
+    from freed memory and crash FreeCAD. Undo with remove_overlay()."""
+    parent.ref()
+    parent.addChild(node)
+    return parent
+
+
+def remove_overlay(parent, node) -> None:
+    """Undo add_overlay(): take *node* out of *parent* and let *parent* go."""
+    if parent is None:
+        return
+    try:
+        if node is not None:
+            parent.removeChild(node)
+    except Exception:
+        pass
+    finally:
+        parent.unref()
+
+
 def get_view_widget() -> Optional[QtWidgets.QWidget]:
     """The widget of the active MDI sub-window (the 3D view), or None."""
     try:

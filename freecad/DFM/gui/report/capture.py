@@ -16,6 +16,10 @@ model. The navigation cube is turned off while capturing.
 
 The camera, the highlight, the navigation cube and the viewport markers
 are put back afterwards, also when capturing is cancelled or fails.
+
+A saved analysis or check added to the report (``job.render``, see
+views.py) is drawn in the view only while its picture is taken, with the
+model shown plain around it, and framed on its own model.
 """
 
 import math
@@ -260,6 +264,8 @@ class ViewportCapture:
         view = self._view
         if view is None:
             return None
+        if job.render is not None:
+            return self._capture_view(job, width, height)
         # Images showing several findings make the part see-through, so
         # findings on the far side still show. Close-ups face their finding.
         see_through = 0 if job.key.startswith("finding:") else self.settings.see_through
@@ -269,7 +275,25 @@ class ViewportCapture:
         name = self.settings.overview_view if overview else self.settings.view_direction
         zoom = self.settings.framing == "zoom" and job.findings and not overview
         self._place_camera(name, job.findings, job.findings if zoom else [], width / max(height, 1))
+        return self._save(width, height)
 
+    def _capture_view(self, job: ImageJob, width: int, height: int) -> Optional[QtGui.QImage]:
+        """A saved analysis or check: drawn, framed on its model, taken, removed."""
+        render = job.render
+        self.bridge.set_display_style()
+        self.bridge.highlight_faces_and_edges_by_index([], [])
+        try:
+            render.show(self._view)
+            # Room around the part for the legend or key drawn on the picture.
+            self._place_camera(self.settings.overview_view, [], [], width / max(height, 1),
+                               shape=render.shape(), padding=1.45)
+            render.refresh()
+            return self._save(width, height)
+        finally:
+            render.hide()
+
+    def _save(self, width: int, height: int) -> Optional[QtGui.QImage]:
+        view = self._view
         background = "#ffffff" if self.settings.background == "white" else "Current"
         path = os.path.join(self._tmp, "capture.png")
         try:
@@ -332,11 +356,14 @@ class ViewportCapture:
         return _mul(_norm(EYES["isometric"]), -1.0)
 
     def _place_camera(self, name: str, highlighted: list[CheckResult],
-                      framed: list[CheckResult], aspect: float) -> None:
-        """Look the way *name* says and fit the *framed* findings (the whole model if none)."""
+                      framed: list[CheckResult], aspect: float, shape=None,
+                      padding: Optional[float] = None) -> None:
+        """Look the way *name* says and fit the *framed* findings (the whole
+        model if none; *shape* instead of the analysed model if given)."""
         direction = self._direction(name, highlighted)
         cam = self._camera_node()
-        shape = getattr(self.bridge.target_object, "Shape", None)
+        if shape is None:
+            shape = getattr(self.bridge.target_object, "Shape", None)
         if cam is None or shape is None:
             self._view.fitAll()
             return
@@ -349,7 +376,7 @@ class ViewportCapture:
             only_edges = all(ref.type == "Edge" for f in framed for ref in f.refs)
             min_fraction = 0.55 if only_edges else 0.35
         else:
-            target, padding, min_fraction = model, 1.12, 0.0
+            target, padding, min_fraction = model, padding or 1.12, 0.0
         up_hint = (0.0, 0.0, 1.0)
         if name == "current" and self._start_q:
             up_hint = rotate(self._start_q, (0.0, 1.0, 0.0))

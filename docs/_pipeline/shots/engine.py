@@ -198,8 +198,21 @@ def take(ids: list[str], timeout: int = 3600) -> tuple[dict[str, bytes], dict[st
         try:
             results = json.loads((out / "results.json").read_text(encoding="utf-8"))
         except FileNotFoundError:
+            results = {}
+        running = out / "running.txt"
+        if running.exists():
+            # FreeCAD crashed: blame the shot it was taking, keep the ones before it.
+            crashed = running.read_text(encoding="utf-8").strip()
+            stack = (out / "crash.txt").read_text(encoding="utf-8", errors="replace") \
+                if (out / "crash.txt").exists() else ""
             tail = (proc.stdout + proc.stderr)[-3000:]
-            return {}, {}, {i: "FreeCAD stopped before writing results:\n" + tail for i in ids}
+            results[crashed] = (f"FreeCAD crashed while taking this shot:\n{tail}\n"
+                                f"Python stack at the crash:\n{stack[-4000:]}")
+            for i in ids:
+                results.setdefault(i, f"not taken: FreeCAD crashed earlier, in {crashed}")
+        elif not results:
+            tail = (proc.stdout + proc.stderr)[-3000:]
+            return {}, {}, {i: "FreeCAD stopped before taking any shot:\n" + tail for i in ids}
         images, made, errors = {}, {}, {}
         for i in ids:
             status = results.get(i, "not taken")

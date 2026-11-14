@@ -39,6 +39,8 @@ class ReportData:
     derived_hint: Callable[[Rulebook], str] = lambda rule: ""
     created: datetime = field(default_factory=datetime.now)
     run: Optional[int] = None
+    #: Saved analyses and checks added to the report (views.ViewSection), in order.
+    views: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
 
@@ -196,6 +198,8 @@ class ImageJob:
     findings: list[CheckResult]  # highlighted; empty for the plain model
     caption: str = ""
     aspect: float = 4 / 3  # width / height
+    #: For a saved analysis or check: draws it in the 3D view (views.py).
+    render: object = None
 
 
 OVERVIEW_ASPECT = 16 / 9
@@ -229,6 +233,8 @@ def image_jobs(
             for f in section.findings:
                 if id(f) in picks and image_eligible(f, settings):
                     jobs.append(ImageJob(finding_image_key(f), [f], finding_caption(f)))
+    for view in data.views:
+        jobs.append(ImageJob(view.key, [], view.caption, view.aspect, view.render))
     return jobs
 
 

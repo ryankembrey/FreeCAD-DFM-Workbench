@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Ryan Kembrey <ryan.FreeCAD@gmail.com>
 # SPDX-FileNotice: Part of the DFM addon.
 
-"""Write a PDF report: capture the viewport images, then write the pages."""
+"""Write a PDF report: capture the viewport images, write the pages, then
+add the bookmarks and links (pdf_nav.py)."""
 
 import os
 from typing import Optional
@@ -108,6 +109,13 @@ def export_pdf(parent: Optional[QtWidgets.QWidget], path: str, data: ReportData,
         except Exception as exc:
             App.Console.PrintError(f"DFM: writing the PDF report failed: {exc}\n")
             ok = False
+        if ok:
+            try:
+                from .pdf_nav import add_navigation
+
+                add_navigation(path, layout.navigation())
+            except Exception as exc:  # the report is still good, just without links
+                App.Console.PrintWarning(f"DFM: could not add bookmarks and links to the PDF: {exc}\n")
         if not ok:
             _remove(path)
             if not progress.wasCanceled():

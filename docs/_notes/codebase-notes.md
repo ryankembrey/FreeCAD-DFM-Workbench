@@ -248,6 +248,17 @@ Lessons, each paid for:
   Without the explicit app font, Qt picked a monospace fallback.
 * Offscreen `saveImage` doesn't recompute clipping (see report/capture.py); window grabs of the
   live view are fine.
+* `saveImage` renders only the document's node. From FreeCAD 1.2 (main) `getSceneGraph()`
+  returns an outer node around it, so an overlay added there is on screen but missing from
+  saved images and report pictures. The pipeline's FreeCAD 1.1 doesn't show this. Add
+  overlays with `gui/utils/view.py: model_parent(view, obj)` (beside the model's own node),
+  and attach and detach with `add_overlay()` / `remove_overlay()`: they hold the parent,
+  because closing a document frees its scene while an overlay can still be listed (contour
+  overlays outlive their panel), and removing it from freed memory crashes FreeCAD.
+* The shots run in one FreeCAD process. The runner writes `results.json` after each shot
+  and `running.txt` / `crash.txt` (faulthandler), so a crash names its shot and Python stack.
+  Panels left open also leave their overlays live: close them (`reject()`) before a shot
+  that should show only what the report itself draws.
 * Anything time-based in a shot changes every retake: pin it (history shot patches
   `app.history.datetime`). Paths too: the General prefs page prints the worker Python's path.
 * Drive tools via their panels: `ContourTaskPanel(measure, title)` + `_apply_object(obj)` +
@@ -283,6 +294,28 @@ Lessons, each paid for:
   the xref table. QtPdf isn't in conda-forge's Qt, so pages are painted, not rendered from the PDF.
 * The runner replaces QMessageBox.information/warning/critical/question with stderr prints: a
   box under Xvfb would wait until the one-hour timeout.
+
+### Report: saved views, links and bookmarks (added 2026-11-14, third round)
+
+* `gui/report/views.py`: saved contours (FieldData + display settings, probes), Zebra Stripes
+  (`gui/contour/zebra_document.py`, now saveable), Symmetry Checks and comparisons can be added to
+  a report (dialog: Content → "Analyses and checks"). `describe(obj)` → `ViewSection` (pure data
+  for the layout) with a `render` (show / refresh / hide / dispose) used by
+  `ViewportCapture._capture_view`. Inspections are re-run through their own panel class,
+  constructed but never shown; `panel._closed` is toggled so its queued auto-run and redraws stay
+  quiet; dispose removes the selection observer.
+* The contour legend is drawn on the picture by the layout (`_legend_on_image`), like the
+  in-view ContourLegend (domain = data domain, handles at the range), following the saved legend's
+  orientation and visibility. Category keys likewise (`_key_on_image`). Probes are made visible
+  only while their contour's picture is taken (the panel hides them when it closes) and listed.
+* `gui/report/pdf_nav.py`: Qt's PDF writer can't link inside a document, so bookmarks and link
+  annotations are appended as a PDF incremental update (stdlib only). Layout records `anchor()` /
+  `link()` while laying out; `navigation()` builds the outline. pypdf (test only, optional) and
+  qpdf --check accept the result.
+* Bug fixed on the way: `compute_shape_hash` hashed `exportBrepToString()`, which includes the
+  display triangulation and TShape flags, so any re-tessellation made results and saved checks
+  look out of date. Now OCCT writes the BRep without triangles and the flag lines are dropped;
+  new hashes start with "g". `shape_matches()` still checks old hashes the old way.
 
 ### Real FreeCAD GUI under Xvfb (for 3D viewport shots)
 

@@ -16,8 +16,9 @@
     > How to read the stripes
 
 Everything applies at once; only Quality meshes the part again. The stripes
-show only while the panel is open: Close clears them. The last settings are
-kept for next time.
+show only while the panel is open: Close clears them. Save keeps the
+settings in the document (see zebra_document.py), to open again or add to a
+PDF report. The last settings are kept for next time.
 """
 
 from typing import Optional
@@ -115,7 +116,8 @@ class ContinuityPicture(QtWidgets.QWidget):
 
 
 class ZebraTaskPanel:
-    def __init__(self):
+    def __init__(self, saved=None):
+        self.saved = saved
         self.target_object = None
         self.faces: Optional[list] = None  # 1-based face numbers, or None for the whole body
         self.overlay: Optional[ZebraOverlay] = None
@@ -135,6 +137,15 @@ class ZebraTaskPanel:
         self._escape_filter = EscapeFilter(self._on_escape)
         self.form.installEventFilter(self._escape_filter)
 
+        if saved is not None:
+            from .zebra_document import settings_of
+
+            settings = settings_of(saved)
+            self.load_settings(settings)
+            source = getattr(saved, "Source", None)
+            if source is not None:
+                self._apply_object(source, settings.get("faces"))
+            return
         faces_obj, faces = self._selected_faces()
         if faces_obj is not None:
             Gui.Selection.clearSelection()
@@ -336,6 +347,59 @@ class ZebraTaskPanel:
                 f"QPushButton {{ background: rgb({r}, {g}, {b}); border: 1px solid rgba(127, 127, 127, 160);"
                 " border-radius: 3px; }")
 
+    def settings(self) -> dict:
+        """Everything a saved Zebra Stripes keeps (see zebra_document.save)."""
+        d = self.direction
+        return {
+            "mode": self.mode,
+            "horizontal": self.sw_horizontal.isChecked(),
+            "direction": (d.x, d.y, d.z),
+            "direction_ref": self.direction_ref,
+            "count": self.sb_count.value(),
+            "width": self.sl_width.value(),
+            "colors": [tuple(c) for c in self._colors],
+            "quality": self.cb_quality.currentText(),
+            "edges": self.cb_edges.isChecked(),
+            "faces": list(self.faces or []),
+        }
+
+    def load_settings(self, s: dict) -> None:
+        widgets = (self.sw_mode, self.sw_horizontal, self.sb_count, self.sl_count, self.sl_width,
+                   self.cb_quality, self.cb_edges)
+        for w in widgets:
+            w.blockSignals(True)
+        try:
+            self.sw_mode.setChecked(s.get("mode") == "fixed")
+            self.sw_horizontal.setChecked(bool(s.get("horizontal")))
+            self.sb_count.setValue(int(s.get("count", _DEFAULTS["count"])))
+            self.sl_count.setValue(self.sb_count.value())
+            self.sl_width.setValue(int(s.get("width", _DEFAULTS["width"])))
+            if s.get("quality") in Z.QUALITY:
+                self.cb_quality.setCurrentText(s["quality"])
+            self.cb_edges.setChecked(bool(s.get("edges", True)))
+        finally:
+            for w in widgets:
+                w.blockSignals(False)
+        self.direction = App.Vector(*s.get("direction", (0, 0, 1)))
+        self.direction_ref = s.get("direction_ref") or "+Z"
+        if s.get("colors"):
+            self._colors = [tuple(c) for c in s["colors"]]
+        self.lbl_width.setText(f"{self.sl_width.value()} %")
+        self._refresh_colors()
+        self._refresh_mode_rows()
+
+    def save(self):
+        """Keep the settings in the document; returns the saved object."""
+        if self.target_object is None:
+            return None
+        from .zebra_document import save
+
+        try:
+            self.saved = save(self.saved, self.target_object, self.settings())
+        except Exception as exc:
+            App.Console.PrintError(f"DFM zebra: could not save. {exc}\n")
+        return self.saved
+
     def _save_prefs(self) -> None:
         prefs = dfm_params()
         prefs.SetString("ZebraMode", self.mode)
@@ -391,7 +455,7 @@ class ZebraTaskPanel:
         overlay.mode = self.mode
         overlay.horizontal = self.sw_horizontal.isChecked()
         overlay.direction = (self.direction.x, self.direction.y, self.direction.z)
-        overlay.attach(view)
+        overlay.attach(view, self.target_object)
         self.overlay = overlay
 
     def _remove_overlay(self) -> None:
@@ -570,7 +634,8 @@ class ZebraTaskPanel:
     # -- the task dialog ---------------------------------------------------------
 
     def getStandardButtons(self):  # noqa: N802
-        return QtWidgets.QDialogButtonBox.StandardButton.Close
+        return (QtWidgets.QDialogButtonBox.StandardButton.Save
+                | QtWidgets.QDialogButtonBox.StandardButton.Close)
 
     def _teardown(self) -> None:
         self._end_pick()
@@ -586,4 +651,5 @@ class ZebraTaskPanel:
         return True
 
     def accept(self):
+        self.save()
         return self.reject()

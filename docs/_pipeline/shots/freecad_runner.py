@@ -73,7 +73,21 @@ def _no_message_boxes() -> None:
     box.question = make("question", box.StandardButton.No)
 
 
+def _write_results(results: dict) -> None:
+    """Written after every shot, so a crash keeps what was already taken."""
+    path = os.path.join(OUT, "results.json")
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=1)
+    os.replace(path + ".tmp", path)
+
+
 def main() -> None:
+    import faulthandler
+
+    # If FreeCAD crashes, engine.py reports the shot named in running.txt,
+    # with the Python stack from crash.txt.
+    crash = open(os.path.join(OUT, "crash.txt"), "w", encoding="utf-8")
+    faulthandler.enable(crash, all_threads=False)
     results = {}
     try:
         prepare()
@@ -85,6 +99,8 @@ def main() -> None:
             if shot is None:
                 results[shot_id] = "no such shot"
                 continue
+            with open(os.path.join(OUT, "running.txt"), "w", encoding="utf-8") as f:
+                f.write(shot_id)
             try:
                 image = shot.fn(ctx) if shot.engine == "scene" else shot.fn()
                 for rel in shot.files:
@@ -99,10 +115,14 @@ def main() -> None:
                 results[shot_id] = traceback.format_exc()
             finally:
                 ctx.reset()
+                _write_results(results)
     except Exception:
         results["_runner"] = traceback.format_exc()
-    with open(os.path.join(OUT, "results.json"), "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=1)
+    _write_results(results)
+    try:
+        os.remove(os.path.join(OUT, "running.txt"))
+    except OSError:
+        pass
     os._exit(0)
 
 

@@ -6,7 +6,9 @@ material, and they make good pictures for a design review.
 ## Contours
 
 Each contour tool meshes the part evenly and colors it by one measurement. Pick the part, set what
-the tool asks for, and click **Update contour**. **Save** keeps the contour in the document.
+the tool asks for, and click **Update contour**. **Save** keeps the contour in the document, with
+any probes you placed, ready to
+[add to a PDF report](history-and-reports.md#adding-contours-and-checks-to-a-report).
 
 The **Display** settings are shared by all four: a **Color scale** or a **Pass/fail** view, the color
 map, smooth or banded colors, and the range of values the colors cover. Set the range by hand to
@@ -67,8 +69,10 @@ once, and every setting applies straight away:
 - **Quality** sets how finely the part is meshed for the stripes. Use **Very fine** for a close look
   at a small fillet; it takes longer on a big part.
 
-The stripes show only while the panel is open, and **Close** clears them. They don't change the part
-or any analysis result.
+The stripes show only while the panel is open, and **Close** clears them. **Save** keeps the settings
+in the document, to open again with a double-click or to
+[add to a PDF report](history-and-reports.md#adding-contours-and-checks-to-a-report). They don't
+change the part or any analysis result.
 
 [![Zebra Stripes: reflection stripes that slide over the part as the view turns](../assets/shots/contour-zebra.png)](../assets/shots/contour-zebra.png)
 

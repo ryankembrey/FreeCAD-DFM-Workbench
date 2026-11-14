@@ -38,7 +38,8 @@ skips them.
 | A new built-in process | Run `pixi run docs`; it gets its own pages. Add its file name to `PROCESS_ORDER` in `docs/_pipeline/model.py` to place it in the list. Add claims for its values. |
 | A tool, panel, command, preference or anything a user sees | Update or add a hand-written page in `docs/content/` and add new pages to the `nav` in `docs/zensical.toml` (outside the `BEGIN GENERATED` blocks). Add a screenshot of it (below). |
 | A panel's layout or what it shows | Nothing by hand: its screenshots are retaken. Look at them (`docs/content/assets/shots/`) and fix any page whose text no longer matches the picture. |
-| The PDF report (`gui/report/`) | Nothing by hand: the sample report (`docs/content/assets/reports/sample-dfm-report.pdf`) and its picture are made again. Look at both. If you added a report option, it can be set for the sample in `docs/models/models.yaml` under `report: settings:`. |
+| The PDF report (`gui/report/`) | Nothing by hand: the sample report (`docs/content/assets/reports/sample-dfm-report.pdf`) and its picture are made again. Look at both. If you added a report option, it can be set for the sample in `docs/models/models.yaml` under `report: settings:`. A new section in the layout needs an `anchor()` (and a bookmark in `navigation()`), so the PDF's bookmarks and links reach it. |
+| A contour or inspection tool, or what it saves | Check that its saved object still goes into a report (`gui/report/views.py`: `kind_of`, `describe`, and a render with `show`, `refresh`, `hide`, `dispose`). A new tool that saves something should be added there, and to `REPORT_VIEWS` in `docs/_pipeline/models.py`. |
 | Something that changes what an existing guide or concept page says | Fix that page in the same change. Search `docs/content` for the feature's name. |
 
 ### Screenshots

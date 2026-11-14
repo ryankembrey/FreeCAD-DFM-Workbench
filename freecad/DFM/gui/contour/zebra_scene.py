@@ -22,6 +22,7 @@ import numpy as np
 from pivy import coin
 
 from ...app.contour import zebra as Z
+from ..utils.view import add_overlay, model_parent, remove_overlay
 from .scene import _pref_display_offset_fraction
 
 _NAME = "DFMZebraStripes"
@@ -41,6 +42,7 @@ class ZebraOverlay:
         self.width_share = 0.5
         self.colors = ((0, 0, 0), (255, 255, 255))
         self.view = None
+        self._parent = None
         self._camera = None
         self._sensor: Optional[coin.SoNodeSensor] = None
         self._last_camera = None
@@ -155,20 +157,20 @@ class ZebraOverlay:
 
     # -- the view ---------------------------------------------------------
 
-    def attach(self, view) -> None:
+    def attach(self, view, obj=None) -> None:
+        """Show the stripes in *view*, beside *obj*'s own node when given, so
+        saved images and report pictures include them."""
         self.view = view
-        view.getSceneGraph().addChild(self.root)
+        parent = model_parent(view, obj) if obj is not None else view.getSceneGraph()
+        self._parent = add_overlay(parent, self.root)
         self._watch_camera(self.mode == "view")
         self.update()
 
     def remove(self) -> None:
         self._watch_camera(False)
-        if self.view is not None:
-            try:
-                self.view.getSceneGraph().removeChild(self.root)
-            except Exception:
-                pass
+        remove_overlay(self._parent, self.root)
         self.view = None
+        self._parent = None
 
     def _watch_camera(self, on: bool) -> None:
         if self._sensor is not None:

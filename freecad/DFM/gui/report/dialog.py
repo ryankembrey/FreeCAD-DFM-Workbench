@@ -6,6 +6,10 @@
 
 The options start from the preferences (``ReportSettings.load()``). Changes
 apply to this export only, until "Save as defaults" writes them back.
+
+"Analyses and checks" lists the document's saved contours, Zebra Stripes,
+Symmetry Checks and comparisons (views.py); each one ticked gets a section of
+its own. A check is run again when it is ticked, once per dialog.
 """
 
 import os
@@ -304,6 +308,8 @@ class ReportDialog(QtWidgets.QDialog):
         self._ts: Optional[Typesetter] = None
         self._single_index = 0
         self._syncing = False
+        self._view_sections: dict[str, object] = {}  # object name -> views.ViewSection
+        self.finished.connect(self._dispose_views)
 
         self._timer = QtCore.QTimer(self)
         self._timer.setSingleShot(True)
@@ -574,6 +580,8 @@ class ReportDialog(QtWidgets.QDialog):
         f.add(self._bind_check("target_and_limit", "Target and limit for each rule"))
         f.add(self._bind_check("settings_appendix", "Process and material settings appendix"))
 
+        self._views_section(f)
+
         f.section("Large results")
         at_most = QtWidgets.QHBoxLayout()
         self.sp_list = self._bind_spin("list_at_most", 0, 1000)
@@ -591,6 +599,92 @@ class ReportDialog(QtWidgets.QDialog):
         f.add(appendix)
         f.finish()
         return f
+
+    # -- Saved analyses and checks ------------------------------------------
+
+    def _views_section(self, f: "_Form") -> None:
+        from . import views as V
+
+        f.section("Analyses and checks")
+        try:
+            import FreeCAD as App  # type: ignore
+
+            saved = V.saved_views(App.ActiveDocument)
+        except Exception:
+            saved = []
+        self.lst_views = QtWidgets.QListWidget()
+        self.lst_views.setToolTip("Tick a saved analysis or check to add it to the report, "
+                                  "with its own page.")
+        icons = {"zebra": ":/icons/dfm_zebra.svg", "symmetry": ":/icons/dfm_symmetry.svg",
+                 "compare": ":/icons/dfm_compare.svg"}
+        for obj in saved:
+            kind = V.kind_of(obj)
+            icon = icons.get(kind)
+            if kind == "contour":
+                from ..contour.document import _measure_icon
+
+                icon = _measure_icon(getattr(obj, "Measure", ""))
+            item = QtWidgets.QListWidgetItem(QtGui.QIcon(icon) if icon else QtGui.QIcon(), obj.Label)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, obj.Name)
+            item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.CheckState.Unchecked)
+            self.lst_views.addItem(item)
+        rows = max(1, min(len(saved), 6))
+        self.lst_views.setFixedHeight(rows * 24 + 6)
+        self.lst_views.itemChanged.connect(self._view_ticked)
+        if saved:
+            f.add(self.lst_views)
+        else:
+            self.lst_views.hide()
+            note = muted_label("Save a contour, Zebra Stripes, a Symmetry Check or a comparison to "
+                               "add it here.", small=True)
+            note.setWordWrap(True)
+            f.add(note)
+
+    def _view_ticked(self, item: QtWidgets.QListWidgetItem) -> None:
+        from . import views as V
+
+        name = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        if item.checkState() == QtCore.Qt.CheckState.Checked and name not in self._view_sections:
+            import FreeCAD as App  # type: ignore
+
+            obj = App.ActiveDocument.getObject(name) if App.ActiveDocument else None
+            if obj is None:
+                return
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+            try:
+                self._view_sections[name] = V.describe(obj)
+            except Exception as exc:
+                App.Console.PrintError(f"DFM: could not add {obj.Label} to the report. {exc}\n")
+                self.lst_views.blockSignals(True)
+                item.setCheckState(QtCore.Qt.CheckState.Unchecked)
+                self.lst_views.blockSignals(False)
+                return
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
+        self._apply_views()
+
+    def _apply_views(self) -> None:
+        """The ticked views, in the order of the list (the tree's order)."""
+        chosen = []
+        for i in range(self.lst_views.count()):
+            item = self.lst_views.item(i)
+            name = item.data(QtCore.Qt.ItemDataRole.UserRole)
+            if item.checkState() == QtCore.Qt.CheckState.Checked and name in self._view_sections:
+                chosen.append(self._view_sections[name])
+        self.data.views = chosen
+        self._timer.start()
+
+    def _dispose_views(self, *_args) -> None:
+        for section in self._view_sections.values():
+            render = getattr(section, "render", None)
+            if render is not None and hasattr(render, "dispose"):
+                try:
+                    render.dispose()
+                except Exception:
+                    pass
+        self._view_sections.clear()
+        self.data.views = []
 
     def _chip(self, name: str, text: str, icon: Optional[str]) -> QtWidgets.QToolButton:
         chip = ThemeChip(text, icon)

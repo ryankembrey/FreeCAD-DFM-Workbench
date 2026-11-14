@@ -14,8 +14,14 @@ never by Qt at paint time, so line breaks and page breaks are identical in
 the preview and in the PDF. Viewport images are looked up by key when a
 page is painted; until they have been captured a placeholder is drawn in
 their place, at the same size.
+
+While laying out, the layout also notes where things are (``anchor``) and
+which areas of a page lead somewhere (``link``): the summary rows lead to
+their rules, every footer back to the summary. ``navigation()`` turns that
+into the PDF's bookmarks and links, which pdf_nav.py adds to the file.
 """
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -60,6 +66,7 @@ SEVERITY = {
 }
 PASS = "#639922"
 IGNORED = "#8b919b"
+NOTE = "#D4900A"
 CRITICALITY = {
     Criticality.CRITICAL: "#B3261E",
     Criticality.HIGH: "#E24B4A",
@@ -170,6 +177,22 @@ class Typesetter:
 # ---------------------------------------------------------------------------
 # Painting
 # ---------------------------------------------------------------------------
+
+
+def _hex_rgb(rgb) -> str:
+    r, g, b = (max(0, min(255, round(float(c) * 255))) for c in tuple(rgb)[:3])
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+def _nice_step(raw: float) -> float:
+    """1, 2 or 5 times a power of ten, at least *raw* (tick spacing)."""
+    if raw <= 0 or not math.isfinite(raw):
+        return 1.0
+    exp = math.floor(math.log10(raw))
+    for m in (1.0, 2.0, 5.0, 10.0):
+        if m * 10 ** exp >= raw:
+            return m * 10 ** exp
+    return 10 ** (exp + 1)
 
 
 class Canvas:
@@ -371,6 +394,8 @@ class ReportLayout:
         self._diagrams: dict[Rulebook, QSvgRenderer] = {}
         self._extra_rules: dict[int, int] = {}
         self._jobs = {job.key: job for job in image_jobs(data, settings, picks)}
+        self._anchors: dict[str, tuple[int, float]] = {}
+        self._links: list[tuple[int, float, float, float, float, str]] = []
 
     # -- Flow ----------------------------------------------------------
 
@@ -393,6 +418,44 @@ class ReportLayout:
 
     def space(self, h: float) -> None:
         self.y += h
+
+    # -- Navigation ------------------------------------------------------
+
+    def anchor(self, name: str, y: Optional[float] = None) -> None:
+        """Note that *name* starts here (a little above *y*, the current position)."""
+        top = self.y if y is None else y
+        self._anchors[name] = (len(self.pages) - 1, max(top - 8.0, 0.0))
+
+    def link(self, x: float, y: float, w: float, h: float, target: str) -> None:
+        """Make the area at x, y (w by h points) on this page lead to the anchor *target*."""
+        self._links.append((len(self.pages) - 1, x, y, w, h, target))
+
+    def navigation(self):
+        """The bookmarks and links of the pages last built, for pdf_nav."""
+        from .pdf_nav import Bookmark, Link, Navigation
+
+        a = self._anchors
+        nav = Navigation()
+        for page, x, y, w, h, target in self._links:
+            if target in a:
+                nav.links.append(Link(page, x, y, w, h, a[target]))
+
+        def mark(title, name, children=None):
+            if name in a:
+                nav.bookmarks.append(Bookmark(title, a[name], children or []))
+
+        mark("Summary" if "summary" in a else "Cover", "summary" if "summary" in a else "cover")
+        rules = [Bookmark(sec.rule.label, a[f"rule:{sec.rule.name}"])
+                 for sec in rule_sections(self.data, self.settings) if f"rule:{sec.rule.name}" in a]
+        if rules:
+            nav.bookmarks.append(Bookmark("Rules with findings", rules[0].place, rules))
+        mark("Passed rules", "passed")
+        views = [Bookmark(v.title, a[v.key]) for v in self.data.views if v.key in a]
+        if views:
+            nav.bookmarks.append(Bookmark("Analyses and checks", views[0].place, views))
+        mark("Appendix: all findings", "appendix-findings")
+        mark("Appendix: process and material settings", "appendix-settings")
+        return nav
 
     # -- Primitives ----------------------------------------------------
 
@@ -439,7 +502,8 @@ class ReportLayout:
         return head_h + row_h * (rows if rows <= 8 else 3)
 
     def table(self, columns: list[Column], rows: list[list], label: Optional[str] = None,
-              spec: Optional[Font] = None) -> None:
+              spec: Optional[Font] = None, links: Optional[list[Optional[str]]] = None) -> None:
+        """A table; *links*, one per row, makes each row lead to that anchor."""
         spec = spec or self.F_SMALL
         pad = 5.0
         row_h = self.ts.line_height(spec) + 6
@@ -465,11 +529,13 @@ class ReportLayout:
         # Keep short tables in one piece; long ones start with a few rows at least.
         self.need(head_h + row_h * (len(rows) if len(rows) <= 8 else 3), label)
         header()
-        for row in rows:
+        for index, row in enumerate(rows):
             if self.y + row_h > self.bottom:
                 self.need(row_h + head_h + 1, label)
                 header()
             y = self.y
+            if links and index < len(links) and links[index]:
+                self.link(self.left, y, self.cw, row_h, links[index])
             cells = []
             for col, x, w, cell in zip(columns, xs, widths, row):
                 inner = w - 2 * pad
@@ -534,7 +600,9 @@ class ReportLayout:
 
     def build(self) -> list[Page]:
         self.pages = []
+        self._anchors, self._links = {}, []
         self.new_page("Cover")
+        self.anchor("cover", self.top + 8)
         self._cover()
 
         sections = rule_sections(self.data, self.settings)
@@ -544,6 +612,9 @@ class ReportLayout:
         passed = passed_sections(self.data, self.settings)
         if passed:
             self._passed(passed, after_rules=bool(sections))
+
+        for view in self.data.views:
+            self._view_section(view)
 
         listed = max(self.settings.list_at_most, 0)
         if self.settings.findings_appendix and any(len(s.findings) > listed for s in sections):
@@ -630,9 +701,17 @@ class ReportLayout:
         th = self.ts.line_height(self.F_STAT) + self.ts.line_height(self.F_TINY) + 10
         self.need(th + 8)
         y = self.y
+        shown = rule_sections(d, s)
+        tile_targets = {
+            "errors": next((f"rule:{x.rule.name}" for x in shown if x.errors), None),
+            "warnings": next((f"rule:{x.rule.name}" for x in shown if x.warnings), None),
+            "passed": "passed",
+        }
         for i, (key, label, color) in enumerate(tiles):
             x = self.left + i * (tw + tile_gap)
             n = counts[key]
+            if n and tile_targets.get(key):
+                self.link(x, y, tw, th, tile_targets[key])
             sa, ta = self.ts.ascent(self.F_STAT), self.ts.ascent(self.F_TINY)
             slh = self.ts.line_height(self.F_STAT)
 
@@ -651,6 +730,7 @@ class ReportLayout:
             sections.sort(key=lambda sec: (sec.criticality.value, sec.passed, sec.rule.label))
             if sections:
                 self.heading("Summary by criticality", self.F_H2, keep=self.table_keep(len(sections)))
+                self.anchor("summary", self.y - self.ts.line_height(self.F_H2) - 4)
                 rows = []
                 for sec in sections:
                     rows.append([
@@ -661,8 +741,19 @@ class ReportLayout:
                     ])
                 self.table([Column("Criticality", 0.18), Column("Rule", 0.52),
                             Column("Findings", 0.12, "right"), Column("Result", 0.18, "right")],
-                           rows, "Summary")
+                           rows, "Summary",
+                           links=["passed" if sec.passed else f"rule:{sec.rule.name}" for sec in sections])
                 self.space(12)
+
+        if d.views:
+            self.heading("Analyses and checks", self.F_H2, keep=self.table_keep(len(d.views)))
+            if "summary" not in self._anchors:
+                self.anchor("summary", self.y - self.ts.line_height(self.F_H2) - 4)
+            rows = [[v.title, v.tool, Pill(v.verdict[0], v.verdict[1]) if v.verdict else (v.summary or "—")]
+                    for v in d.views]
+            self.table([Column("Name", 0.42), Column("Tool", 0.28), Column("Result", 0.30, "right")],
+                       rows, "Summary", links=[v.key for v in d.views])
+            self.space(12)
 
         if s.show_notes and s.notes.strip():
             self.heading("Notes", self.F_H2)
@@ -695,6 +786,8 @@ class ReportLayout:
                 self._extra_rules[id(self.page)] = self._extra_rules.get(id(self.page), 0) + 1
                 base = self.page.label.removesuffix(" (cont.)").split(" +")[0]
                 self.page.label = f"{base} +{self._extra_rules[id(self.page)]}"
+
+        self.anchor(f"rule:{rule.name}")
 
         # Title with result pills.
         pills = []
@@ -872,8 +965,215 @@ class ReportLayout:
             self.space(4)
             where = ", listed in the appendix" if s.findings_appendix else ""
             more = f"and {rest} more{where}." if shown else f"{rest} findings{where}."
-            self.paragraph(more, self.F_SMALL, MUTED)
+            page, top = len(self.pages), self.y
+            self.paragraph(more, self.F_SMALL, self.t.accent if s.findings_appendix else MUTED)
+            if s.findings_appendix and len(self.pages) == page:
+                self.link(self.left, top, self.ts.width(more, self.F_SMALL), self.y - top,
+                          "appendix-findings")
         self.space(6)
+
+    # -- Saved analyses and checks (views.py) ----------------------------
+
+    def _view_section(self, view) -> None:
+        """A saved analysis or check: its picture, color scale or key, and table."""
+        self.new_page(view.title)
+        self.anchor(view.key)
+        pills = [Pill(view.verdict[0], view.verdict[1])] if view.verdict else []
+        lh = self.ts.line_height(self.F_H1)
+        title_w = self.ts.width(view.title, self.F_H1)
+        if pills and title_w + 8 + self.pills_width(pills) <= self.cw:
+            y = self.y
+            asc = self.ts.ascent(self.F_H1)
+            self.emit(lambda c, _i, y=y: c.text(self.left, y + asc, view.title, self.F_H1, self.t.accent))
+            self.draw_pills(self.left + title_w + 8, y + lh * 0.55, pills)
+            self.y += lh
+        else:
+            self.paragraph(view.title, self.F_H1, self.t.accent)
+            if pills:
+                self.draw_pills(self.left, self.y + 7, pills)
+                self.y += 14
+        self.space(1)
+        for line in view.facts:
+            self.paragraph(line, self.F_SMALL, MUTED)
+        if view.detail:
+            self.paragraph(view.detail, self.F_SMALL, INK)
+        self.space(8)
+        if view.note:
+            self._callout(view.note, NOTE)
+            self.space(2)
+
+        job = self._jobs.get(view.key)
+        aspect = job.aspect if job else view.aspect
+        w = self.cw if self.t.images_per_row <= 2 else self.cw * 0.75
+        h = w / aspect
+        cap = (self.H - 2 * self.m) * 0.42
+        if h > cap:
+            h, w = cap, cap * aspect
+        self.need(h + 14)
+        x = self.left + (self.cw - w) / 2
+        top = self.y
+        self.image_box(x, top, w, h, view.key, None)
+        # The legend or key, on the picture as in the 3D view.
+        if view.scale is not None:
+            self._legend_on_image(view.scale, x, top, w, h)
+        elif view.categories:
+            self._key_on_image(view.categories, x, top, w, h)
+        self.y += h + 3
+        self.y += self.caption(x, self.y, w, view.caption)
+        self.space(8)
+
+        if view.rows:
+            cols = [Column(t, wd, al) for t, wd, al in view.columns]
+            heading = "Differences" if view.verdict else "Values"
+            self.heading(heading, self.F_H2, keep=self.table_keep(len(view.rows)))
+            self.table(cols, view.rows, view.title)
+            self.space(6)
+        if view.probes:
+            self.heading("Probes", self.F_H2, keep=self.table_keep(len(view.probes)))
+            self.table([Column("Probe", 0.6), Column("Value", 0.4, "right")],
+                       [list(p) for p in view.probes], view.title)
+            self.space(6)
+
+    def _legend_on_image(self, scale, x: float, y: float, w: float, h: float) -> None:
+        """A contour's legend in a corner of its picture: the color bar over the
+        whole range of values, ticks, and its name and unit, as in the 3D view."""
+        from ...app.contour.colormap import NO_VALUE_RGB, HighlightSpec, value_to_color
+
+        lo = scale.dom_lo if scale.dom_lo is not None else scale.low
+        hi = scale.dom_hi if scale.dom_hi is not None else scale.high
+        if hi <= lo:
+            hi = lo + 1.0
+        spec = HighlightSpec(active=True, lo=scale.low, hi=scale.high) if scale.flag else None
+        n = 120
+        colors = []
+        for i in range(n):
+            v = lo + (hi - lo) * (i + 0.5) / n
+            rgb = value_to_color(v, scale.low, scale.high, scale.colormap, scale.bands, spec)
+            colors.append(_hex_rgb(rgb))
+        step = _nice_step((hi - lo) / 6.0)
+        dec = max(0, min(3, -int(math.floor(math.log10(step))))) if step > 0 else 0
+        ticks = [lo, hi]
+        guard = step * 0.4
+        v = math.ceil(lo / step) * step
+        while v <= hi - 1e-9:
+            if v - lo > guard and hi - v > guard:
+                ticks.append(v)
+            v += step
+        title = f"{scale.label} ({scale.unit})" if scale.unit else scale.label
+        f, fb = self.F_TINY, self.F_TINY_BOLD
+        asc, lh = self.ts.ascent(f), self.ts.line_height(f)
+        labels = [f"{t:.{dec}f}" for t in ticks]
+        pad, bar_t = 6.0, 8.0
+        no_value = _hex_rgb(NO_VALUE_RGB) if scale.no_value_label else None
+        nv_h = lh + 4 if no_value else 0.0
+        if scale.vertical:
+            bar_l = min(h * 0.62, 150.0)
+            tick_w = max(self.ts.width(t, f) for t in labels)
+            box_w = max(5 + bar_t + 6 + tick_w, self.ts.width(title, fb),
+                        (12 + self.ts.width(scale.no_value_label, f)) if no_value else 0) + 2 * pad
+            box_h = pad + lh + 4 + bar_l + 4 + nv_h + pad
+            bx, by = x + w - box_w - 8, y + 8
+            bar_x0 = bx + pad + 5  # room for the range handles
+        else:
+            bar_l = min(w * 0.55, 230.0)
+            box_w = max(bar_l + 16, self.ts.width(title, fb) + 2 * pad)
+            box_h = pad + lh + 6 + bar_t + 3 + lh + nv_h + pad
+            bx, by = x + (w - box_w) / 2, y + h - box_h - 8
+
+        def op(c, _i):
+            c.rect(bx, by, box_w, box_h, fill="#EBFFFFFF", stroke=LINE, radius=3, width=0.5)
+            c.text(bx + pad, by + pad + asc, title, fb, INK)
+            top = by + pad + lh + (6 if not scale.vertical else 4)
+            if scale.vertical:
+                bar_x = bar_x0
+                seg = bar_l / n
+                for i, color in enumerate(colors):  # high values at the top
+                    c.rect(bar_x, top + bar_l - (i + 1) * seg, bar_t, seg + 0.3, fill=color)
+                c.rect(bar_x, top, bar_t, bar_l, stroke=MUTED, width=0.4)
+                if not scale.flag:
+                    for v in (scale.low, scale.high):  # the colored range, as the 3D view marks it
+                        hy = top + bar_l - (min(max(v, lo), hi) - lo) / (hi - lo) * bar_l
+                        c.line(bar_x - 2.5, hy, bar_x + bar_t, hy, INK, 0.6)
+                        c.p.setBrush(QtGui.QColor("#ffffff"))
+                        c.p.setPen(QtGui.QPen(QtGui.QColor(INK), max(0.5 * c.k, 0.5)))
+                        k = c.k
+                        c.p.drawPolygon(QtGui.QPolygonF([QtCore.QPointF((bar_x - 0.5) * k, hy * k),
+                                                         QtCore.QPointF((bar_x - 4) * k, (hy - 2.2) * k),
+                                                         QtCore.QPointF((bar_x - 4) * k, (hy + 2.2) * k)]))
+                for t, text in zip(ticks, labels):
+                    ty = top + bar_l - (t - lo) / (hi - lo) * bar_l
+                    c.line(bar_x + bar_t, ty, bar_x + bar_t + 3, ty, MUTED, 0.5)
+                    c.text(bar_x + bar_t + 5, ty + asc * 0.4, text, f, INK)
+                nv_y = top + bar_l + 4
+            else:
+                bar_x = bx + (box_w - bar_l) / 2
+                seg = bar_l / n
+                for i, color in enumerate(colors):
+                    c.rect(bar_x + i * seg, top, seg + 0.3, bar_t, fill=color)
+                c.rect(bar_x, top, bar_l, bar_t, stroke=MUTED, width=0.4)
+                if not scale.flag:
+                    for v in (scale.low, scale.high):  # the colored range, as the 3D view marks it
+                        hx = bar_x + (min(max(v, lo), hi) - lo) / (hi - lo) * bar_l
+                        c.line(hx, top - 2.5, hx, top + bar_t, INK, 0.6)
+                        c.p.setBrush(QtGui.QColor("#ffffff"))
+                        c.p.setPen(QtGui.QPen(QtGui.QColor(INK), max(0.5 * c.k, 0.5)))
+                        k = c.k
+                        c.p.drawPolygon(QtGui.QPolygonF([QtCore.QPointF(hx * k, (top - 0.5) * k),
+                                                         QtCore.QPointF((hx - 2.2) * k, (top - 4) * k),
+                                                         QtCore.QPointF((hx + 2.2) * k, (top - 4) * k)]))
+                for t, text in zip(ticks, labels):
+                    tx = bar_x + (t - lo) / (hi - lo) * bar_l
+                    c.line(tx, top + bar_t, tx, top + bar_t + 2, MUTED, 0.5)
+                    c.text(tx, top + bar_t + 3 + asc, text, f, INK, "center")
+                nv_y = top + bar_t + 3 + lh
+            if no_value:
+                c.rect(bx + pad, nv_y + 2, 7, 7, fill=no_value, stroke=MUTED, width=0.4)
+                c.text(bx + pad + 11, nv_y + 2 + asc * 0.85, scale.no_value_label, f, INK)
+
+        self.emit(op)
+
+    def _key_on_image(self, items, x: float, y: float, w: float, h: float) -> None:
+        """A category key (swatch, name and share of the part) in the picture's corner."""
+        f = self.F_TINY
+        asc, lh = self.ts.ascent(f), self.ts.line_height(f) + 3
+        pad = 6.0
+        texts = [f"{t} ({100 * s:.1f} %)" if s is not None else t for t, _c, s in items]
+        text_w = min(max(self.ts.width(t, f) for t in texts), w * 0.45)
+        texts = [self.ts.elide(t, f, text_w) for t in texts]
+        box_w, box_h = 2 * pad + 12 + text_w, 2 * pad + lh * len(items) - 3
+        bx, by = x + w - box_w - 8, y + 8
+
+        def op(c, _i):
+            c.rect(bx, by, box_w, box_h, fill="#EBFFFFFF", stroke=LINE, radius=3, width=0.5)
+            for i, ((_t, color, _s), text) in enumerate(zip(items, texts)):
+                ty = by + pad + i * lh
+                c.rect(bx + pad, ty + (asc - 7) / 2 + 0.5, 7, 7, fill=color, stroke=MUTED, width=0.4)
+                c.text(bx + pad + 12, ty + asc, text, f, INK)
+
+        self.emit(op)
+
+    def _key(self, items) -> None:
+        """Color swatches with their names (and share of the part), as many to a line as fit."""
+        lh = self.ts.line_height(self.F_SMALL) + 4
+        asc = self.ts.ascent(self.F_SMALL)
+        x = self.left
+        self.need(lh)
+        for text, color, share in items:
+            label = f"{text} ({100 * share:.1f} %)" if share is not None else text
+            w = 14 + self.ts.width(label, self.F_SMALL) + 14
+            if x + w > self.right and x > self.left:
+                self.y += lh
+                self.need(lh)
+                x = self.left
+            y = self.y
+
+            def op(c, _i, x=x, y=y, color=color, label=label):
+                c.rect(x, y + (lh - 4 - 9) / 2, 9, 9, fill=color, stroke=LINE, width=0.4, radius=1.5)
+                c.text(x + 14, y + asc, label, self.F_SMALL, INK)
+
+            self.emit(op)
+            x += w
+        self.y += lh + 6
 
     # -- Passed rules and appendices ------------------------------------
 
@@ -886,6 +1186,7 @@ class ReportLayout:
             self.page.label = "Passed rules"
         self.heading("Passed rules", self.F_H1 if after_rules else self.F_H2,
                      keep=self.table_keep(len(passed)))
+        self.anchor("passed", self.y - self.ts.line_height(self.F_H1 if after_rules else self.F_H2) - 4)
         rows = []
         for sec in passed:
             phrases = self.limits_text(sec.rule) if self.settings.target_and_limit else []
@@ -896,20 +1197,23 @@ class ReportLayout:
 
     def _findings_appendix(self, sections: list[RuleSection]) -> None:
         self.new_page("Appendix")
+        self.anchor("appendix-findings", self.top + 8)
         self.heading("Appendix: all findings", self.F_H1)
-        rows = []
+        rows, links = [], []
         for sec in sections:
             for f in sec.findings:
+                links.append(f"rule:{sec.rule.name}")
                 measured, threshold = split_result(f.overview)
                 color = IGNORED if f.ignore else SEVERITY.get(f.severity, MUTED)
                 rows.append([sec.rule.label, geometry_label(f), measured, threshold,
                              Dot(severity_label(f), color)])
         self.table([Column("Rule", 0.34), Column("Geometry", 0.22), Column("Measured", 0.15, "right"),
-                    Column("Limit", 0.15, "right"), Column("Status", 0.14)], rows, "Appendix")
+                    Column("Limit", 0.15, "right"), Column("Status", 0.14)], rows, "Appendix", links=links)
 
     def _settings_appendix(self) -> None:
         d = self.data
         self.new_page("Appendix")
+        self.anchor("appendix-settings", self.top + 8)
         self.heading("Appendix: process and material settings", self.F_H1)
         self.paragraph(" \u00b7 ".join(dict.fromkeys(p for p in (d.process, d.process_kind, d.material) if p)),
                        self.F_SMALL, MUTED)
@@ -942,8 +1246,15 @@ class ReportLayout:
         text_y = fy + 4 + logo_h / 2 + asc_s * 0.38
         accent = self.t.accent
         company_name = s.company_name
+        back_to = "summary" if "summary" in self._anchors else "cover"
+        back = "Back to summary" if back_to == "summary" else "Back to the cover"
+        back_w = self.ts.width(back, self.F_TINY)
 
         for n, page in enumerate(self.pages, start=1):
+            if n > 1:
+                total_w = self.ts.width(f"Page {n} of {total}", self.F_TINY)
+                bx = self.right - total_w - 14 - back_w
+                self._links.append((n - 1, bx - 2, fy + 2, back_w + 4, logo_h + 4, back_to))
             def chrome(c, _i, n=n):
                 # Header: company logo or name on the left, header text on the right.
                 left_end = self.left
@@ -966,8 +1277,12 @@ class ReportLayout:
                     x += 2
                 page_text = f"Page {n} of {total}"
                 pw = self.ts.width(page_text, self.F_TINY)
+                room = pw + 12
+                if n > 1:  # a link back, beside the page number
+                    c.text(self.right - pw - 14, text_y, back, self.F_TINY, accent, "right")
+                    room += back_w + 14
                 if footer:
-                    c.text(x, text_y, self.ts.elide(footer, self.F_TINY, self.right - pw - 12 - x),
+                    c.text(x, text_y, self.ts.elide(footer, self.F_TINY, self.right - room - x),
                            self.F_TINY, MUTED)
                 c.text(self.right, text_y, page_text, self.F_TINY, MUTED, "right")
 

@@ -140,11 +140,13 @@ def save(obj, tool: str, source, settings: dict, ignored, summary: str, referenc
 
 def is_out_of_date(obj) -> bool:
     """True when a model changed after *obj* was saved."""
+    from ...app.document_object import shape_matches
+
     try:
-        if obj.Source is not None and obj.SourceHash and shape_hash(obj.Source) != obj.SourceHash:
+        if obj.Source is not None and obj.SourceHash and not shape_matches(obj.Source.Shape, obj.SourceHash):
             return True
         ref = getattr(obj, "Reference", None)
-        if ref is not None and obj.ReferenceHash and shape_hash(ref) != obj.ReferenceHash:
+        if ref is not None and obj.ReferenceHash and not shape_matches(ref.Shape, obj.ReferenceHash):
             return True
     except Exception:
         return False

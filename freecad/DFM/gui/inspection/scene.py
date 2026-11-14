@@ -32,7 +32,7 @@ import FreeCAD as App  # type: ignore
 from ...core.inspection import geometry as G
 from ..results.highlight_scene import HighlightScene, hex_to_rgb
 from ..utils.badge import qimage_to_soimage
-from ..utils.view import device_pixel_ratio, get_active_view
+from ..utils.view import add_overlay, device_pixel_ratio, get_active_view, remove_overlay
 from .widgets import INFO_HEX, INFO_ICON
 
 PLANE_RGB = (0.18, 0.47, 0.77)
@@ -249,7 +249,7 @@ class InspectScene:
         self._root = coin.SoSeparator()
         self._root.setName(coin.SbName("DFM_InspectScene"))
         _unpickable(self._root)
-        parent.addChild(self._root)
+        add_overlay(parent, self._root)
         self._view, self._parent = view, parent
         return True
 
@@ -403,11 +403,7 @@ class InspectScene:
             sw.removeAllChildren()
 
     def remove(self) -> None:
-        if self._root is not None and self._parent is not None:
-            try:
-                self._parent.removeChild(self._root)
-            except Exception:
-                pass
+        remove_overlay(self._parent, self._root)
         self._root = None
         self._parent = None
         self._parts = {}

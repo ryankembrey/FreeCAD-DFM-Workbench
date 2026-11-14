@@ -453,33 +453,101 @@ def compare_bodies(ctx: Context):
 REPORT = "assets/reports/sample-dfm-report.pdf"
 
 
-@shot("report-pages", "scene", "Two pages of the sample DFM report: the summary, and the findings of a rule",
-      files=(REPORT,))
+@shot("report-pages", "scene",
+      "Three pages of the sample DFM report: the summary, the findings of a rule, and a saved analysis "
+      "added to it", files=(REPORT,))
 def report_pages(ctx: Context):
     """Writes the sample report with Export PDF report, as the results panel's
-    Export button does (with the report settings in models.yaml), and returns
-    its first pages, painted the way the report dialog previews them."""
+    Export button does (with the report settings in models.yaml, and the saved
+    analyses and checks it lists ticked), and returns three of its pages,
+    painted the way the report dialog previews them."""
+    from freecad.DFM.gui.report import views as V
     from freecad.DFM.gui.report.exporter import export_pdf
     from freecad.DFM.gui.report.layout import ReportLayout, page_thumbnail
     from freecad.DFM.gui.report.template import get_template
 
     report = MODELS.report
-    analyse(ctx, MODELS.parts[report.part])
+    part = MODELS.parts[report.part]
+    obj = ctx.open(part)
+    # Saved before the analysis: their panels close any task dialog when they close.
+    saved = [_save_view(ctx, obj, part, name) for name in report.views]
+    ctx.analyse(obj, part.process, part.material, **requirements(part))
     presenter = ctx.presenter
     data = presenter._report_data()
     data.created = _dt.datetime.combine(report.date, _dt.time(9, 0))
+    data.views = [V.describe(o) for o in saved]
     settings = presenter._report_settings().copy(**report.settings, open_after=False)
     template = get_template(settings.template)
     capture = _KeepImages(presenter._report_capture(settings))
-    if not export_pdf(None, ctx.file(REPORT), data, settings, template, capture):
-        raise RuntimeError("Export PDF report didn't write the report")
+    try:
+        if not export_pdf(None, ctx.file(REPORT), data, settings, template, capture):
+            raise RuntimeError("Export PDF report didn't write the report")
+    finally:
+        for view in data.views:
+            view.render.dispose()
     layout = ReportLayout(data, settings, template)
     pages = layout.build()
-    # The cover, and the first page of a rule with findings (the summary can run on).
+    # The cover, the first page of a rule with findings (the summary can run
+    # on), and the first saved analysis.
     flagged = {rule.label for rule, found in data.grouped.items() if found}
     first_rule = next((p for p in pages[1:] if p.label in flagged), pages[min(1, len(pages) - 1)])
-    return _side_by_side([page_thumbnail(p, template, layout.ts, 700, images=capture.images)
-                          for p in (pages[0], first_rule)])
+    shown = [pages[0], first_rule]
+    if data.views:
+        shown.append(next(p for p in pages if p.label == data.views[0].title))
+    return _side_by_side([page_thumbnail(p, template, layout.ts, 640, images=capture.images) for p in shown])
+
+
+def _save_view(ctx: Context, obj, part: models.Part, name: str):
+    """Make and save a contour, Symmetry Check or Zebra Stripes of *obj* with
+    its own panel, as a user would; returns the saved object."""
+    if name == "symmetry":
+        from freecad.DFM.gui.inspection.symmetry_panel import SymmetryPanel
+
+        panel = SymmetryPanel()
+        panel.set_model(obj)
+        panel.run()
+        saved = panel.save()
+        panel._teardown()
+    elif name == "zebra":
+        from freecad.DFM.gui.contour.zebra_panel import ZebraTaskPanel
+
+        panel = ZebraTaskPanel()
+        if panel.target_object is not obj:
+            panel._apply_object(obj)
+        saved = panel.save()
+        panel.reject()
+    else:
+        import math
+
+        from freecad.DFM.app.contour.measures import measure_for_id
+        from freecad.DFM.gui.contour.document import _MEASURE_TITLES
+        from freecad.DFM.gui.contour.panel import ContourTaskPanel
+
+        measure = measure_for_id(name)
+        panel = ContourTaskPanel(measure, _MEASURE_TITLES[name][0])
+        panel._apply_object(obj)
+        if measure.needs_pull_direction and part.key == "molded":
+            panel._on_pull_axis(part.direction("pull_direction"))
+        panel._on_generate()
+        rng = part.options.get("thickness_range") if name == "thickness" else None
+        if rng:
+            panel.sb_range_lo.setValue(rng[0])
+            panel.sb_range_hi.setValue(rng[1])
+        # A probe on the lowest value, as a user clicks one on.
+        mesh, values = panel._last[0], panel._last[1]
+        finite = [i for i, v in enumerate(values) if math.isfinite(v)]
+        if finite:
+            i = min(finite, key=lambda k: values[k])
+            pts = [mesh.vertices[v] for v in mesh.triangles[i]]
+            centre = tuple(sum(p[k] for p in pts) / 3.0 for k in range(3))
+            panel._add_probe(centre, values[i])
+        panel._on_save()
+        saved = panel._analysis_obj
+        panel.reject()  # closed, as a user does before making a report
+    ctx.pump(0.3)
+    if saved is None:
+        raise RuntimeError(f"could not save the {name} view for the sample report")
+    return saved
 
 
 class _KeepImages:

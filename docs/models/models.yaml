@@ -54,3 +54,8 @@ report:
   settings:
     project: Sample report
     prepared_by: DFM Workbench documentation
+  # Saved analyses and checks added to the report, each on a page of its own,
+  # as ticked under "Analyses and checks" in the Export PDF report dialog.
+  # Any of: thickness, draft, undercut, curvature (contours; a probe is put on
+  # the lowest value), symmetry, zebra.
+  views: [thickness, symmetry, zebra]

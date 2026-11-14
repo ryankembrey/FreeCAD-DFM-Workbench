@@ -25,7 +25,7 @@ import FreeCAD as App  # type: ignore
 
 from ...app.contour.colormap import value_to_color, HighlightSpec
 from ...app.prefs import dfm_params
-from ..utils.view import get_active_view
+from ..utils.view import add_overlay, get_active_view, model_parent, remove_overlay
 
 
 _TARGET_PER_CHUNK_DEFAULT = 2500
@@ -140,6 +140,7 @@ class ContourNode:
         self._chunks = []  # [{'material':..., 'values':[...]}]
         self._name_to_chunk = {}
         self._view = None
+        self._parent = None
         self._smooth = False
         self._global_material = None
         self._vertex_values = None
@@ -401,16 +402,14 @@ class ContourNode:
         if view is None:
             raise RuntimeError("No active 3D view to display the contour in.")
         self._view = view
-        self._view.getSceneGraph().addChild(self._sep)
+        # Beside the model, so saved images and report pictures include it.
+        self._parent = add_overlay(model_parent(view, self.target_object), self._sep)
 
     def remove(self):
-        if self._view is not None and self._sep is not None:
-            try:
-                self._view.getSceneGraph().removeChild(self._sep)
-            except Exception:
-                pass
+        remove_overlay(self._parent, self._sep)
         self._sep = None
         self._view = None
+        self._parent = None
 
 
 _ACTIVE_CONTOURS = []

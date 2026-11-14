@@ -49,7 +49,7 @@ from pivy import coin
 import FreeCAD as App  # type: ignore
 
 from ...app.prefs import dfm_params
-from ..utils.view import get_active_view
+from ..utils.view import add_overlay, get_active_view, model_parent, remove_overlay
 
 RGB = tuple[float, float, float]
 
@@ -182,11 +182,8 @@ class HighlightScene:
 
     def remove(self) -> None:
         """Take the node out of the 3D view and drop the geometry."""
-        if self._attached and self._parent is not None:
-            try:
-                self._parent.removeChild(self._switch)
-            except Exception:
-                pass
+        if self._attached:
+            remove_overlay(self._parent, self._switch)
         self._attached = False
         self._view = None
         self._parent = None
@@ -214,8 +211,7 @@ class HighlightScene:
         view = get_active_view()
         if view is None:
             return
-        parent = self._model_parent(view)
-        parent.addChild(self._switch)
+        parent = add_overlay(self._model_parent(view), self._switch)
         self._view = view
         self._parent = parent
         self._attached = True
@@ -229,30 +225,11 @@ class HighlightScene:
         container (an App::Part, say) this node carries the container's
         placement, which the model's shape doesn't include.
         """
-        root = view.getSceneGraph()
-        try:
-            target = self.target_object.ViewObject.RootNode
-        except Exception:
-            target = None
-        if target is not None:
-            group_type = coin.SoGroup.getClassTypeId()
-            queue = [(root, 0)]
-            while queue:
-                node, depth = queue.pop(0)
-                try:
-                    if not node.isOfType(group_type):
-                        continue
-                    group = coin.cast(node, "SoGroup")
-                    if group.findChild(target) >= 0:
-                        return group
-                    if depth < 8:
-                        queue.extend((group.getChild(i), depth + 1)
-                                     for i in range(group.getNumChildren()))
-                except Exception:
-                    continue
-        App.Console.PrintWarning(
-            "DFM: could not find the model in the scene; report images may not show highlights.\n")
-        return root
+        parent = model_parent(view, self.target_object)
+        if parent is view.getSceneGraph():
+            App.Console.PrintWarning(
+                "DFM: could not find the model in the scene; report images may not show highlights.\n")
+        return parent
 
     def _build(self) -> None:
         shape = self.target_object.Shape

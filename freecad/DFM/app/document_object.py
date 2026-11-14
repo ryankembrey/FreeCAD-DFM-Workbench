@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -40,17 +41,63 @@ _PROP_GROUP = "DFM"
 
 
 def compute_shape_hash(shape) -> str:
-    """Compute a hash of a Part.Shape for change detection.
+    """A hash of a Part.Shape's geometry, for change detection.
 
-    Uses the BRep (boundary representation) string which captures the
-    full geometry and topology.  The BRep output is deterministic for a
-    given shape, so a hash of it reliably detects any modelling change.
+    The shape's BRep, written without its triangulation: the mesh FreeCAD
+    (or any tool) makes to draw the shape changes whenever the shape is
+    tessellated again, and must not make an unchanged part look changed.
+    Placement is part of the BRep, so moving the part counts as a change.
     """
     try:
+        return _geometry_hash(shape)
+    except Exception:
+        return legacy_shape_hash(shape)
+
+
+_FLAGS = re.compile(rb"^\s*[01]{7}\s*$")
+
+
+def _geometry_hash(shape) -> str:
+    import os
+    import tempfile
+
+    from OCP.BRep import BRep_Builder
+    from OCP.BRepTools import BRepTools
+    from OCP.TopoDS import TopoDS_Shape
+    from OCP.TopTools import TopTools_FormatVersion
+
+    fd, src = tempfile.mkstemp(suffix=".brep")
+    os.close(fd)
+    fd, dst = tempfile.mkstemp(suffix=".brep")
+    os.close(fd)
+    try:
+        shape.exportBrep(src)
+        ocp = TopoDS_Shape()
+        BRepTools.Read_s(ocp, src, BRep_Builder())
+        # Without triangles or normals; a fixed format version, so OCCT's
+        # default can't change the hash.
+        BRepTools.Write_s(ocp, dst, False, False, TopTools_FormatVersion.TopTools_FormatVersion_VERSION_1)
+        with open(dst, "rb") as fh:
+            lines = fh.read().splitlines()
+        # Leave out each shape's flags (modified, checked, ...): bookkeeping
+        # that meshing updates, not geometry.
+        kept = b"\n".join(line for line in lines if not _FLAGS.match(line))
+        return "g" + hashlib.sha256(kept).hexdigest()[:31]
+    finally:
+        for path in (src, dst):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def legacy_shape_hash(shape) -> str:
+    """The hash older versions saved: the BRep with its triangulation, so
+    it changed whenever the shape was meshed again for drawing."""
+    try:
         brep = shape.exportBrepToString()
-        h = hashlib.sha256(brep.encode()).hexdigest()[:32]
-        return h
-    except Exception as exc:
+        return hashlib.sha256(brep.encode()).hexdigest()[:32]
+    except Exception:
         # Fallback: geometric fingerprint for shapes that can't export BRep
         bb = shape.BoundBox
         parts = [
@@ -63,6 +110,16 @@ def compute_shape_hash(shape) -> str:
         ]
         h = hashlib.sha256("|".join(parts).encode()).hexdigest()[:32]
         return h
+
+
+def shape_matches(shape, stored: str) -> bool:
+    """Whether *shape* is still the shape *stored* was hashed from. Hashes
+    saved by older versions are checked the old way."""
+    if not stored:
+        return False
+    if stored.startswith("g") and len(stored) == 32:
+        return compute_shape_hash(shape) == stored
+    return legacy_shape_hash(shape) == stored
 
 
 # Serialisation helpers
@@ -448,9 +505,7 @@ def check_shape_changed(obj, current_shape) -> bool:
     stored_hash = getattr(obj, _PROP_SHAPE_HASH, "")
     if not stored_hash:
         return True
-    current_hash = compute_shape_hash(current_shape)
-    changed = current_hash != stored_hash
-    return changed
+    return not shape_matches(current_shape, stored_hash)
 
 
 def mark_stale(obj, stale: bool = True):
